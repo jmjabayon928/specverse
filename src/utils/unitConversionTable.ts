@@ -106,6 +106,9 @@ type ConversionEntry = {
     },
 ];
 
+const normalizeUnit = (u: string) =>
+  u.toLowerCase().replace(/°/g, "deg").replace(/\(.*?\)/g, "").trim();
+
 // ✅ Memoized Maps for O(1) lookup
 const siToUSCMap = new Map<string, ConversionEntry>();
 const uscToSIMap = new Map<string, ConversionEntry>();
@@ -115,14 +118,18 @@ conversionTable.forEach(entry => {
   uscToSIMap.set(entry.uscUnit.toLowerCase(), entry);
 });
   
-export function convertToUSC(valueStr: string, fromUnit: string): { value: string; unit: string } {
-  const normalizedUnit = fromUnit.toLowerCase(); // normalize casing
+export function convertToUSC(valueStr: string, fromUnit: string | null | undefined): { value: string; unit: string } {
+  if (!fromUnit || !fromUnit.trim()) {
+    return { value: valueStr, unit: "" }; // For descriptive or missing units
+  }
+
+  const normalizedUnit = normalizeUnit(fromUnit);
   const entry = siToUSCMap.get(normalizedUnit);
   const value = parseFloat(valueStr);
 
   if (!entry || isNaN(value)) {
     if (!entry) {
-      console.warn(`convertToUSC: Conversion unit not found for SI unit: "${fromUnit}"`);
+      console.warn(`convertToUSC: No conversion entry found for SI unit "${fromUnit}"`);
     }
     return { value: valueStr, unit: fromUnit };
   }
@@ -133,15 +140,14 @@ export function convertToUSC(valueStr: string, fromUnit: string): { value: strin
   };
 }
 
-
 export function convertToSI(valueStr: string, fromUnit: string): { value: string; unit: string } {
-  const normalizedUnit = fromUnit.toLowerCase(); // normalize casing
-  const value = parseFloat(valueStr);
+  const normalizedUnit = normalizeUnit(fromUnit);
   const entry = uscToSIMap.get(normalizedUnit);
+  const value = parseFloat(valueStr);
 
   if (!entry || isNaN(value)) {
     if (!entry) {
-      console.warn(`convertToSI: Conversion unit not found for USC unit: "${fromUnit}"`);
+      console.warn(`convertToSI: No conversion entry found for USC unit "${fromUnit}"`);
     }
     return { value: valueStr, unit: fromUnit };
   }
@@ -152,13 +158,15 @@ export function convertToSI(valueStr: string, fromUnit: string): { value: string
   };
 }
 
-
-export function getUSCUnit(siUnit: string): string {
-  return siToUSCMap.get(siUnit.toLowerCase())?.uscUnit ?? siUnit;
+export function getUSCUnit(siUnit: string | null | undefined): string {
+  if (!siUnit || !siUnit.trim()) return "";
+  const normalizedUnit = normalizeUnit(siUnit);
+  return siToUSCMap.get(normalizedUnit)?.uscUnit ?? siUnit;
 }
 
 export function getSIUnit(uscUnit: string): string {
-  return uscToSIMap.get(uscUnit.toLowerCase())?.siUnit ?? uscUnit;
+  const normalizedUnit = normalizeUnit(uscUnit);
+  return uscToSIMap.get(normalizedUnit)?.siUnit ?? uscUnit;
 }
 
 

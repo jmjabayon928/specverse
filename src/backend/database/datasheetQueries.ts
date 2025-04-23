@@ -1,6 +1,7 @@
 // src/backend/database/datasheetQueries.ts
-import sql from "mssql";
 import { dbConfig } from "../config/db";
+import { poolPromise, sql } from "../config/db";
+
 
 export async function getDatasheetById(sheetId: string) {
     try {
@@ -61,3 +62,16 @@ export async function getSubSheetsBySheetId(sheetId: string) {
     return result.recordset;
   }
   
+  export async function getTranslatedSheetNameAndDescription(sheetId: number, lang: string) {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input("SheetID", sql.Int, sheetId)
+      .input("LanguageCode", sql.VarChar, lang)
+      .query(`
+        SELECT TranslatedName, TranslatedDescription
+        FROM SheetTranslations
+        WHERE SheetID = @SheetID AND LanguageCode = @LanguageCode
+      `);
+  
+    return result.recordset[0]; // May return undefined
+  }

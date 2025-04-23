@@ -60,6 +60,7 @@ const navItems: NavItem[] = [
     subItems: [
       { name: "Unfilled Forms", path: "/datasheets/unfilled", pro: false },
       { name: "Filled Forms", path: "/datasheets/filled", pro: false },
+      { name: "Revisions", path: "/datasheets/revisions", pro: false },
     ],
   },
   {

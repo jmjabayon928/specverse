@@ -1,9 +1,8 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { saveAs } from 'file-saver';
-//import { convertToUSC, convertToSI, getUSCUnit } from "@/utils/unitConversion";
-import { convertToUSC, convertToSI, getUSCUnit, unitConversions } from '@/utils/unitConversionTable';
+import { convertToUSC, convertToSI, getUSCUnit } from '@/utils/unitConversionTable';
 
 // Define types
 type Datasheet = {
@@ -11,6 +10,8 @@ type Datasheet = {
   SheetNameFr: string;
   SheetDescEng: string;
   SheetDescFr: string;
+  SheetName?: string;
+  SheetDesc?: string;
   ClientDocNum: string;
   ClientProjNum: string;
   CompanyDocNum: string;
@@ -60,6 +61,17 @@ type SubsheetInfo = {
   UOM: string;
 };
 
+type ChangeLog = {
+  LogID: number;
+  LabelEng: string;
+  OldValue: string | null;
+  NewValue: string | null;
+  UOM: string | null;
+  ChangedAt: string;
+  ChangedBy: string;
+};
+
+
 type LanguageOption = {
   LanguageCode: string;
   LanguageName: string;
@@ -87,6 +99,15 @@ export default function DatasheetDetailsPage() {
   const [translatedSubsheets, setTranslatedSubsheets] = useState([]);
   const [templateTranslations, setTemplateTranslations] = useState<Record<number, string>>({});
   const [labelTranslations, setLabelTranslations] = useState<UILabelMap>({});
+  const [validationErrors, setValidationErrors] = useState<Record<number, string>>({});
+  const [changeLogs, setChangeLogs] = useState<ChangeLog[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
+  const searchParams = useSearchParams();
+  const showLogsQuery = searchParams?.get("showLogs") === "true";
+
+  useEffect(() => {
+    if (showLogsQuery) setShowLogs(true);
+  }, [showLogsQuery]);
 
   useEffect(() => {
     async function loadTranslations() {
@@ -129,6 +150,15 @@ export default function DatasheetDetailsPage() {
     return map;
   }, [translatedSubsheets]);
   
+  useEffect(() => {
+    async function fetchLogs() {
+      const res = await fetch(`http://localhost:5000/api/datasheets/${selectedSheetId}/change-logs`);
+      const data = await res.json();
+      setChangeLogs(data);
+    }
+  
+    if (showLogs) fetchLogs();
+  }, [showLogs, selectedSheetId]);
 
   useEffect(() => {
     async function loadLanguages() {
@@ -169,8 +199,7 @@ export default function DatasheetDetailsPage() {
   useEffect(() => {
     async function fetchDatasheetAndRevisions() {
       try {
-        // 1. Fetch datasheet details
-        const response = await fetch(`http://localhost:5000/api/datasheets/${id}`);
+        const response = await fetch(`http://localhost:5000/api/datasheets/detail/${id}?lang=${selectedLang}`);
         const data = await response.json();
         setDatasheet(data);
         if (id) {
@@ -184,7 +213,7 @@ export default function DatasheetDetailsPage() {
     }
   
     fetchDatasheetAndRevisions();
-  }, [id]);
+  }, [id, selectedLang]); // 👈 include selectedLang here
 
   // When user switches revision, reload that revision
   useEffect(() => {
@@ -192,14 +221,14 @@ export default function DatasheetDetailsPage() {
 
     async function fetchSelectedRevisionData() {
       setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/datasheets/${selectedSheetId}`);
+      const response = await fetch(`http://localhost:5000/api/datasheets/detail/${selectedSheetId}?lang=${selectedLang}`);
       const data = await response.json();
       setDatasheet(data);
       setLoading(false);
     }
 
     fetchSelectedRevisionData();
-  }, [selectedSheetId]);
+  }, [selectedSheetId, selectedLang]);
 
   // Fetch subsheets under this datasheet
   useEffect(() => {
@@ -220,23 +249,32 @@ export default function DatasheetDetailsPage() {
 
   // Fetch subsheet information
   useEffect(() => {
-    async function fetchSubsheetInfo() {
-      try {
-        const infoData: Record<string, SubsheetInfo[]> = {};
-    
-        for (const sub of subsheets) {
-          const response = await fetch(`http://localhost:5000/api/datasheets/subsheets/${sub.SubID}/sheet/${selectedSheetId}/info`);
+    if (!selectedSheetId || !subsheets || subsheets.length === 0) return;
+  
+    const fetchAllInfos = async () => {
+      const infoData: Record<string, SubsheetInfo[]> = {};
+  
+      for (const sub of subsheets) {
+        if (!sub?.SubID) continue;
+  
+        try {
+          const response = await fetch(
+            `http://localhost:5000/api/datasheets/subsheets/${sub.SubID}/sheet/${selectedSheetId}/info`
+          );
           const data: SubsheetInfo[] = await response.json();
+          console.log("✅ Info loaded for", sub.SubID, data);
           infoData[sub.SubID] = data;
+        } catch (error) {
+          console.error("❌ Failed to fetch info for SubID:", sub.SubID, error);
         }
-    
-        setSubsheetInfo(infoData);
-      } catch (error) {
-        console.error("Error fetching subsheet info:", error);
       }
-    }
-    if (subsheets.length > 0) fetchSubsheetInfo();
-  }, [subsheets]);
+  
+      setSubsheetInfo(infoData);
+    };
+  
+    fetchAllInfos();
+  }, [subsheets, selectedSheetId]);
+  
 
   if (loading) return <p className="text-center mt-10">Loading...</p>;
   if (!datasheet) return <p className="text-center mt-10 text-red-500">Datasheet not found.</p>;
@@ -270,6 +308,16 @@ export default function DatasheetDetailsPage() {
     });
   }
 
+  function validateField(value: string, uom: string): string | null {
+    if (uom && isNaN(Number(value))) {
+      return "Must be a numeric value for measured entries";
+    }
+    if (!value.trim()) {
+      return "Value is required";
+    }
+    return null;
+  }
+
   function handleValueChange(templateId: number, field: string, value: string) {
     // Update view state
     setSubsheetInfo((prev) => {
@@ -293,15 +341,53 @@ export default function DatasheetDetailsPage() {
     }));
   }
 
+  function preparePayload(infoUpdates: Record<number, { InfoValue: string; UOM: string }>) {
+    const convertedUpdates: Record<number, { InfoValue: string; UOM: string }> = {};
+  
+    for (const [templateId, entry] of Object.entries(infoUpdates)) {
+      const id = Number(templateId);
+      if (uom === "USC") {
+        const { value: siValue, unit: siUnit } = convertToSI(entry.InfoValue, entry.UOM);
+        convertedUpdates[id] = { InfoValue: siValue, UOM: siUnit };
+      } else {
+        convertedUpdates[id] = { InfoValue: entry.InfoValue, UOM: entry.UOM };
+      }
+    }
+  
+    return convertedUpdates;
+  }
+
+  function isValidEntry(value: string, uom: string | null): boolean {
+    if (!value?.trim()) return false;
+    if (uom && isNaN(Number(value))) return false;
+    return true;
+  }
+  
   async function handleSave() {
+    const hasErrors = Object.values(validationErrors).some((err) => err);
+    if (hasErrors) {
+      alert("Please fix validation errors before saving.");
+      return;
+    }
+
     if (!selectedSheetId || Object.keys(editedInfo).length === 0) {
       alert("No changes to save.");
       return;
     }
+
+    // Validate first
+    for (const [templateId, update] of Object.entries(editedInfo)) {
+      const val = update.InfoValue ?? "";
+      const uom = update.UOM ?? "";
+      if (!isValidEntry(val, uom)) {
+        alert(`🚫 Invalid input for field ID ${templateId}. Please enter a valid value.`);
+        return;
+      }
+    }
   
     const payload = {
       sheetId: parseInt(selectedSheetId),
-      infoUpdates: editedInfo,
+      infoUpdates: preparePayload(editedInfo), // ✅ apply conversion here
     };
   
     try {
@@ -330,14 +416,6 @@ export default function DatasheetDetailsPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           {/* Toggle Language & UOM */}
           <div className="flex justify-end space-x-4 mb-4">
-            {/*
-            <button
-              onClick={() => setLanguage(language === "eng" ? "fr" : "eng")}
-              className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition"
-            >
-              {language === "eng" ? "🇫🇷 French" : "🇬🇧 English"}
-            </button>
-            */}
             <select
               title="Language"
               value={selectedLang}
@@ -370,12 +448,8 @@ export default function DatasheetDetailsPage() {
         <div className="flex items-center space-x-4">
           <img src={`/clients/${datasheet.ClientLogo}`} alt={datasheet.ClientName} className="w-16 h-16 rounded-lg" />
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-              {language === "eng" ? datasheet.SheetNameEng : datasheet.SheetNameFr}
-            </h1>
-            <h2 className="text-lg text-gray-700 dark:text-gray-300">
-              {language === "eng" ? datasheet.SheetDescEng : datasheet.SheetDescFr}
-            </h2>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{datasheet.SheetName}</h1>
+            <h2 className="text-lg text-gray-700 dark:text-gray-300">{datasheet.SheetDesc}</h2>
           </div>
         </div>
 
@@ -560,12 +634,40 @@ export default function DatasheetDetailsPage() {
                         : templateTranslations[info.InfoTemplateID] ?? info.LabelEng;
 
                     const handleInputChange = (newVal: string) => {
-                      const finalValue =
-                        uom === "SI"
-                          ? newVal
-                          : convertToSI(newVal, info.UOM).value;
-
-                      handleValueChange(info.InfoTemplateID, "InfoValue", finalValue);
+                      const finalValue = uom === "SI"
+                        ? newVal
+                        : convertToSI(newVal, info.UOM).value;
+                    
+                      const updatedUOM = uom === "SI"
+                        ? info.UOM
+                        : convertToSI(newVal, info.UOM).unit;
+                    
+                      // ✅ Run validation and set error message
+                      const errorMsg = validateField(newVal, info.UOM);
+                      setValidationErrors((prev) => ({
+                        ...prev,
+                        [info.InfoTemplateID]: errorMsg || ""
+                      }));
+                    
+                      // ✅ Update current display and edited info
+                      setSubsheetInfo((prev) => {
+                        const updated = { ...prev };
+                        const list = updated[activeTab!] || [];
+                        updated[activeTab!] = list.map((item) =>
+                          item.InfoTemplateID === info.InfoTemplateID
+                            ? { ...item, InfoValue: finalValue, UOM: updatedUOM }
+                            : item
+                        );
+                        return updated;
+                      });
+                    
+                      setEditedInfo((prev) => ({
+                        ...prev,
+                        [info.InfoTemplateID]: {
+                          InfoValue: finalValue,
+                          UOM: updatedUOM,
+                        },
+                      }));
                     };
 
                     return (
@@ -577,11 +679,13 @@ export default function DatasheetDetailsPage() {
                           {isDraft ? (
                             <input
                               type="text"
-                              className="border px-2 py-1 rounded w-full"
+                              className={`border px-2 py-1 rounded w-full ${validationErrors[info.InfoTemplateID] ? "border-red-500" : ""}`}
                               value={value}
                               onChange={(e) => handleInputChange(e.target.value)}
                               placeholder={uomDisplay}
+                              title={validationErrors[info.InfoTemplateID] || ""}
                             />
+                          
                           ) : (
                             value
                           )}
@@ -611,10 +715,57 @@ export default function DatasheetDetailsPage() {
               >
                 Save Changes
               </button>
+
+              {/* 🔽 Add this below Save button */}
+              <button
+                onClick={() => setShowLogs((prev) => !prev)}
+                className="mt-2 ml-4 px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700"
+              >
+                {showLogs ? "Hide Change Log" : "View Change Log"}
+              </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* ✅ Change Log Viewer (only shows when toggled) */}
+      {showLogs && (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md w-full overflow-x-auto mt-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Change History</h2>
+          <table className="w-full border-collapse border border-gray-300 dark:border-gray-700 text-sm text-gray-900 dark:text-gray-100">
+            <thead className="bg-gray-100 dark:bg-gray-700">
+              <tr>
+                <th className="px-4 py-2 border font-semibold">Field</th>
+                <th className="px-4 py-2 border font-semibold">Old</th>
+                <th className="px-4 py-2 border font-semibold">New</th>
+                <th className="px-4 py-2 border font-semibold">UOM</th>
+                <th className="px-4 py-2 border font-semibold">Changed At</th>
+                <th className="px-4 py-2 border font-semibold">By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {changeLogs.length > 0 ? (
+                changeLogs.map((log) => (
+                  <tr key={log.LogID}>
+                    <td className="border px-4 py-2">{log.LabelEng}</td>
+                    <td className="border px-4 py-2">{log.OldValue}</td>
+                    <td className="border px-4 py-2">{log.NewValue}</td>
+                    <td className="border px-4 py-2">{log.UOM}</td>
+                    <td className="border px-4 py-2">{new Date(log.ChangedAt).toLocaleString()}</td>
+                    <td className="border px-4 py-2">{log.ChangedBy}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="border px-4 py-2 text-center text-gray-500">
+                    No change logs available.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

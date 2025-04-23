@@ -4,7 +4,7 @@ import * as os from "os";
 import ExcelJS from "exceljs";
 import * as fs from "fs";
 import * as path from "path";
-import { getDatasheetById } from "../database/datasheetQueries";
+import { getDatasheetById, getTranslatedSheetNameAndDescription } from "../database/datasheetQueries";
 import { getSubSheetsBySheetId } from "../database/subsheetQueries";
 import { getInformationBySubSheetId } from "../database/informationQueries"; // We'll update this
 import { convertToUSC, getUSCUnit } from "../../utils/unitConversionTable";
@@ -28,6 +28,11 @@ export async function generateDatasheetPDF(sheetId: string, uom: "SI" | "USC", l
   try {
     const datasheet = await getDatasheetById(sheetId);
     if (!datasheet) throw new Error("Datasheet not found");
+
+    // ✅ Load translated name and description
+    const translation = await getTranslatedSheetNameAndDescription(Number(sheetId), lang);
+    datasheet.SheetName = translation?.TranslatedName || (lang === 'fr' ? datasheet.SheetNameFr : datasheet.SheetNameEng);
+    datasheet.SheetDesc = translation?.TranslatedDescription || (lang === 'fr' ? datasheet.SheetDescFr : datasheet.SheetDescEng);
 
     const subsheets = await getSubSheetsBySheetId(Number(sheetId));
     const labels = await getUILabelTranslations(lang);
@@ -80,8 +85,8 @@ export async function generateDatasheetPDF(sheetId: string, uom: "SI" | "USC", l
     <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px;">
       <img src="${logoBase64}" alt="${datasheet.ClientName}" style="width: 64px; height: 64px; border-radius: 8px;" />
       <div>
-        <h1 style="font-size: 24px; font-weight: bold; margin: 0;">${getLabel("SheetNameEng")}</h1>
-        <h2 style="font-size: 16px; color: #555; margin: 4px 0 0 0;">${getLabel("SheetDescEng")}</h2>
+        <h1 style="font-size: 24px; font-weight: bold; margin: 0;">${datasheet.SheetName}</h1>
+        <h2 style="font-size: 16px; color: #555; margin: 4px 0 0 0;">${datasheet.SheetDesc}</h2>
       </div>
     </div>
 
@@ -175,6 +180,12 @@ export async function generateDatasheetExcel(sheetId: string, uom: "SI" | "USC",
   const datasheet = await getDatasheetById(sheetId);
   if (!datasheet) throw new Error("Datasheet not found");
 
+  // ✅ Load translated name and description
+  const translation = await getTranslatedSheetNameAndDescription(Number(sheetId), languageCode );
+  datasheet.SheetName = translation?.TranslatedName || (languageCode  === 'fr' ? datasheet.SheetNameFr : datasheet.SheetNameEng);
+  datasheet.SheetDesc = translation?.TranslatedDescription || (languageCode  === 'fr' ? datasheet.SheetDescFr : datasheet.SheetDescEng);
+
+
   const labelMap = await getUILabelTranslations(languageCode);
   const subsheets = await getSubSheetsBySheetId(Number(sheetId));
   const translatedSubsheets = await getTranslatedSubSheets(Number(sheetId), languageCode);
@@ -201,8 +212,8 @@ export async function generateDatasheetExcel(sheetId: string, uom: "SI" | "USC",
 
   worksheet.getCell("C1").value = {
     richText: [
-      { text: `${getLabel("SheetNameEng")}\n`, font: { bold: true, size: 16 } },
-      { text: `${getLabel("SheetDescEng")}`, font: { size: 11 } }
+      { text: `${datasheet.SheetName}\n`, font: { bold: true, size: 16 } },
+      { text: `${datasheet.SheetDesc}`, font: { size: 11 } }
     ]
   };
   worksheet.getCell("C1").alignment = { vertical: "middle", horizontal: "left", wrapText: true };
