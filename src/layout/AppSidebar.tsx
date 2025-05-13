@@ -18,60 +18,86 @@ import {
   UserCircleIcon,
 } from "../icons/index";
 import {
-  ClientsIcon,
-  DepartmentsIcon,
-  ProjectsIcon,
+  EstimationIcon,
   DataSheetsIcon,
-  InventoryIcon,
-  UsersIcon,
+  TemplatesIcon,
+  AdministrationIcon,
+  InventoryIcon
 } from "../components/icons/index";
+
+const userRole = "admin";
+
+type SubNavItem = {
+  name: string;
+  path: string;
+  pro?: boolean;
+  new?: boolean;
+  roles?: string[]; // 🔥 Add this line
+};
 
 type NavItem = {
   name: string;
   icon: React.ReactNode;
   path?: string;
-  subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
+  roles?: string[]; // 🔥 Add this line
+  subItems?: SubNavItem[];
 };
 
 const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: "Dashboard",
-    subItems: [{ name: "Ecommerce", path: "/", pro: false }],
-  },
-  {
-    icon: <ClientsIcon />,
-    name: "Clients",
-    path: "/clients",
-  },
-  {
-    icon: <DepartmentsIcon />,
-    name: "Departments",
-    path: "/departments",
-  },
-  {
-    icon: <ProjectsIcon />,
-    name: "Projects",
-    path: "/projects",
+    roles: ["admin", "engineer", "viewer"],
+    subItems: [
+      { name: "Overview & Stats", path: "/", pro: false },
+      { name: "Alerts & Warnings", path: "/alerts", pro: false }
+    ],
   },
   {
     icon: <DataSheetsIcon />,
     name: "DataSheets",
+    roles: ["admin", "engineer", "viewer", "qa"],
     subItems: [
-      { name: "Unfilled Forms", path: "/datasheets/unfilled", pro: false },
       { name: "Filled Forms", path: "/datasheets/filled", pro: false },
       { name: "Revisions", path: "/datasheets/revisions", pro: false },
     ],
   },
   {
-    icon: <InventoryIcon />,
-    name: "Inventory",
-    path: "/inventory",
+    icon: <TemplatesIcon />,
+    name: "Templates",
+    roles: ["admin", "engineer"],
+    subItems: [
+      { name: "Templates", path: "/datasheets/templates", pro: false },
+      { name: "Create a Template", path: "/datasheets/templates/create", pro: false },
+    ],
   },
   {
-    icon: <UsersIcon />,
-    name: "System Users",
-    path: "/users",
+    icon: <EstimationIcon />, // You can create or import a calculator-like icon
+    name: "Project Estimation",
+    subItems: [
+      { name: "Estimation Dashboard", path: "/estimation/dashboard" },
+      { name: "Create Estimation", path: "/estimation/create" },
+      { name: "Past Estimates", path: "/estimation/history" }
+    ],
+    roles: ["admin", "estimator", "manager"] // restrict access to specific roles
+  },
+  {
+    icon: <InventoryIcon />,
+    name: "Inventory",
+    roles: ['admin', 'warehouse'],
+    subItems: [
+      { name: "Stock Levels", path: "/inventory/stock", pro: false },
+      { name: "Maintenance Logs", path: "/inventory/maintenance", pro: false },
+    ],
+  },
+  {
+    icon: <AdministrationIcon />,
+    name: "Administration",
+    roles: ['admin'],
+    subItems: [
+      { name: "User Management", path: "/admin/users", pro: false },
+      { name: "System Settings", path: "/admin/settings", pro: false },
+    ],
   },
   {
     icon: <CalenderIcon />,
@@ -142,7 +168,18 @@ const AppSidebar: React.FC = () => {
   const renderMenuItems = (
     navItems: NavItem[],
     menuType: "main" | "others"
-  ) => (
+  ) => {
+    const filtered = navItems
+    .filter((nav) => !nav.roles || nav.roles.includes(userRole))
+    .map((nav) => {
+      const visibleSubItems = nav.subItems?.filter(
+        (s) => !s.roles || s.roles.includes(userRole)
+      );
+      return { ...nav, subItems: visibleSubItems };
+    })
+    .filter((nav) => nav.subItems?.length || nav.path);
+
+    return (
     <ul className="flex flex-col gap-4">
       {navItems.map((nav, index) => (
         <li key={nav.name}>
@@ -264,6 +301,7 @@ const AppSidebar: React.FC = () => {
       ))}
     </ul>
   );
+};
 
   const [openSubmenu, setOpenSubmenu] = useState<{
     type: "main" | "others";

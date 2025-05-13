@@ -280,6 +280,10 @@
   background-color: #344054;
 }
 
+.input {
+  @apply p-2 border rounded w-full;
+}
+
 
 
 @layer utilities {

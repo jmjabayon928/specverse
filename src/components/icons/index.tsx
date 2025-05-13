@@ -21,35 +21,44 @@ export function DepartmentsIcon(props: IconProps) {
 }
 
 // Data Sheets (File Spreadsheet Icon)
-export function ProjectsIcon(props: IconProps) {
+export function TemplatesIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg width={24} height={24} viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z" />
+      <path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4H3V5zm0 6h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8zm4 2v2h2v-2H7zm0 3v2h2v-2H7z" />
     </svg>
   );
 }
 
 // Reports (Bar Chart Icon)
-export function DataSheetsIcon(props: IconProps) {
+export function DataSheetsIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg width={24} height={24} viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M3 4h18v2H3V4zm0 4h12v2H3V8zm0 4h18v2H3v-2zm0 4h12v2H3v-2z" />
+      <path d="M6 2a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6H6zm7 1.5L18.5 9H13V3.5zM8 13h8v2H8v-2zm0 4h5v2H8v-2z" />
     </svg>
   );
 }
 
-export function InventoryIcon(props: SVGProps<SVGSVGElement>) {
+export function InventoryIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg width={24} height={24} viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z" />
+      <path d="M20 6h-8V4h8v2zM4 4h6v2H4V4zm0 4h16v12H4V8zm2 2v8h12v-8H6z" />
     </svg>
   );
 }
   
-export function UsersIcon(props: React.SVGProps<SVGSVGElement>) {
+export function EstimationIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg width={24} height={24} viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M9 2h6c.55 0 1 .45 1 1v1h3c1.1 0 2 .9 2 2v14c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2h3V3c0-.55.45-1 1-1zm6 2h-6v1h6V4zM5 8v12h14V8H5zm2 3h5v2H7v-2zm0 4h5v2H7v-2zm7.5-4.25L17 14l3.5-4.25-1.41-1.41L17 10.17l-1.09-1.09-1.41 1.42z" />
+      <path d="M5 2c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2H5zm0 2h14v4H5V4zm2 6h2v2H7v-2zm4 0h2v2h-2v-2zm4 0h2v2h-2v-2zM7 14h2v2H7v-2zm4 0h2v2h-2v-2zm4 0h2v2h-2v-2z" />
     </svg>
   );
 }
+
+export function AdministrationIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg width={24} height={24} viewBox="0 0 24 24" fill="currentColor" {...props}>
+      <path d="M12 2c-.6 0-1 .4-1 1v2.1c-1.2.2-2.2.8-3 1.6L6.2 5.7a1 1 0 0 0-1.4 0L3.6 6.9a1 1 0 0 0 0 1.4L5.3 10c-.8.8-1.4 1.8-1.6 3H2c-.6 0-1 .4-1 1v2c0 .6.4 1 1 1h1.7c.2 1.2.8 2.2 1.6 3l-1.7 1.7a1 1 0 0 0 0 1.4l1.1 1.1a1 1 0 0 0 1.4 0l1.7-1.7c.8.8 1.8 1.4 3 1.6V22c0 .6.4 1 1 1h2c.6 0 1-.4 1-1v-1.7c1.2-.2 2.2-.8 3-1.6l1.7 1.7a1 1 0 0 0 1.4 0l1.1-1.1a1 1 0 0 0 0-1.4l-1.7-1.7c.8-.8 1.4-1.8 1.6-3H22c.6 0 1-.4 1-1v-2c0-.6-.4-1-1-1h-1.7c-.2-1.2-.8-2.2-1.6-3l1.7-1.7a1 1 0 0 0 0-1.4l-1.1-1.1a1 1 0 0 0-1.4 0l-1.7 1.7c-.8-.8-1.8-1.4-3-1.6V3c0-.6-.4-1-1-1h-2zm1 14h-2v-2h2v2zm0-4h-2V9h2v3z" />
+    </svg>
+  );
+}
+
