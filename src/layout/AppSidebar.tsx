@@ -15,14 +15,13 @@ import {
   PieChartIcon,
   PlugInIcon,
   TableIcon,
-  UserCircleIcon,
 } from "../icons/index";
 import {
   EstimationIcon,
   DataSheetsIcon,
-  TemplatesIcon,
   AdministrationIcon,
-  InventoryIcon
+  InventoryIcon, 
+  ReportsIcon
 } from "../components/icons/index";
 
 const userRole = "admin";
@@ -47,7 +46,7 @@ const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: "Dashboard",
-    roles: ["admin", "engineer", "viewer"],
+    roles: ["admin", "manager", "estimator", "user"],
     subItems: [
       { name: "Overview & Stats", path: "/", pro: false },
       { name: "Alerts & Warnings", path: "/alerts", pro: false }
@@ -56,39 +55,44 @@ const navItems: NavItem[] = [
   {
     icon: <DataSheetsIcon />,
     name: "DataSheets",
-    roles: ["admin", "engineer", "viewer", "qa"],
+    roles: ["admin", "engineer", "estimator", "qa"],
     subItems: [
+      { name: "Templates", path: "/datasheets/templates", pro: false },
       { name: "Filled Forms", path: "/datasheets/filled", pro: false },
       { name: "Revisions", path: "/datasheets/revisions", pro: false },
     ],
   },
   {
-    icon: <TemplatesIcon />,
-    name: "Templates",
-    roles: ["admin", "engineer"],
-    subItems: [
-      { name: "Templates", path: "/datasheets/templates", pro: false },
-      { name: "Create a Template", path: "/datasheets/templates/create", pro: false },
-    ],
-  },
-  {
-    icon: <EstimationIcon />, // You can create or import a calculator-like icon
+    icon: <EstimationIcon />,  
     name: "Project Estimation",
     subItems: [
-      { name: "Estimation Dashboard", path: "/estimation/dashboard" },
-      { name: "Create Estimation", path: "/estimation/create" },
-      { name: "Past Estimates", path: "/estimation/history" }
+      { name: "Estimation List", path: "/estimation" },
+      { name: "Estimation Packages", path: "/estimation/packages" },
+      { name: "Estimation Quotes", path: "/estimation/quotes" },
+      { name: "Browse Past Estimates", path: "/estimation/history" } 
     ],
-    roles: ["admin", "estimator", "manager"] // restrict access to specific roles
-  },
+    roles: ["admin", "estimator", "manager"]  
+},
   {
     icon: <InventoryIcon />,
     name: "Inventory",
-    roles: ['admin', 'warehouse'],
+    roles: ["admin", "warehouse", "maintenance"],
     subItems: [
-      { name: "Stock Levels", path: "/inventory/stock", pro: false },
-      { name: "Maintenance Logs", path: "/inventory/maintenance", pro: false },
+      { name: "Inventory Items", path: "/inventory" },
+      { name: "Transactions", path: "/inventory/transactions" },
+      { name: "Maintenance", path: "/inventory/maintenance" },
+      { name: "Audit Logs", path: "/inventory/logs" } 
     ],
+  },
+  {
+    icon: <ReportsIcon />,
+    name: "Reports",
+    subItems: [
+      { name: "Datasheet Reports", path: "/reports/datasheets" },
+      { name: "Inventory Reports", path: "/reports/inventory" },
+      { name: "Estimation Reports", path: "/reports/estimations" }
+    ],
+    roles: ["admin", "manager", "estimator"]
   },
   {
     icon: <AdministrationIcon />,
@@ -104,12 +108,6 @@ const navItems: NavItem[] = [
     name: "Calendar",
     path: "/calendar",
   },
-  {
-    icon: <UserCircleIcon />,
-    name: "User Profile",
-    path: "/profile",
-  },
-
   {
     name: "Forms",
     icon: <ListIcon />,

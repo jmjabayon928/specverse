@@ -125,6 +125,23 @@ router.get("/filter", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+// GET /api/backend/datasheets/filled
+router.get("/filled", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query(`
+      SELECT SheetID, SheetNameEng
+      FROM Sheets
+      WHERE IsTemplate = 0
+      ORDER BY SheetNameEng
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load filled datasheets" });
+  }
+});
+
 // ✅ Get all filled datasheets
 router.get("/", async (req: Request, res: Response): Promise<void> => {
   try {

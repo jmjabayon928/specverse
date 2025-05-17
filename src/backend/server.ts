@@ -13,6 +13,9 @@ import categoriesRoutes from "./routes/categoriesRoutes";
 import datasheetsRoutes from "./routes/datasheetsRoutes";
 import languageRoutes from "./routes/languageRoutes";
 import labelRoutes from "./routes/labelRoutes";
+import inventoryRoutes from "./routes/inventoryRoutes";
+import estimationRoutes from "./routes/estimationRoutes";
+import { mockUser } from "@/backend/middleware/authMiddleware";
 
 // Initialize environment variables
 dotenv.config();
@@ -30,13 +33,16 @@ app.use(compression());
 app.use(morgan("dev"));
 app.use(express.json());
 
+app.use(mockUser);
 // ✅ Mount API routes
 app.use("/api/users", userRoutes);
 app.use("/api/clients", clientsRoutes);
 app.use("/api/categories", categoriesRoutes);
-app.use("/api/backend/datasheets", datasheetsRoutes);   // ✅ KEY FIX
+app.use("/api/backend/datasheets", datasheetsRoutes); 
+app.use("/api/backend/inventory", inventoryRoutes); 
+app.use("/api/backend/estimation", estimationRoutes);
 app.use("/api/languages", languageRoutes);
-app.use("/api", labelRoutes);   // you can later rename to /api/labels if you prefer
+app.use("/api", labelRoutes); 
 
 // ✅ Health check route
 app.get("/api/health", (req: Request, res: Response) => {

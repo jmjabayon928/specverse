@@ -62,3 +62,10 @@ export function AdministrationIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function ReportsIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg width={24} height={24} viewBox="0 0 24 24" fill="currentColor" {...props}>
+      <path d="M4 22a1 1 0 0 1-1-1V10a1 1 0 0 1 2 0v11a1 1 0 0 1-1 1zm7 0a1 1 0 0 1-1-1V4a1 1 0 0 1 2 0v17a1 1 0 0 1-1 1zm7 0a1 1 0 0 1-1-1v-7a1 1 0 0 1 2 0v7a1 1 0 0 1-1 1z" />
+    </svg>
+  );
+}

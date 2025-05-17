@@ -1,3 +1,5 @@
+// src/validation/inventorySchema.ts
+
 import { z } from "zod";
 
 // Inventory Item Schema
@@ -33,3 +35,8 @@ export const inventoryMaintenanceSchema = z.object({
   description: z.string().min(1, "Description is required").max(1000),
   notes: z.string().max(1000).optional().or(z.literal("")),
 });
+
+// ✅ Type Inference
+export type InventoryFormValues = z.infer<typeof inventoryItemSchema>;
+export type InventoryTransactionValues = z.infer<typeof inventoryTransactionSchema>;
+export type InventoryMaintenanceValues = z.infer<typeof inventoryMaintenanceSchema>;
