@@ -2,7 +2,14 @@
 
 import { useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
-import type { SupplierQuoteFormProps } from "@/types/estimation";
+import { SupplierQuote } from "@/types/estimation";
+
+export type SupplierQuoteFormProps = {
+  itemId?: number; // Only used for create mode
+  defaultValues?: SupplierQuote;
+  mode?: "create" | "edit";
+  onSubmitSuccess?: () => void;
+};
 
 interface QuoteFormData {
   SupplierID: number;
@@ -17,13 +24,26 @@ const currencyOptions = [
   "INR", "PHP", "THB", "KRW", "NZD", "SEK", "NOK", "DKK", "ZAR", "BRL"
 ];
 
-export default function SupplierQuoteForm({ itemId, onSuccess }: SupplierQuoteFormProps) {
+export default function SupplierQuoteForm({
+  itemId,
+  defaultValues,
+  mode = "create",
+  onSubmitSuccess,
+}: SupplierQuoteFormProps) {
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<QuoteFormData>();
+  } = useForm<QuoteFormData>({
+    defaultValues: {
+      SupplierID: defaultValues?.SupplierID || undefined,
+      QuotedUnitCost: defaultValues?.QuotedUnitCost || undefined,
+      ExpectedDeliveryDays: defaultValues?.ExpectedDeliveryDays || undefined,
+      CurrencyCode: defaultValues?.CurrencyCode || "",
+      Notes: defaultValues?.Notes || "",
+    },
+  });
 
   const [suppliers, setSuppliers] = useState<{ id: number; name: string }[]>([]);
 
@@ -43,19 +63,32 @@ export default function SupplierQuoteForm({ itemId, onSuccess }: SupplierQuoteFo
 
   const onSubmit = async (data: QuoteFormData) => {
     try {
-      const res = await fetch("/api/backend/estimation/quotes/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, ItemID: itemId }),
-      });
+      const response = await fetch(
+        mode === "edit"
+          ? `/api/backend/estimation/quotes/${defaultValues?.QuoteID}`
+          : `/api/backend/estimation/quotes/create`,
+        {
+          method: mode === "edit" ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            mode === "edit" ? data : { ...data, ItemID: itemId }
+          ),
+        }
+      );
 
-      if (!res.ok) throw new Error("Insert failed");
-      reset();
-      alert("Supplier quote added successfully!");
-      onSuccess();
+      if (!response.ok) throw new Error("Quote save failed");
+
+      if (mode === "create") {
+        reset(); // Clear form only for creation
+        alert("Supplier quote added successfully!");
+      } else {
+        alert("Quote updated successfully!");
+      }
+
+      if (onSubmitSuccess) onSubmitSuccess();
     } catch (err) {
-      console.error("Insert error:", err);
-      alert("Failed to add quote.");
+      console.error("Quote submit error:", err);
+      alert("Failed to save quote.");
     }
   };
 
@@ -82,9 +115,7 @@ export default function SupplierQuoteForm({ itemId, onSuccess }: SupplierQuoteFo
 
       {/* Quoted Unit Cost */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Quoted Unit Cost
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Quoted Unit Cost</label>
         <input
           type="number"
           step="0.01"
@@ -98,9 +129,7 @@ export default function SupplierQuoteForm({ itemId, onSuccess }: SupplierQuoteFo
 
       {/* Delivery Days */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Expected Delivery (Days)
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Expected Delivery (Days)</label>
         <input
           type="number"
           {...register("ExpectedDeliveryDays", { required: true })}
@@ -111,25 +140,24 @@ export default function SupplierQuoteForm({ itemId, onSuccess }: SupplierQuoteFo
         )}
       </div>
 
-      {/* Currency (Dropdown) */}
-        <div>
+      {/* Currency Dropdown */}
+      <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
         <select
-            {...register("CurrencyCode", { required: true })}
-            className="w-full border rounded px-3 py-2 text-sm"
-            defaultValue=""
+          {...register("CurrencyCode", { required: true })}
+          className="w-full border rounded px-3 py-2 text-sm"
         >
-            <option value="">-- Select Currency --</option>
-            {currencyOptions.map(code => (
+          <option value="">-- Select Currency --</option>
+          {currencyOptions.map((code) => (
             <option key={code} value={code}>{code}</option>
-            ))}
+          ))}
         </select>
         {errors.CurrencyCode && (
-            <p className="text-red-500 text-sm mt-1">Currency is required.</p>
+          <p className="text-red-500 text-sm mt-1">Currency is required.</p>
         )}
-        </div>
+      </div>
 
-      {/* Notes (Optional) */}
+      {/* Notes */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
         <textarea
@@ -145,7 +173,7 @@ export default function SupplierQuoteForm({ itemId, onSuccess }: SupplierQuoteFo
           type="submit"
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm shadow"
         >
-          Submit Quote
+          {mode === "edit" ? "Update Quote" : "Submit Quote"}
         </button>
       </div>
     </form>

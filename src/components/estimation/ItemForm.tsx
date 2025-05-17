@@ -1,61 +1,125 @@
-"use client";
-import { useForm } from "react-hook-form";
-import type { ItemFormProps } from "@/types/estimation";
+'use client';
 
-type ItemFormValues = {
-    PartName: string;
-    Quantity: number;
-    UnitCost: number;
+import { useForm } from 'react-hook-form';
+import { useRouter } from 'next/navigation';
+import { EstimationItem } from '@/types/estimation';
+
+export type ItemFormProps = {
+  defaultValues?: EstimationItem;
+  mode?: 'create' | 'edit';
+  onSubmitSuccess?: () => void;
 };
 
-export default function ItemForm({ packageId, estimationId, onSuccess }: ItemFormProps) {
-    const { register, handleSubmit, reset } = useForm<ItemFormValues>();
+type ItemFormData = {
+  EstimationID: number;
+  PackageID?: number;
+  ItemID: number; // SheetID
+  Quantity: number;
+  Description?: string;
+};
 
-    const onSubmit = async (data: ItemFormValues) => {
-        await fetch("/api/backend/estimation/items/create", {
-            method: "POST",
-            body: JSON.stringify({
-                PackageID: packageId,
-                EstimationID: estimationId, 
-                PartName: data.PartName,
-                Quantity: data.Quantity,
-                UnitCost: data.UnitCost,
-            }),
-            headers: { "Content-Type": "application/json" },
-        });
+export default function ItemForm({
+  defaultValues,
+  mode = 'create',
+  onSubmitSuccess,
+}: ItemFormProps) {
+  const router = useRouter();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ItemFormData>({
+    defaultValues: {
+      EstimationID: defaultValues?.EstimationID ?? undefined,
+      PackageID: defaultValues?.PackageID ?? undefined,
+      ItemID: defaultValues?.ItemID ?? undefined,
+      Quantity: defaultValues?.Quantity ?? 1,
+      Description: defaultValues?.Description ?? '',
+    },
+  });
 
-        reset(); 
-        alert("Item successfully added!");
-        onSuccess(); 
-    };
+  const onSubmit = async (data: ItemFormData) => {
+    try {
+      const res = await fetch(
+        mode === 'edit'
+          ? `/api/estimation/items/${defaultValues?.EItemID}`
+          : `/api/estimation/items/create`,
+        {
+          method: mode === 'edit' ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        }
+      );
 
-    return (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 border p-4 bg-gray-50 rounded">
-            <h3 className="font-semibold mb-2">Add Item</h3>
+      if (!res.ok) throw new Error('Save failed');
 
-            <input
-                {...register("PartName", { required: true })}
-                placeholder="Part Name"
-                className="input w-full"
-            />
+      if (onSubmitSuccess) onSubmitSuccess();
+      else router.push(`/estimation/packages/${data.PackageID}`);
+    } catch (err) {
+      console.error('Failed to save item:', err);
+      alert('Failed to save item.');
+    }
+  };
 
-            <input
-                type="number"
-                step="any"
-                {...register("Quantity", { required: true, valueAsNumber: true })}
-                placeholder="Quantity"
-                className="input w-full"
-            />
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {/* Estimation ID (hidden for edit) */}
+      {mode === 'edit' ? (
+        <input type="hidden" value={defaultValues?.EstimationID} {...register('EstimationID')} />
+      ) : (
+        <div>
+          <label className="block text-sm font-medium mb-1">Estimation ID</label>
+          <input
+            type="number"
+            {...register('EstimationID', { required: true })}
+            className="input"
+          />
+          {errors.EstimationID && <p className="text-red-500 text-sm">Required.</p>}
+        </div>
+      )}
 
-            <input
-                type="number"
-                step="any"
-                {...register("UnitCost", { required: true, valueAsNumber: true })}
-                placeholder="Unit Cost"
-                className="input w-full"
-            />
+      {/* Package ID (hidden or optional) */}
+      <input type="hidden" value={defaultValues?.PackageID ?? ''} {...register('PackageID')} />
 
-            <button type="submit" className="mt-6 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow-sm text-sm">Add Item</button>
-        </form>
-    );
+      {/* ItemID = Datasheet ID */}
+      <div>
+        <label className="block text-sm font-medium mb-1">Item (Datasheet)</label>
+        <input
+          type="number"
+          {...register('ItemID', { required: true })}
+          className="input"
+        />
+        {errors.ItemID && <p className="text-red-500 text-sm">ItemID is required.</p>}
+      </div>
+
+      {/* Quantity */}
+      <div>
+        <label className="block text-sm font-medium mb-1">Quantity</label>
+        <input
+          type="number"
+          step="0.01"
+          {...register('Quantity', { required: true, min: 0 })}
+          className="input"
+        />
+        {errors.Quantity && <p className="text-red-500 text-sm">Quantity is required.</p>}
+      </div>
+
+      {/* Description */}
+      <div>
+        <label className="block text-sm font-medium mb-1">Description</label>
+        <textarea
+          {...register('Description')}
+          className="input"
+          rows={3}
+        />
+      </div>
+
+      {/* Submit */}
+      <div>
+        <button type="submit" className="btn-primary">
+          {mode === 'edit' ? 'Update Item' : 'Add Item'}
+        </button>
+      </div>
+    </form>
+  );
 }

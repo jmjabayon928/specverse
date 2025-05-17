@@ -1,181 +1,190 @@
 import express from "express";
 import {
-    getAllEstimations,
-    getEstimationById,
-    createEstimation
+  getAllEstimations,
+  getEstimationById,
+  createEstimation,
+  updateEstimation
 } from "../database/estimationQueries";
 
 import {
-    getPackagesByEstimationId,
-    getPackageById,
-    createPackage
+  getPackagesByEstimationId,
+  getPackageById,
+  createPackage
 } from "../database/estimationPackageQueries";
 
 import {
-    getItemsByPackageId,
-    createItem
+  getItemsByPackageId,
+  createItem
 } from "../database/estimationItemQueries";
 
 import {
-    getQuotesByItemId,
-    createSupplierQuote,
-    selectSupplierQuote
+  getQuotesByItemId,
+  createSupplierQuote,
+  selectSupplierQuote
 } from "../database/estimationQuoteQueries";
 
 const router = express.Router();
 
-
 // ==============================
-// MAIN ESTIMATION ROUTES
+// REST-STYLE ESTIMATION ROUTES
 // ==============================
 
-// GET all estimations
-router.get("/all", async (req, res) => {
-    try {
-        const data = await getAllEstimations();
-        res.json(data);
-    } catch (error) {
-        console.error("Error fetching estimations:", error);
-        res.status(500).json({ error: "Failed to load estimations" });
-    }
+// GET /api/estimation (All estimations)
+router.get("/", async (req, res) => {
+  try {
+    const data = await getAllEstimations();
+    res.json(data);
+  } catch (err) {
+    console.error("Error fetching estimations:", err);
+    res.status(500).json({ error: "Failed to fetch estimations" });
+  }
 });
 
-// POST create new estimation
-router.post("/create", async (req, res) => {
-    try {
-        const newEstimation = req.body;
-        const createdId = await createEstimation(newEstimation);
-        res.status(201).json({ EstimationID: createdId });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to create estimation" });
-    }
+// POST /api/estimation (Create new estimation)
+router.post("/", async (req, res) => {
+  try {
+    const data = await createEstimation(req.body);
+    res.status(201).json(data);
+  } catch (err) {
+    console.error("Insert failed:", err);
+    res.status(500).json({ error: "Failed to create estimation" });
+  }
 });
 
+// GET /api/estimation/:id (Get one estimation)
+router.get("/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid EstimationID" });
+
+  try {
+    const data = await getEstimationById(id);
+    res.json(data);
+  } catch (err) {
+    console.error("Error fetching estimation:", err);
+    res.status(500).json({ error: "Failed to load estimation" });
+  }
+});
+
+// PUT /api/estimation/:id (Update estimation)
+router.put("/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid EstimationID" });
+
+  try {
+    const data = await updateEstimation(id, req.body);
+    res.json(data);
+  } catch (err) {
+    console.error("Error updating estimation:", err);
+    res.status(500).json({ error: "Failed to update estimation" });
+  }
+});
 
 // ==============================
-// PACKAGES ROUTES
+// PACKAGE ROUTES
 // ==============================
 
-// GET all packages for an estimation
+// GET /api/estimation/packages?estimationId=1
 router.get("/packages", async (req, res) => {
-    try {
-        const estimationId = parseInt(req.query.estimationId as string);
-        console.log("Fetching packages for estimation:", estimationId);
-
-        const packages = await getPackagesByEstimationId(estimationId);
-        console.log("Packages fetched from DB:", packages); // ← NEW LOG
-        res.json(packages);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to load packages" });
-    }
+  try {
+    const estimationId = parseInt(req.query.estimationId as string);
+    const packages = await getPackagesByEstimationId(estimationId);
+    res.json(packages);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load packages" });
+  }
 });
 
-// GET single package by ID
+// GET /api/estimation/packages/:id
 router.get("/packages/:id", async (req, res) => {
-    try {
-        const packageId = parseInt(req.params.id);
-        const pkg = await getPackageById(packageId);
-        res.json(pkg);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to load package" });
-    }
+  try {
+    const packageId = parseInt(req.params.id);
+    const pkg = await getPackageById(packageId);
+    res.json(pkg);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load package" });
+  }
 });
 
-// POST create package
+// POST /api/estimation/packages/create
 router.post("/packages/create", async (req, res) => {
-    try {
-        const newPackage = req.body;
-        const createdId = await createPackage(newPackage);
-        res.status(201).json({ PackageID: createdId });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to create package" });
-    }
+  try {
+    const newPackage = req.body;
+    const createdId = await createPackage(newPackage);
+    res.status(201).json({ PackageID: createdId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to create package" });
+  }
 });
 
-
 // ==============================
-// ITEMS ROUTES
+// ITEM ROUTES
 // ==============================
 
-// GET all items for a package
+// GET /api/estimation/items?packageId=1
 router.get("/items", async (req, res) => {
-    try {
-        const packageId = parseInt(req.query.packageId as string);
-        const items = await getItemsByPackageId(packageId);
-        res.json(items);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to load items" });
-    }
+  try {
+    const packageId = parseInt(req.query.packageId as string);
+    const items = await getItemsByPackageId(packageId);
+    res.json(items);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load items" });
+  }
 });
 
-// POST create item
+// POST /api/estimation/items/create
 router.post("/items/create", async (req, res) => {
-    try {
-        const newItem = req.body;
-        const createdId = await createItem(newItem);
-        res.status(201).json({ ItemID: createdId });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to create item" });
-    }
+  try {
+    const newItem = req.body;
+    const createdId = await createItem(newItem);
+    res.status(201).json({ ItemID: createdId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to create item" });
+  }
 });
-
 
 // ==============================
 // SUPPLIER QUOTES ROUTES
 // ==============================
 
-// GET all quotes for an item
+// GET /api/estimation/quotes?itemId=123
 router.get("/quotes", async (req, res) => {
-    try {
-        const itemId = parseInt(req.query.itemId as string);
-        const quotes = await getQuotesByItemId(itemId);
-        res.json(quotes);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to load quotes" });
-    }
+  try {
+    const itemId = parseInt(req.query.itemId as string);
+    const quotes = await getQuotesByItemId(itemId);
+    res.json(quotes);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load quotes" });
+  }
 });
 
-// POST create supplier quote
+// POST /api/estimation/quotes/create
 router.post("/quotes/create", async (req, res) => {
-    try {
-        const newQuote = req.body;
-        const createdId = await createSupplierQuote(newQuote);
-        res.status(201).json({ QuoteID: createdId });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to create supplier quote" });
-    }
+  try {
+    const newQuote = req.body;
+    const createdId = await createSupplierQuote(newQuote);
+    res.status(201).json({ QuoteID: createdId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to create supplier quote" });
+  }
 });
 
-// POST select a supplier quote
+// POST /api/estimation/quotes/select/:quoteId
 router.post("/quotes/select/:quoteId", async (req, res) => {
-    try {
-        const quoteId = parseInt(req.params.quoteId);
-        await selectSupplierQuote(quoteId);
-        res.status(200).json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to select supplier quote" });
-    }
-});
-
-// GET single estimation by ID
-router.get("/:id", async (req, res) => {
-    try {
-        const id = parseInt(req.params.id);
-        const data = await getEstimationById(id);
-        res.json(data);
-    } catch (error) {
-        console.error("Error fetching estimation:", error);
-        res.status(500).json({ error: "Failed to load estimation" });
-    }
+  try {
+    const quoteId = parseInt(req.params.quoteId);
+    await selectSupplierQuote(quoteId);
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to select supplier quote" });
+  }
 });
 
 export default router;

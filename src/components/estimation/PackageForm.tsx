@@ -1,79 +1,111 @@
-"use client";
-import { useForm } from "react-hook-form";
-import { PackageFormValues } from "@/types/estimation";
+'use client';
 
-export interface PackageFormProps {
-  estimationId: number;
-  onSuccess: () => void;
-}
+import { useForm } from 'react-hook-form';
+import { useRouter } from 'next/navigation';
+import { EstimationPackage } from '@/types/estimation';
 
-export default function PackageForm({ estimationId, onSuccess }: PackageFormProps) {
-  const { register, handleSubmit, reset } = useForm<PackageFormValues>();
+export type PackageFormProps = {
+  defaultValues?: EstimationPackage;
+  mode?: 'create' | 'edit';
+  onSubmitSuccess?: () => void;
+};
 
-  const onSubmit = async (data: PackageFormValues) => {
-    await fetch("/api/backend/estimation/packages/create", {
-      method: "POST",
-      body: JSON.stringify({ ...data, EstimationID: estimationId }),
-      headers: { "Content-Type": "application/json" },
-    });
+type PackageFormData = {
+  EstimationID: number;
+  PackageName: string;
+  Description?: string;
+};
 
-    reset();
-    alert("Package successfully added!");
-    onSuccess();
+export default function PackageForm({
+  defaultValues,
+  mode = 'create',
+  onSubmitSuccess,
+}: PackageFormProps) {
+  const router = useRouter();
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<PackageFormData>({
+    defaultValues: {
+      EstimationID: defaultValues?.EstimationID ?? undefined,
+      PackageName: defaultValues?.PackageName ?? '',
+      Description: defaultValues?.Description ?? '',
+    },
+  });
+
+  const onSubmit = async (data: PackageFormData) => {
+    try {
+      const response = await fetch(
+        mode === 'edit'
+          ? `/api/estimation/packages/${defaultValues?.PackageID}`
+          : `/api/estimation/packages/create`,
+        {
+          method: mode === 'edit' ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        }
+      );
+
+      if (!response.ok) throw new Error('Save failed');
+
+      if (onSubmitSuccess) onSubmitSuccess();
+      else router.push(`/estimation/${data.EstimationID}`);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save package.');
+    }
   };
 
   return (
-    <div>
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">Create New Package</h1>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-                Package Name <span className="text-red-500">*</span>
-            </label>
-            <input
-                {...register("PackageName")}
-                type="text"
-                required
-                className="w-full border rounded-md px-4 py-2 text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                placeholder="e.g. Pumping Station A"
-            />
-            </div>
-
-            <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-                Sequence
-            </label>
-            <input
-                {...register("Sequence")}
-                type="number"
-                className="w-full border rounded-md px-4 py-2 text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                placeholder="e.g. 1"
-            />
-            </div>
-        </div>
-
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {/* Estimation ID (hidden for edit mode) */}
+      {mode === 'edit' ? (
+        <input type="hidden" value={defaultValues?.EstimationID} {...register('EstimationID')} />
+      ) : (
         <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-            Description
-            </label>
-            <textarea
-            {...register("Description")}
-            className="w-full border rounded-md px-4 py-2 text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            placeholder="Optional package description..."
-            rows={3}
-            />
+          <label className="block text-sm font-medium mb-1">Estimation ID</label>
+          <input
+            type="number"
+            {...register('EstimationID', { required: true })}
+            className="input"
+          />
+          {errors.EstimationID && (
+            <p className="text-red-500 text-sm">Estimation ID is required.</p>
+          )}
         </div>
+      )}
 
-        <div className="flex justify-end">
-            <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-6 py-2 rounded-md shadow-sm"
-            >
-            Save Package
-            </button>
-        </div>
-        </form>
-    </div>
+      {/* Package Name */}
+      <div>
+        <label className="block text-sm font-medium mb-1">Package Name</label>
+        <input
+          type="text"
+          {...register('PackageName', { required: true })}
+          className="input"
+        />
+        {errors.PackageName && (
+          <p className="text-red-500 text-sm">Package name is required.</p>
+        )}
+      </div>
+
+      {/* Description */}
+      <div>
+        <label className="block text-sm font-medium mb-1">Description</label>
+        <textarea
+          {...register('Description')}
+          className="input"
+          rows={3}
+        />
+      </div>
+
+      {/* Submit */}
+      <div>
+        <button type="submit" className="btn-primary">
+          {mode === 'edit' ? 'Update Package' : 'Create Package'}
+        </button>
+      </div>
+    </form>
   );
 }

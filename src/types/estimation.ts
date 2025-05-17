@@ -1,7 +1,6 @@
 // Project Estimation Main Record
 export interface Estimation {
     EstimationID: number;
-    SheetID: number;
     ClientID?: number;
     ProjectID?: number;
     Title: string;
@@ -21,7 +20,6 @@ export interface Estimation {
 
 // Input for Create/Update Estimation
 export interface NewEstimationInput {
-    SheetID: number;
     Title: string;
     Description?: string;
     ClientID?: number;
@@ -57,35 +55,25 @@ export interface NewPackageInput {
 
 // Estimation Item (per Package)
 export interface EstimationItem {
-    ItemID: number;
-    EstimationID: number;
-    PackageID?: number;
-    InformationValueID?: number;
-    PartName: string;
-    Description?: string;
-    Quantity: number;
-    UnitOfMeasure?: string;
-    UnitCost: number;
-    SupplierID?: number;
-    EstimatedDeliveryDays?: number;
-    Notes?: string;
-    LineTotal?: number;
-    CreatedAt?: string;
-    CreatedBy?: number;
-    ModifiedAt?: string;
-    ModifiedBy?: number;
+  EItemID: number;         // ✅ correct primary key
+  EstimationID: number;
+  PackageID?: number;
+  ItemID: number;          // FK to Sheets (datasheet)
+  Quantity: number;
+  Description?: string;
+  CreatedAt?: string;
+  CreatedBy?: number;
+  ModifiedAt?: string;
+  ModifiedBy?: number;
 }
 
 // Input for Create/Update Item
 export interface NewEstimationItemInput {
     EstimationID: number;
     PackageID?: number;
-    PartName: string;
+    ItemID: number; // refers to SheetID
     Quantity: number;
-    UnitCost: number;
-    UnitOfMeasure?: string;
     Description?: string;
-    SupplierID?: number;
     CreatedBy?: number;
 }
 
@@ -197,22 +185,3 @@ export type SupplierQuoteFormProps = {
     onSuccess: () => void;
 };
 
-export interface PackageFormValues {
-  PackageName: string;
-  Description?: string;
-  Sequence: number;
-}
-
-export interface ItemFormValues {
-  PartName: string;
-  Quantity: number;
-  UnitCost: number;
-}
-
-export interface SupplierQuoteFormValues {
-  SupplierID: number;
-  QuotedUnitCost: number;
-  ExpectedDeliveryDays: number;
-  CurrencyCode: string;
-  Notes?: string;
-}
