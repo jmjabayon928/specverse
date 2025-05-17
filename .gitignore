@@ -1,13 +1,21 @@
-# Node.js
+# Node.js / Next.js
 node_modules/
 .next/
-out/
+.out/
 dist/
 coverage/
 .env
-.vscode/
 *.log
 
-# OS / IDE junk
+# IDE and system
+.vscode/
 .DS_Store
 Thumbs.db
+
+# TurboRepo (if using Turborepo or TailAdmin)
+.turbo/
+
+# Optional: OS-specific
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
