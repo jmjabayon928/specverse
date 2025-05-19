@@ -15,6 +15,7 @@ import languageRoutes from "./routes/languageRoutes";
 import labelRoutes from "./routes/labelRoutes";
 import inventoryRoutes from "./routes/inventoryRoutes";
 import estimationRoutes from "./routes/estimationRoutes";
+import projectsRoutes from "./routes/projectsRoutes";
 import { mockUser } from "@/backend/middleware/authMiddleware";
 
 // Initialize environment variables
@@ -41,6 +42,7 @@ app.use("/api/categories", categoriesRoutes);
 app.use("/api/backend/datasheets", datasheetsRoutes); 
 app.use("/api/backend/inventory", inventoryRoutes); 
 app.use("/api/backend/estimation", estimationRoutes);
+app.use("/api/projects", projectsRoutes);
 app.use("/api/languages", languageRoutes);
 app.use("/api", labelRoutes); 
 

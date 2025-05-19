@@ -1,5 +1,12 @@
 import { poolPromise, sql } from "../config/db";
 
+type InfoRow = {
+  InfoID: number;
+  InfoTemplateID: number;
+  Value: string | number | null;
+  Label: string;
+};
+
 /**
  * Get all information for a given SubID and SheetID.
  * Pulls the templates (labels, types) and their filled values.
@@ -45,7 +52,7 @@ export async function getTranslatedTemplateLabels(sheetId: number, languageCode:
 
   // ✅ THIS is where you put the block
   const templateMap: Record<string, string> = {};
-  result.recordset.forEach(row => {
+  result.recordset.forEach((row: InfoRow) => {
     templateMap[row.InfoTemplateID] = row.Label;
   });
 

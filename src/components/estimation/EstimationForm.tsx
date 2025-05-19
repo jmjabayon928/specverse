@@ -24,10 +24,14 @@ export default function EstimationForm({
   onSubmitSuccess,
 }: EstimationFormProps) {
   const router = useRouter();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+
   const {
     register,
     handleSubmit,
     formState: { errors },
+    setValue,
   } = useForm<EstimationFormData>({
     defaultValues: {
       ProjectID: defaultValues?.ProjectID ?? undefined,
@@ -36,23 +40,36 @@ export default function EstimationForm({
     },
   });
 
-  const [projects, setProjects] = useState<Project[]>([]);
-
+  // ✅ Fetch project options
   useEffect(() => {
     const fetchProjects = async () => {
-      const res = await fetch('/api/projects');
-      const data = await res.json();
-      setProjects(data);
-    };
-    fetchProjects();
-  }, []);
+      try {
+        const res = await fetch(`${baseUrl}/api/projects`);
+        const data = await res.json();
+        setProjects(data);
 
+        // ✅ Set selected project only after options are available
+        if (defaultValues?.ProjectID) {
+          const match = data.find((p: Project) => p.ProjID === defaultValues.ProjectID);
+          if (match) {
+            setValue('ProjectID', match.ProjID);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load projects:", err);
+      }
+    };
+
+    fetchProjects();
+  }, [defaultValues?.ProjectID, baseUrl, setValue]);
+
+  // ✅ Handle submit
   const onSubmit = async (data: EstimationFormData) => {
     try {
       const res = await fetch(
         mode === 'edit'
-          ? `/api/estimation/${defaultValues?.EstimationID}`
-          : '/api/estimation',
+          ? `${baseUrl}/api/backend/estimation/${defaultValues?.EstimationID}`
+          : `${baseUrl}/api/backend/estimation`,
         {
           method: mode === 'edit' ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -75,7 +92,10 @@ export default function EstimationForm({
       {/* Project Selection */}
       <div>
         <label className="block text-sm font-medium mb-1">Project</label>
-        <select {...register('ProjectID', { required: true })} className="input">
+        <select
+          {...register('ProjectID', { required: true })}
+          className="input"
+        >
           <option value="">-- Select Project --</option>
           {projects.map((proj) => (
             <option key={proj.ProjID} value={proj.ProjID}>

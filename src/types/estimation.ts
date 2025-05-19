@@ -1,21 +1,23 @@
 // Project Estimation Main Record
 export interface Estimation {
     EstimationID: number;
-    ClientID?: number;
-    ProjectID?: number;
+    ClientID: number;
+    ClientName?: string;
+    ProjectID: number;
+    ProjectName?: string;
     Title: string;
     Description?: string;
-    EstimatedBy?: number;
-    EstimationDate: string;
     TotalMaterialCost?: number;
     TotalLaborCost?: number;
     TotalDurationDays?: number;
     CurrencyCode?: string;
     Status: string;
-    CreatedAt?: string;
-    CreatedBy?: number;
-    ModifiedAt?: string;
-    ModifiedBy?: number;
+    CreatedByName?: string;
+    CreatedAt: string;
+    VerifiedByName?: string;
+    VerifiedAt?: string;
+    ApprovedByName?: string;
+    ApprovedAt?: string;
 }
 
 // Input for Create/Update Estimation
@@ -42,6 +44,8 @@ export interface EstimationPackage {
     CreatedBy?: number;
     ModifiedAt?: string;
     ModifiedBy?: number;
+    CreatedByName?: string;
+    ModifiedByName?: string;
 }
 
 // Input for Create/Update Package
@@ -55,16 +59,16 @@ export interface NewPackageInput {
 
 // Estimation Item (per Package)
 export interface EstimationItem {
-  EItemID: number;         // ✅ correct primary key
+  EItemID: number;
   EstimationID: number;
   PackageID?: number;
-  ItemID: number;          // FK to Sheets (datasheet)
+  ItemID: number;
   Quantity: number;
   Description?: string;
   CreatedAt?: string;
   CreatedBy?: number;
-  ModifiedAt?: string;
-  ModifiedBy?: number;
+  CreatedByName?: string; 
+  ItemName?: string; 
 }
 
 // Input for Create/Update Item
@@ -170,14 +174,25 @@ export interface EstimationChangeLog {
 }
 
 export type PackageFormProps = {
-    estimationId: number;
-    onSuccess: () => void;
+  defaultValues?: EstimationPackage;
+  estimationId: number;
+  mode?: 'create' | 'edit';
+  onSuccess: () => void;
 };
 
+export interface PackageFormValues {
+  PackageName: string;
+  Description?: string;
+  Sequence: number;
+}
+
 export type ItemFormProps = {
-    packageId: number;
-    estimationId: number;
-    onSuccess: () => void;
+  estimationId: number;
+  packageId: number;
+  mode?: 'create' | 'edit';
+  defaultValues?: EstimationItem;
+  onSuccess: () => void;
+  onCancel: () => void;
 };
 
 export type SupplierQuoteFormProps = {

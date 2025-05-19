@@ -24,6 +24,7 @@ import {
 import { checkRolePermission } from "../middleware/authMiddleware";
 import { getAllReferenceOptions } from "@/backend/database/ReferenceQueries";
 import { asyncHandler } from "@/backend/utils/asyncHandler";
+import { getInventoryItemOptions } from '../database/ReferenceQueries';
 
 const router = express.Router();
 
@@ -68,6 +69,16 @@ router.get("/", checkRolePermission("INVENTORY_VIEW"), async (req, res) => {
 router.post("/", checkRolePermission("INVENTORY_CREATE"), async (req, res) => {
   const newId = await createInventoryItem(req.body);
   res.status(201).json({ inventoryId: newId });
+});
+
+router.get('/item-options', async (req, res) => {
+  try {
+    const data = await getInventoryItemOptions();
+    res.json(data);
+  } catch (err) {
+    console.error('Failed to fetch inventory items:', err);
+    res.status(500).json({ error: 'Failed to load inventory options' });
+  }
 });
 
 

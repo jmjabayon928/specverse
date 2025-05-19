@@ -24,7 +24,7 @@ export default function CreateEstimationPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const response = await fetch("/api/backend/estimation/create", {
+    const response = await fetch("/api/backend/estimation/", {
       method: "POST",
       body: JSON.stringify({
         ProjectID: parseInt(projectId),

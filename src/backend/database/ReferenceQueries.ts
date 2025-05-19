@@ -29,3 +29,17 @@ export async function getAllReferenceOptions() {
     projects: projects.recordset
   };
 }
+
+export async function getInventoryItemOptions() {
+  const pool = await poolPromise;
+  const result = await pool.request().query(`
+    SELECT 
+      i.InventoryID AS ItemID,
+      s.SheetNameEng
+    FROM Inventory i
+    JOIN Sheets s ON i.SheetID = s.SheetID
+    ORDER BY s.SheetNameEng
+  `);
+
+  return result.recordset;
+}

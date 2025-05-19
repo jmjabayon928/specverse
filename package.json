@@ -48,6 +48,7 @@
     "react-dom": "18.2.0",
     "react-dropzone": "^14.3.5",
     "react-hook-form": "^7.56.3",
+    "react-hot-toast": "^2.5.2",
     "react-select": "^5.10.1",
     "specverse": "file:",
     "swiper": "^11.2.0",
