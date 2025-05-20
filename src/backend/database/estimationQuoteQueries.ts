@@ -82,3 +82,16 @@ export async function selectSupplierQuote(quoteId: number) {
     .input('QuoteID', sql.Int, quoteId)
     .query(`UPDATE EstimationItemSupplierQuotes SET IsSelected = 1 WHERE QuoteID = @QuoteID`);
 }
+
+export async function isDuplicateQuote(itemId: number, supplierId: number) {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("ItemID", sql.Int, itemId)
+    .input("SupplierID", sql.Int, supplierId)
+    .query(`
+      SELECT 1 FROM EstimationItemSupplierQuotes
+      WHERE ItemID = @ItemID AND SupplierID = @SupplierID
+    `);
+  return result.recordset.length > 0;
+}
+

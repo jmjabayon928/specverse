@@ -69,6 +69,21 @@ export interface EstimationItem {
   CreatedBy?: number;
   CreatedByName?: string; 
   ItemName?: string; 
+  HasSelectedQuote?: boolean;
+}
+
+export interface EstimationQuote {
+  QuoteID: number;
+  ItemID: number;
+  SupplierID: number;
+  UnitCost: number;
+  Currency: string;
+  ExpectedDeliveryDays: number;
+  Notes?: string;
+  IsSelected: boolean;
+  CreatedAt?: string;
+  CreatedBy?: number;
+  SupplierName?: string;
 }
 
 // Input for Create/Update Item
@@ -176,6 +191,7 @@ export interface EstimationChangeLog {
 export type PackageFormProps = {
   defaultValues?: EstimationPackage;
   estimationId: number;
+  packages: EstimationPackage[];
   mode?: 'create' | 'edit';
   onSuccess: () => void;
 };

@@ -21,7 +21,7 @@ export async function getEstimationById(id: number) {
         c.ClientName,
         e.ProjectID,
         p.ProjName AS ProjectName,
-        e.Currency,
+        e.CurrencyCode,
         e.Status,
         e.CreatedBy,
         e.VerifiedBy,
@@ -91,3 +91,130 @@ export async function updateEstimation(estimationId: number, data: {
 
   return result.recordset[0];
 }
+
+export async function getFilteredEstimations(
+  statuses: string[] = [],
+  clientIds: number[] = [],
+  projectIds: number[] = [],
+  search: string = ""
+) {
+  const pool = await poolPromise;
+  const request = pool.request();
+
+  request.input("search", sql.NVarChar, `%${search}%`);
+
+  const statusFilter = statuses.length > 0 ? `AND e.Status IN (${statuses.map((s, i) => {
+    const key = `status${i}`;
+    request.input(key, sql.NVarChar, s);
+    return `@${key}`;
+  }).join(", ")})` : "";
+
+  const clientFilter = clientIds.length > 0 ? `AND e.ClientID IN (${clientIds.map((id, i) => {
+    const key = `client${i}`;
+    request.input(key, sql.Int, id);
+    return `@${key}`;
+  }).join(", ")})` : "";
+
+  const projectFilter = projectIds.length > 0 ? `AND e.ProjectID IN (${projectIds.map((id, i) => {
+    const key = `proj${i}`;
+    request.input(key, sql.Int, id);
+    return `@${key}`;
+  }).join(", ")})` : "";
+
+  const result = await request.query(`
+    SELECT 
+      e.EstimationID,
+      e.Title,
+      e.Description,
+      e.Status,
+      e.ClientID,
+      c.ClientName,
+      e.ProjectID,
+      p.ProjName AS ProjectName,
+      e.CurrencyCode,
+      e.CreatedBy,
+      u1.FirstName + ' ' + u1.LastName AS CreatedByName,
+      e.CreatedAt
+    FROM Estimations e
+    LEFT JOIN Clients c ON e.ClientID = c.ClientID
+    LEFT JOIN Projects p ON e.ProjectID = p.ProjID
+    LEFT JOIN Users u1 ON e.CreatedBy = u1.UserID
+    WHERE 
+      (e.Title LIKE @search OR e.Description LIKE @search)
+      ${statusFilter}
+      ${clientFilter}
+      ${projectFilter}
+    ORDER BY e.CreatedAt DESC
+  `);
+
+  return result.recordset;
+}
+
+export async function getFilteredEstimationsWithPagination(
+  statuses: string[] = [],
+  clientIds: number[] = [],
+  projectIds: number[] = [],
+  search: string = "",
+  page: number = 1,
+  pageSize: number = 10
+) {
+  const pool = await poolPromise;
+  const request = pool.request();
+
+  request.input("search", sql.NVarChar, `%${search}%`);
+  request.input("offset", sql.Int, (page - 1) * pageSize);
+  request.input("limit", sql.Int, pageSize);
+
+  const statusFilter = statuses.length > 0 ? `AND e.Status IN (${statuses.map((s, i) => {
+    const key = `status${i}`;
+    request.input(key, sql.NVarChar, s);
+    return `@${key}`;
+  }).join(", ")})` : "";
+
+  const clientFilter = clientIds.length > 0 ? `AND e.ClientID IN (${clientIds.map((id, i) => {
+    const key = `client${i}`;
+    request.input(key, sql.Int, id);
+    return `@${key}`;
+  }).join(", ")})` : "";
+
+  const projectFilter = projectIds.length > 0 ? `AND e.ProjectID IN (${projectIds.map((id, i) => {
+    const key = `proj${i}`;
+    request.input(key, sql.Int, id);
+    return `@${key}`;
+  }).join(", ")})` : "";
+
+  const result = await request.query(`
+    SELECT 
+      e.EstimationID,
+      e.Title,
+      e.Description,
+      e.Status,
+      e.ClientID,
+      c.ClientName,
+      e.ProjectID,
+      p.ProjName AS ProjectName,
+      e.CurrencyCode,
+      e.CreatedBy,
+      u1.FirstName + ' ' + u1.LastName AS CreatedByName,
+      e.CreatedAt,
+      COUNT(*) OVER() AS TotalCount
+    FROM Estimations e
+    LEFT JOIN Clients c ON e.ClientID = c.ClientID
+    LEFT JOIN Projects p ON e.ProjectID = p.ProjID
+    LEFT JOIN Users u1 ON e.CreatedBy = u1.UserID
+    WHERE 
+      (e.Title LIKE @search OR e.Description LIKE @search)
+      ${statusFilter}
+      ${clientFilter}
+      ${projectFilter}
+    ORDER BY e.CreatedAt DESC
+    OFFSET @offset ROWS
+    FETCH NEXT @limit ROWS ONLY
+  `);
+
+  return {
+    estimations: result.recordset,
+    totalCount: result.recordset.length > 0 ? result.recordset[0].TotalCount : 0,
+  };
+}
+

@@ -57,7 +57,7 @@ export default function EstimationTable({ estimations, onDelete }: Props) {
                 <td className="px-4 py-2">{est.EstimationID}</td>
                 <td className="px-4 py-2">{est.Title}</td>
                 <td className="px-4 py-2">{est.Status}</td>
-                <td className="px-4 py-2">{new Date(est.EstimationDate).toLocaleDateString()}</td>
+                <td>{est.CreatedAt && !isNaN(new Date(est.CreatedAt).getTime()) ? new Date(est.CreatedAt).toLocaleDateString() : "-"}</td>
                 <td className="px-4 py-2">
                   {est.TotalMaterialCost ? `$${est.TotalMaterialCost.toFixed(2)}` : "-"}
                 </td>

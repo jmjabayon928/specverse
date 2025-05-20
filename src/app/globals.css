@@ -193,6 +193,34 @@
   }
 }
 
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-break {
+    page-break-after: always;
+  }
+}
+
+@media print {
+  .print-page-break {
+    page-break-after: always;
+  }
+}
+
+legend {
+  font-weight: bold;
+  font-size: 14px;
+  padding: 0 6px;
+  color: #1a3c66;
+}
+
 @utility menu-item {
   @apply relative flex items-center w-full gap-3 px-3 py-2 font-medium rounded-lg text-theme-sm;
 }

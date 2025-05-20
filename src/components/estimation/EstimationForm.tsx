@@ -128,9 +128,27 @@ export default function EstimationForm({
       </div>
 
       {/* Submit */}
-      <div>
-        <button type="submit" className="btn-primary">
-          {mode === 'edit' ? 'Update Estimation' : 'Create Estimation'}
+      <div className="flex justify-between items-center gap-3">
+        <button
+          type="submit"
+          className={`text-white font-medium px-4 py-2 rounded shadow ${
+            mode === 'edit'
+              ? 'bg-yellow-500 hover:bg-yellow-600'
+              : 'bg-green-600 hover:bg-green-700'
+          }`}
+        >
+          {mode === 'edit' ? 'Update' : 'Add Estimation'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (onSubmitSuccess) onSubmitSuccess(); // acts as a cancel handler too
+            else router.push('/estimation');
+          }}
+          className="text-white bg-red-500 hover:bg-red-600 font-medium px-4 py-2 rounded shadow"
+        >
+          Cancel
         </button>
       </div>
     </form>

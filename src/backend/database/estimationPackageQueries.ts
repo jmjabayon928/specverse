@@ -36,12 +36,20 @@ export async function getPackagesByEstimationId(estimationId: number) {
 
 export async function getPackageById(packageId: number) {
   const pool = await poolPromise;
-  const result = await pool.request()
-    .input('PackageID', sql.Int, packageId)
+  const result = await pool
+    .request()
+    .input("PackageID", sql.Int, packageId)
     .query(`
-      SELECT * FROM EstimationPackages
-      WHERE PackageID = @PackageID
+      SELECT 
+        ep.*, 
+        u1.FirstName + ' ' + u1.LastName AS CreatedByName,
+        u2.FirstName + ' ' + u2.LastName AS ModifiedByName
+      FROM EstimationPackages ep
+      LEFT JOIN Users u1 ON ep.CreatedBy = u1.UserID
+      LEFT JOIN Users u2 ON ep.ModifiedBy = u2.UserID
+      WHERE ep.PackageID = @PackageID
     `);
+
   return result.recordset[0];
 }
 
@@ -103,4 +111,16 @@ export async function deletePackage(packageId: number) {
     .query(`
       DELETE FROM EstimationPackages WHERE PackageID = @PackageID
     `);
+}
+
+export async function isDuplicatePackageName(estimationId: number, packageName: string) {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("EstimationID", sql.Int, estimationId)
+    .input("PackageName", sql.VarChar, packageName)
+    .query(`
+      SELECT 1 FROM EstimationPackages
+      WHERE EstimationID = @EstimationID AND PackageName = @PackageName
+    `);
+  return result.recordset.length > 0;
 }

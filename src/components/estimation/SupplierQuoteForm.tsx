@@ -1,200 +1,138 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { SupplierQuote, Supplier } from '@/types/estimation';
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "react-hot-toast";
+import { SupplierQuoteFormValues, supplierQuoteSchema } from "@/validation/estimationSchema";
+import { SupplierQuote } from "@/types/estimation";
 
-type QuoteFormValues = {
-  SupplierID: string; 
-  QuotedUnitCost: number;
-  ExpectedDeliveryDays?: number;
-  CurrencyCode?: string;
-  Notes?: string;
-};
-
-export type SupplierQuoteFormProps = {
+interface SupplierQuoteFormProps {
+  mode: "create" | "edit";
+  defaultValues?: SupplierQuoteFormValues & { QuoteID?: number };
   itemId: number;
-  defaultValues?: SupplierQuote;
-  mode?: "edit" | "create"; 
+  quotes: SupplierQuote[];
   onSuccess: () => void;
-  onCancel?: () => void;
-};
+  onCancel: () => void;
+}
 
 export default function SupplierQuoteForm({
-  itemId,
+  mode,
   defaultValues,
+  itemId,
+  quotes,
   onSuccess,
   onCancel,
 }: SupplierQuoteFormProps) {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const isEditMode = !!defaultValues?.QuoteID;
-
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<QuoteFormValues>({
-    defaultValues: {
-      SupplierID: defaultValues?.SupplierID ? String(defaultValues.SupplierID) : '',
-      QuotedUnitCost: defaultValues?.QuotedUnitCost ?? 0,
-      ExpectedDeliveryDays: defaultValues?.ExpectedDeliveryDays ?? undefined,
-      CurrencyCode: defaultValues?.CurrencyCode ?? '',
-      Notes: defaultValues?.Notes ?? '',
-    },
+  } = useForm<SupplierQuoteFormValues>({
+    resolver: zodResolver(supplierQuoteSchema),
+    defaultValues,
   });
 
-  // Fetch suppliers on load
-  useEffect(() => {
-    const fetchSuppliers = async () => {
-      try {
-        const res = await fetch('/api/backend/datasheets/templates/reference-options', {
-          cache: 'no-store',
-        });
-
-        if (!res.ok) {
-          console.error('Failed to fetch suppliers:', res.statusText);
-          return;
-        }
-
-        const data = await res.json();
-        console.log('Fetched supplier data:', data);
-
-        // ✅ Normalize the structure from { id, name } to { SupplierID, SuppName }
-        const raw = data.suppliers || [];
-
-        const normalized: Supplier[] = (raw as unknown[])
-          .filter((s: unknown): s is { id: number; name: string } => {
-            const obj = s as Record<string, unknown>;
-            return typeof obj.id === 'number' && typeof obj.name === 'string';
-          })
-          .map((s) => ({
-            SupplierID: s.id,
-            SuppName: s.name,
-          }));
-
-        setSuppliers(normalized);
-      } catch (err) {
-        console.error('Error fetching suppliers:', err);
-      }
-    };
-
-    fetchSuppliers();
-  }, []);
-
-  // Reset form if editing
-  useEffect(() => {
-    if (
-      defaultValues &&
-      suppliers.length > 0 
-    ) {
-      reset({
-        SupplierID: defaultValues.SupplierID ? String(defaultValues.SupplierID) : '',
-        QuotedUnitCost: defaultValues.QuotedUnitCost,
-        ExpectedDeliveryDays: defaultValues.ExpectedDeliveryDays,
-        CurrencyCode: defaultValues.CurrencyCode ?? '',
-        Notes: defaultValues.Notes ?? '',
-      });
-    }
-  }, [defaultValues, suppliers, reset]);
-
-  const onSubmit = async (data: QuoteFormValues) => {
+  const onSubmit = async (data: SupplierQuoteFormValues) => {
     try {
+      const isDuplicate =
+        mode === "create" &&
+        quotes.some((q: SupplierQuote) => q.SupplierID === data.SupplierID);
+
+      if (isDuplicate) {
+        toast.error("A quote from this supplier already exists.");
+        return;
+      }
+
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
-      const url = isEditMode
-        ? `${baseUrl}/api/backend/estimation/quotes/${defaultValues!.QuoteID}`
-        : `${baseUrl}/api/backend/estimation/quotes/create`;
+      const url =
+        mode === "edit"
+          ? `${baseUrl}/api/backend/estimation/quotes/${defaultValues?.QuoteID}`
+          : `${baseUrl}/api/backend/estimation/quotes/create`;
 
       const res = await fetch(url, {
-        method: isEditMode ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: mode === "edit" ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
-          SupplierID: parseInt(data.SupplierID, 10), // Convert back to number
           ItemID: itemId,
         }),
       });
 
-      if (!res.ok) {
-        const msg = await res.text();
-        console.error('Save failed:', msg);
-        throw new Error('Save failed');
+      // ✅ Handle backend duplicate error
+      if (res.status === 409) {
+        const data = await res.json();
+        toast.error(data.message);
+        return;
       }
 
+      // ✅ Fallback generic error handler
+      if (!res.ok) throw new Error("Save failed");
+      
       onSuccess();
-      if (!isEditMode) reset();
+      if (mode === "create") reset();
     } catch (err) {
-      console.error('Supplier quote form error:', err);
-      alert('Failed to save supplier quote.');
+      console.error("Failed to save quote:", err);
+      toast.error("Failed to save supplier quote.");
     }
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 text-sm">
-      {/* Row 1: Supplier + Unit Cost */}
-      <div className="flex gap-4">
-        <div className="w-1/2">
-          <label className="block mb-1 font-medium">Supplier</label>
-          <select {...register('SupplierID', { required: true })} className="input w-full">
-            <option value="">-- Select Supplier --</option>
-            {suppliers
-              .filter((s) => s.SupplierID && s.SuppName)
-              .map((s) => (
-                <option key={`supplier-${s.SupplierID}`} value={String(s.SupplierID)}>
-                  {s.SuppName}
-                </option>
-              ))}
-          </select>
-          {errors.SupplierID && <p className="text-red-500 text-xs">Required.</p>}
-        </div>
-
-        <div className="w-1/2">
-          <label className="block mb-1 font-medium">Unit Cost</label>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label>Supplier ID</label>
           <input
+            {...register("SupplierID", { valueAsNumber: true })}
             type="number"
-            step="0.01"
-            {...register('QuotedUnitCost', { required: true })}
-            className="input w-full"
+            className="border p-2 w-full"
           />
-          {errors.QuotedUnitCost && <p className="text-red-500 text-xs">Required.</p>}
+          {errors.SupplierID && <p className="text-red-500">{errors.SupplierID.message}</p>}
+        </div>
+        <div>
+          <label>Unit Cost</label>
+          <input
+            {...register("UnitCost", { valueAsNumber: true })}
+            type="number"
+            className="border p-2 w-full"
+          />
+          {errors.UnitCost && <p className="text-red-500">{errors.UnitCost.message}</p>}
+        </div>
+        <div>
+          <label>Currency</label>
+          <input
+            {...register("Currency")}
+            type="text"
+            className="border p-2 w-full"
+          />
+          {errors.Currency && <p className="text-red-500">{errors.Currency.message}</p>}
+        </div>
+        <div>
+          <label>Expected Delivery (Days)</label>
+          <input
+            {...register("ExpectedDeliveryDays", { valueAsNumber: true })}
+            type="number"
+            className="border p-2 w-full"
+          />
+          {errors.ExpectedDeliveryDays && <p className="text-red-500">{errors.ExpectedDeliveryDays.message}</p>}
+        </div>
+        <div className="col-span-2">
+          <label>Notes</label>
+          <textarea
+            {...register("Notes")}
+            className="border p-2 w-full"
+          />
+          {errors.Notes && <p className="text-red-500">{errors.Notes.message}</p>}
         </div>
       </div>
 
-      {/* Row 2: Currency + Delivery Days */}
-      <div className="flex gap-4">
-        <div className="w-1/2">
-          <label className="block mb-1 font-medium">Currency</label>
-          <input type="text" {...register('CurrencyCode')} className="input w-full" />
-        </div>
-        <div className="w-1/2">
-          <label className="block mb-1 font-medium">Expected Delivery Days</label>
-          <input type="number" {...register('ExpectedDeliveryDays')} className="input w-full" />
-        </div>
-      </div>
-
-      {/* Row 3: Notes */}
-      <div>
-        <label className="block mb-1 font-medium">Notes</label>
-        <textarea {...register('Notes')} className="input w-full" rows={2} />
-      </div>
-
-      {/* Row 4: Buttons */}
       <div className="flex justify-between">
-        <button
-          type="submit"
-          className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded shadow"
-        >
-          {isEditMode ? 'Update Quote' : 'Add Quote'}
+        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">
+          {mode === "edit" ? "Update Quote" : "Add Supplier Quote"}
         </button>
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded shadow"
-          >
-            Cancel
-          </button>
-        )}
+        <button type="button" className="text-red-500" onClick={onCancel}>
+          Cancel
+        </button>
       </div>
     </form>
   );

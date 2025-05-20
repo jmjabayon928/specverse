@@ -1,11 +1,25 @@
 import express from "express";
 import { poolPromise, sql } from "../config/db";
-import { updatePackage, deletePackage } from "../database/estimationPackageQueries";
+import { generateFilteredEstimationPDF } from "../services/estimationExportService";
+import { 
+  generateEstimationPDF, 
+  generateEstimationSummaryPDF,
+  generatePackageProcurementPDF,
+  generateEstimationProcurementPDF,
+  generateEstimationExcel, 
+  generateEstimationSummaryExcel,
+  generatePackageProcurementExcel,
+  generateEstimationProcurementExcel } from "../services/estimationExportService";
+import { 
+  updatePackage, 
+  deletePackage, 
+  isDuplicatePackageName } from "../database/estimationPackageQueries";
 import {
   getAllEstimations,
   getEstimationById,
   createEstimation,
-  updateEstimation
+  updateEstimation,
+  getFilteredEstimationsWithPagination
 } from "../database/estimationQueries";
 import {
   getPackagesByEstimationId,
@@ -14,12 +28,13 @@ import {
 } from "../database/estimationPackageQueries";
 import {
   getItemsByPackageId,
-  createItem
+  createItem,
+  isDuplicateItem
 } from "../database/estimationItemQueries";
 import {
   getQuotesByItemId,
   createSupplierQuote,
-  selectSupplierQuote
+  isDuplicateQuote
 } from "../database/estimationQuoteQueries";
 
 const router = express.Router();
@@ -49,6 +64,229 @@ router.post("/", async (req, res) => {
 // ==============================
 // Most specific routes
 // ==============================
+
+router.post("/estimation/export/filter/pdf", async (req, res) => {
+  try {
+    const { statuses, clients, projects, search } = req.body;
+    const buffer = await generateFilteredEstimationPDF(statuses, clients, projects, search);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "attachment; filename=Filtered-Estimations.pdf");
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error generating filtered estimation PDF:", err);
+    res.status(500).send("Failed to generate filtered estimation PDF");
+  }
+});
+
+router.post("/estimation/filter", async (req, res) => {
+  try {
+    const {
+      statuses = [],
+      clients = [],
+      projects = [],
+      search = "",
+      page = 1,
+      pageSize = 10
+    } = req.body;
+
+    const { estimations, totalCount } = await getFilteredEstimationsWithPagination(
+      statuses,
+      clients,
+      projects,
+      search,
+      page,
+      pageSize
+    );
+
+    res.json({ data: estimations, totalCount });
+  } catch (err) {
+    console.error("Error fetching paginated estimations:", err);
+    res.status(500).send("Failed to fetch estimations");
+  }
+});
+
+router.get("/export/:id/pdf", async (req, res) => {
+  const estimationId = parseInt(req.params.id);
+  const buffer = await generateEstimationPDF(estimationId);
+
+  const estimation = await getEstimationById(estimationId);
+  const filename = `${estimation.ProjectName}-${estimation.Title}-FullReport.pdf`.replace(/[\s/\\]+/g, "_");
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(buffer);
+});
+
+router.get("/export/:id/summary-pdf", async (req, res) => {
+  const estimationId = parseInt(req.params.id);
+  const buffer = await generateEstimationSummaryPDF(estimationId);
+
+  const estimation = await getEstimationById(estimationId);
+  const filename = `${estimation.ProjectName}-${estimation.Title}-Summary.pdf`.replace(/[\s/\\]+/g, "_");
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(buffer);
+});
+
+router.get("/export/estimation-procurement/:id/pdf", async (req, res) => {
+  try {
+    const estimationId = parseInt(req.params.id);
+
+    const estimation = await getEstimationById(estimationId);
+    if (!estimation) return res.status(404).send("Estimation not found");
+
+    const safeProject = (estimation.ProjectName || "Project").replace(/[^a-z0-9]/gi, "_");
+    const safeTitle = estimation.Title.replace(/[^a-z0-9]/gi, "_");
+    const fileName = `${safeProject}-${safeTitle}-FullProcurement.pdf`;
+
+    const buffer = await generateEstimationProcurementPDF(estimationId);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error generating estimation procurement PDF:", err);
+    res.status(500).send("Failed to generate PDF");
+  }
+});
+
+router.get("/export/package-procurement/:packageId/pdf", async (req, res) => {
+  try {
+    const packageId = parseInt(req.params.packageId);
+
+    const pkg = await getPackageById(packageId);
+    if (!pkg) return res.status(404).send("Package not found");
+
+    const estimation = await getEstimationById(pkg.EstimationID);
+    if (!estimation) return res.status(404).send("Estimation not found");
+
+    const safeTitle = estimation.Title.replace(/[^a-z0-9]/gi, "_");
+    const safePkgName = pkg.PackageName.replace(/[^a-z0-9]/gi, "_");
+    const fileName = `${safeTitle}-${safePkgName}-PackageProcurement.pdf`;
+
+    const buffer = await generatePackageProcurementPDF(packageId);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error generating procurement PDF:", err);
+    res.status(500).send("Failed to generate PDF");
+  }
+});
+
+router.get("/export/:id/excel", async (req, res) => {
+  try {
+    const estimationId = parseInt(req.params.id);
+
+    const estimation = await getEstimationById(estimationId);
+    if (!estimation) return res.status(404).send("Estimation not found");
+
+    const safeProject = (estimation.ProjectName || "Project").replace(/[^a-z0-9]/gi, "_");
+    const safeTitle = estimation.Title.replace(/[^a-z0-9]/gi, "_");
+    const fileName = `${safeProject}-${safeTitle}-FullReport.xlsx`;
+
+    const buffer = await generateEstimationExcel(estimationId);
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error generating estimation Excel:", err);
+    res.status(500).send("Failed to generate Excel file");
+  }
+});
+
+router.get("/export/:id/summary-excel", async (req, res) => {
+  try {
+    const estimationId = parseInt(req.params.id);
+
+    const estimation = await getEstimationById(estimationId);
+    if (!estimation) return res.status(404).send("Estimation not found");
+
+    const safeProject = (estimation.ProjectName || "Project").replace(/[^a-z0-9]/gi, "_");
+    const safeTitle = estimation.Title.replace(/[^a-z0-9]/gi, "_");
+    const fileName = `${safeProject}-${safeTitle}-Summary.xlsx`;
+
+    const buffer = await generateEstimationSummaryExcel(estimationId);
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error generating estimation summary Excel:", err);
+    res.status(500).send("Failed to generate Excel file");
+  }
+});
+
+router.get("/export/estimation-procurement/:id/excel", async (req, res) => {
+  try {
+    const estimationId = parseInt(req.params.id);
+    const estimation = await getEstimationById(estimationId);
+    if (!estimation) return res.status(404).send("Estimation not found");
+
+    const safeProject = (estimation.ProjectName || "Project").replace(/[^a-z0-9]/gi, "_");
+    const safeTitle = estimation.Title.replace(/[^a-z0-9]/gi, "_");
+    const fileName = `${safeProject}-${safeTitle}-FullProcurement.xlsx`;
+
+    const buffer = await generateEstimationProcurementExcel(estimationId);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error generating estimation procurement Excel:", err);
+    res.status(500).send("Failed to generate Excel file");
+  }
+});
+
+router.get("/export/package-procurement/:packageId/excel", async (req, res) => {
+  try {
+    const packageId = parseInt(req.params.packageId);
+
+    const pkg = await getPackageById(packageId);
+    if (!pkg) return res.status(404).send("Package not found");
+
+    const estimation = await getEstimationById(pkg.EstimationID);
+    if (!estimation) return res.status(404).send("Estimation not found");
+
+    const safeTitle = estimation.Title.replace(/[^a-z0-9]/gi, "_");
+    const safePkgName = pkg.PackageName.replace(/[^a-z0-9]/gi, "_");
+    const fileName = `${safeTitle}-${safePkgName}-PackageProcurement.xlsx`;
+
+    const buffer = await generatePackageProcurementExcel(packageId);
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error generating package procurement Excel:", err);
+    res.status(500).send("Failed to generate Excel file");
+  }
+});
+
+router.get("/clients", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.query(`SELECT ClientID, ClientName FROM Clients`);
+    res.json(result.recordset); // ✅ Should return array
+  } catch (err) {
+    console.error("Error fetching clients:", err);
+    res.status(500).send("Failed to fetch clients");
+  }
+});
+
+router.get("/projects", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.query(`SELECT ProjID, ProjName FROM Projects`);
+    res.json(result.recordset); // ✅ Should return array
+  } catch (err) {
+    console.error("Error fetching projects:", err);
+    res.status(500).send("Failed to fetch projects");
+  }
+});
+
 
 // GET /api/estimation/items?packageId=1
 router.get("/items", async (req, res) => {
@@ -117,11 +355,17 @@ router.get("/quotes", async (req, res) => {
 router.post("/quotes/create", async (req, res) => {
   try {
     const newQuote = req.body;
+    const { ItemID, SupplierID } = newQuote;
+
+    if (await isDuplicateQuote(ItemID, SupplierID)) {
+      return res.status(409).json({ message: "A quote from this supplier already exists for this item." });
+    }
+
     const createdId = await createSupplierQuote(newQuote);
     res.status(201).json({ QuoteID: createdId });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to create supplier quote" });
+    res.status(500).json({ error: "Failed to create quote" });
   }
 });
 
@@ -140,7 +384,6 @@ router.post("/quotes/select/:quoteId", async (req, res) => {
     if (!quote) return res.status(404).json({ error: "Quote not found" });
 
     const itemId = quote.ItemID;
-    const cost = quote.QuotedUnitCost;
 
     // Get related package and estimation
     const itemResult = await pool.request()
@@ -265,6 +508,16 @@ router.delete("/quotes/:id", async (req, res) => {
 router.post("/packages/create", async (req, res) => {
   try {
     const newPackage = req.body;
+
+    const { EstimationID, PackageName } = newPackage;
+
+    // ✅ Backend-level duplicate check
+    const isDuplicate = await isDuplicatePackageName(EstimationID, PackageName);
+    if (isDuplicate) {
+      return res.status(409).json({ message: "Duplicate package name is not allowed." });
+    }
+
+    // ✅ Proceed with insert
     const createdId = await createPackage(newPackage);
     res.status(201).json({ PackageID: createdId });
   } catch (err) {
@@ -316,8 +569,14 @@ router.delete("/packages/:id", async (req, res) => {
 router.post("/items/create", async (req, res) => {
   try {
     const newItem = req.body;
+    const { PackageID, ItemID } = newItem;
+
+    if (await isDuplicateItem(PackageID, ItemID)) {
+      return res.status(409).json({ message: "This item already exists in the package." });
+    }
+
     const createdId = await createItem(newItem);
-    res.status(201).json({ ItemID: createdId });
+    res.status(201).json({ EItemID: createdId });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create item" });

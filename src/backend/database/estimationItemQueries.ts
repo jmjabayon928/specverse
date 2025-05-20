@@ -15,11 +15,18 @@ export async function getItemsByPackageId(packageId: number) {
         ei.CreatedAt,
         ei.CreatedBy,
         u.FirstName + ' ' + u.LastName AS CreatedByName,
-        s.SheetNameEng AS ItemName
+        s.SheetNameEng AS ItemName,
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 
+            FROM EstimationItemSupplierQuotes q 
+            WHERE q.ItemID = ei.EItemID AND q.IsSelected = 1
+          ) THEN 1 ELSE 0 
+        END AS HasSelectedQuote
       FROM EstimationItems ei
         LEFT JOIN Users u ON ei.CreatedBy = u.UserID
         LEFT JOIN Inventory i ON ei.ItemID = i.InventoryID
-        LEFT JOIN sheets s ON i.SheetID = s.SheetID
+        LEFT JOIN Sheets s ON i.SheetID = s.SheetID
       WHERE ei.PackageID = @PackageID
     `);
 
@@ -114,4 +121,18 @@ export async function updateItem(eItemId: number, data: {
 
   return result.recordset[0];
 }
+
+export async function isDuplicateItem(packageId: number, itemId: number) {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("PackageID", sql.Int, packageId)
+    .input("ItemID", sql.Int, itemId)
+    .query(`
+      SELECT 1 FROM EstimationItems
+      WHERE PackageID = @PackageID AND ItemID = @ItemID
+    `);
+  return result.recordset.length > 0;
+}
+
+
 

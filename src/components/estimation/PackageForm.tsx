@@ -2,12 +2,14 @@
 
 import { useForm } from 'react-hook-form';
 import { useEffect } from 'react';
-import { PackageFormProps, PackageFormValues } from '@/types/estimation';
+import { toast } from "react-hot-toast";
+import { PackageFormProps, PackageFormValues, EstimationPackage } from '@/types/estimation';
 
 export default function PackageForm({
   defaultValues,
   estimationId,
   mode = 'create',
+  packages, 
   onSuccess,
   onCancel,
 }: PackageFormProps & { onCancel?: () => void }) {
@@ -36,6 +38,18 @@ export default function PackageForm({
 
   const onSubmit = async (data: PackageFormValues) => {
     try {
+      // check if the package name already exists
+      const isDuplicate =
+      mode === "create" &&
+        packages.some((p: EstimationPackage) =>
+          p.PackageName.trim().toLowerCase() === data.PackageName.trim().toLowerCase()
+        );
+
+      if (isDuplicate) {
+        toast.error("Duplicate package name not allowed.");
+        return;
+      }
+
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
       const url =
         mode === 'edit'
@@ -51,6 +65,14 @@ export default function PackageForm({
         }),
       });
 
+      // ✅ Handle backend duplicate error
+      if (res.status === 409) {
+        const data = await res.json();
+        toast.error(data.message);
+        return;
+      }
+
+      // ✅ Fallback generic error handler
       if (!res.ok) throw new Error('Save failed');
 
       onSuccess();
