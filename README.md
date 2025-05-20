@@ -1,42 +1,130 @@
-# 🌐 SpecVerse — Multilingual Datasheet Management System
+# 📘 SpecVerse - Engineering Data & Estimation Platform
 
-**SpecVerse** is a full-featured, multilingual datasheet management platform designed for engineers and technical teams. It supports advanced document handling, dynamic form generation, version control, and internationalization — with future AI capabilities on the roadmap.
-
----
-
-## 🚀 Key Features
-
-- 📄 **Export to PDF & Excel** — Beautifully styled, multilingual datasheet exports
-- 🌍 **Multilingual UI** — Currently supports English, French, German, Japanese (more coming)
-- 🔁 **Revision & Approval Workflow** — Track, duplicate, and approve datasheet revisions
-- 📦 **Subsheet-Based Architecture** — Modular templates and grouped information values
-- 🔢 **Unit Conversion** — SI and USC toggle with smart value conversion
-- 💾 **Database-Driven** — Powered by SQL Server with clean separation of templates and values
-- 🧠 **AI-Ready Design** *(coming soon)* — Designed for future features like:
-  - Smart suggestions
-  - Predictive maintenance
-  - Anomaly detection
-  - Cost estimation from CAD data
+SpecVerse is an all-in-one engineering datasheet and project estimation system tailored for EPC and industrial projects. It supports datasheet creation, equipment specification, multi-language exports, cost estimation, procurement tracking, and more.
 
 ---
 
-## 🧱 Tech Stack
+## 🌟 Key Innovation
 
-- **Frontend**: Next.js 14+, Tailwind CSS, TypeScript
-- **Backend**: Node.js, Express.js, MSSQL
-- **Database**: Microsoft SQL Server
-- **PDF Generator**: `html-pdf-node`
-- **Excel Export**: `exceljs`
-- **Utilities**: `convert-units` for dynamic UOM conversion
+SpecVerse was designed to solve a real-world engineering bottleneck: **every time a new datasheet format was needed, developers had to build a new app or database to support it.**
+
+With SpecVerse’s dynamic template engine:
+- Subsheet structures and templates are fully configurable
+- No code or schema changes are needed to support new datasheets
+- Engineers or admins can define new datasheets themselves
+
+This enables **true no-code datasheet configuration** — a huge time and cost saver for EPC and industrial firms.
 
 ---
 
-## 🛠 Setup Instructions
+## 🧩 Core Modules
 
-> Clone and run locally (for development)
+### 📄 Datasheets
+- ✅ Create/edit datasheet templates (with subsheets and info templates)
+- ✅ Fill datasheets with actual project/equipment data
+- ✅ Inline editing with unit validation (SI/USC support)
+- ✅ Clone datasheets and track revisions
+- ✅ Multi-language support via react-i18next
+- ✅ Export to PDF and Excel (formatted)
+- ✅ Approval workflow (Draft → Verified → Approved) *(Coming soon)*
 
-```bash
-git clone https://github.com/jmjabayon928/specverse.git
-cd specverse
-npm install
-npm run dev
+### 📊 Estimations
+- ✅ Create project estimations
+- ✅ Add multiple packages, items, and supplier quotes
+- ✅ Select winning quotes (auto-compute totals)
+- ✅ Filter by status, client, project (multi-select dropdowns)
+- ✅ Paginated dashboard with search
+- ✅ Export estimation to:
+  - Full Report PDF/Excel
+  - Summary PDF/Excel
+  - Procurement sheets per package or full
+- ✅ Approval workflow *(Planned)*
+- ✅ KPI Dashboard *(Planned)*
+
+### 📦 Inventory
+- ✅ Link items to datasheet variants
+- ✅ Track quantity per warehouse
+- ✅ Edit and update inventory records
+- ✅ Export inventory *(Planned)*
+- ✅ Inventory approval workflow *(Planned)*
+
+---
+
+## 🔐 User Access & Permissions
+
+### Roles
+- **Admin** – Full access, manages users, overrides approvals
+- **Supervisor** – Verifies/approves datasheets and estimations
+- **Engineer** – Creates/edits records but cannot approve
+- **Viewer** – Read-only, can view and export
+
+### Fine-grained Permissions
+Includes:
+- `can_create_template`, `can_approve_datasheet`, `can_manage_inventory`, etc.
+- Enforced at route-level and UI-level
+
+---
+
+## 🧾 Audit & Logging
+- ✅ `UserLogs` table records:
+  - Actions: VIEW, CREATE, UPDATE, DELETE, EXPORT
+  - Timestamp, UserID, Module, RecordID, Description
+- ✅ Field-level change history for datasheets (`InformationChangeLogs`)
+
+---
+
+## 🌍 Internationalization
+- ✅ react-i18next setup
+- ✅ Supports dynamic UI translation
+- ✅ Multi-language datasheet export (12+ supported)
+
+---
+
+## 🚧 Upcoming Features
+- [ ] Approval workflows for datasheets and estimations
+- [ ] Dashboard and KPI charts (quote coverage, estimation trends)
+- [ ] Supplier-specific procurement views
+- [ ] Version control for datasheets and estimations
+- [ ] Inventory export and restocking logs
+- [ ] Real-time notifications for approvals/changes
+
+---
+
+## 📦 Tech Stack
+
+- **Frontend:** Next.js 14+, TailwindCSS, TypeScript, react-select, react-i18next
+- **Backend:** Express.js, Node.js, SQL Server
+- **PDF/Excel Export:** `html-pdf-node`, `exceljs`
+- **Authentication (Planned):** JWT or NextAuth
+- **Storage:** Local public folder for user avatars (S3-compatible optional)
+
+---
+
+## 🛠️ Setup Instructions
+
+1. Clone this repo:
+   ```bash
+   git clone https://github.com/jmjabayon928/specverse.git
+   cd specverse
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Start development servers:
+   - Backend: `npm run dev-backend`
+   - Frontend: `npm run dev`
+
+4. Setup environment variables in `.env.local` and `.env`
+
+---
+
+## 👨‍💻 Author
+
+Jeff Martin Abayon  
+📍 Calgary, Canada  
+📧 jmjabayon928@gmail.com
+
+---
