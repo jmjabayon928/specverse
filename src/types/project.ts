@@ -1,5 +1,5 @@
 export type Project = {
-  ProjID: number;
+  ProjectID: number;
   ProjCode: string;
   ProjName: string;
   ProjNum?: string; // Optional: used if you have project numbers like "P-001"

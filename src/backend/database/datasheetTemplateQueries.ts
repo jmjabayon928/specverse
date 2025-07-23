@@ -1,15 +1,15 @@
 // src/backend/database/datasheetTemplateQueries.ts
-import { poolPromise, sql } from "../config/db";
+import { poolPromise} from "../config/db";
 
 export async function getAllTemplates() {
   const pool = await poolPromise;
   const result = await pool.request().query(`
     SELECT 
       s.SheetID AS sheetId,
-      s.SheetNameEng AS sheetName,
-      s.SheetDescEng AS sheetDesc,
+      s.SheetName AS sheetName,
+      s.SheetDesc AS sheetDesc,
       s.CategoryID AS categoryId,
-      c.CategoryNameEng AS categoryName,
+      c.CategoryName AS categoryName,
       s.PreparedByID AS preparedById,
       u.FirstName + ' ' + u.LastName AS preparedByName,
       s.RevisionDate AS revisionDate

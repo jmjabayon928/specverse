@@ -13,15 +13,15 @@ export async function duplicateSheet(originalSheetId: number): Promise<number> {
 
   // 2. Insert duplicate (simplified — add all fields you need)
   const insertResult = await pool.request()
-    .input("SheetNameEng", sql.NVarChar, original.SheetNameEng)
-    .input("SheetDescEng", sql.NVarChar, original.SheetDescEng)
+    .input("SheetName", sql.NVarChar, original.SheetName)
+    .input("SheetDesc", sql.NVarChar, original.SheetDesc)
     .input("ParentSheetID", sql.Int, original.ParentSheetID ?? original.SheetID)
     .input("RevisionNum", sql.Int, original.RevisionNum + 1)
     .input("Status", sql.NVarChar(20), "Draft")
     .query(`
-      INSERT INTO Sheets (SheetNameEng, SheetDescEng, ParentSheetID, RevisionNum, Status)
+      INSERT INTO Sheets (SheetName, SheetDesc, ParentSheetID, RevisionNum, Status)
       OUTPUT INSERTED.SheetID
-      VALUES (@SheetNameEng, @SheetDescEng, @ParentSheetID, @RevisionNum, @Status)
+      VALUES (@SheetName, @SheetDesc, @ParentSheetID, @RevisionNum, @Status)
     `);
 
   return insertResult.recordset[0].SheetID;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
+//import { useTheme } from "next-themes";
 import { EyeIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 
 type Client = {
@@ -17,7 +17,7 @@ type Client = {
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const { theme } = useTheme();
+  //const { theme } = useTheme();
   const router = useRouter();
 
   useEffect(() => {

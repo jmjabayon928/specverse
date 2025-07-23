@@ -1,23 +1,24 @@
 // src/validation/validationHelpers.ts
 
-import type { DatasheetInput, EquipmentInput } from './datasheetTemplateSchema';
-import { ZodFormattedError } from "zod";
+import type { DatasheetInput, EquipmentInput } from './sheetSchema';
 
 /**
  * Format flattened Zod fieldErrors into a readable alert string.
  * Each line shows the field path and error message(s).
  */
-export function formatZodError(fieldErrors: ZodFormattedError<any>["fieldErrors"]): string {
-  const entries = Object.entries(fieldErrors);
+export function formatZodError(fieldErrors: Record<string, string[] | undefined>): string {
+  const messages: string[] = [];
 
-  if (entries.length === 0) return "Unknown validation error.";
+  for (const key in fieldErrors) {
+    const errs = fieldErrors[key];
+    if (errs && Array.isArray(errs)) {
+      for (const msg of errs) {
+        messages.push(`• ${key}: ${msg}`);
+      }
+    }
+  }
 
-  const lines = entries.flatMap(([key, messages]) => {
-    if (!messages || messages.length === 0) return [];
-    return messages.map((msg) => `• ${key}: ${msg}`);
-  });
-
-  return lines.join("\n");
+  return messages.join('\n');
 }
 
 export function validateForm(

@@ -28,7 +28,7 @@ export default function AddClientPage() {
 
   // 🔹 Validate Form Fields
   const validateForm = () => {
-    let newErrors: Record<string, string> = {};
+    const newErrors: Record<string, string> = {};
     if (!formData.ClientCode.trim()) newErrors.ClientCode = "Client Code is required";
     if (!formData.ClientName.trim()) newErrors.ClientName = "Client Name is required";
     if (!formData.ClientEmail.trim()) newErrors.ClientEmail = "Email is required";
@@ -61,8 +61,12 @@ export default function AddClientPage() {
 
       setSuccess("Client added successfully!");
       setTimeout(() => router.push("/clients"), 2000);
-    } catch (error: any) {
-      setBackendError(error.message);
+    } catch (error) {
+      if (error instanceof Error) {
+        setBackendError(error.message);
+      } else {
+        setBackendError("An unknown error occurred.");
+      }
     } finally {
       setLoading(false);
     }

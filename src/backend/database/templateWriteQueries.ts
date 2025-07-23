@@ -1,6 +1,6 @@
 // src/backend/database/templateWriteQueries.ts
 import { poolPromise, sql } from "@/backend/config/db";
-import type { DatasheetInput, EquipmentInput, SubsheetInput } from "@/validation/datasheetTemplateSchema";
+import type { DatasheetInput, EquipmentInput, SubsheetInput } from "@/validation/sheetSchema";
 
 /**
  * Create a new template (insert into Sheets + SubSheets + Templates + Options)
@@ -21,9 +21,9 @@ export async function insertTemplate(
     const sheetRes = await conn
       .request()
       .input("IsTemplate", sql.Bit, 1)
-      .input("SheetNameEng", sql.VarChar, datasheet.sheetName)
-      .input("SheetDescEng", sql.VarChar, datasheet.sheetDesc)
-      .input("SheetDescEng2", sql.VarChar, datasheet.sheetDesc2 ?? null)
+      .input("SheetName", sql.VarChar, datasheet.sheetName)
+      .input("SheetDesc", sql.VarChar, datasheet.sheetDesc)
+      .input("SheetDesc2", sql.VarChar, datasheet.sheetDesc2 ?? null)
       .input("ClientDocNum", sql.Int, datasheet.clientDoc ?? null)
       .input("ClientProjNum", sql.Int, datasheet.clientProject ?? null)
       .input("CompanyDocNum", sql.Int, datasheet.companyDoc ?? null)
@@ -48,7 +48,7 @@ export async function insertTemplate(
       .input("ManuID", sql.Int, equipment.manufacturerId)
       .input("SuppID", sql.Int, equipment.supplierId)
       .input("InstallPackNum", sql.VarChar, equipment.installPackNum)
-      .input("ModelNumber", sql.VarChar, equipment.modelNum)
+      .input("ModelNum", sql.VarChar, equipment.modelNum)
       .input("Driver", sql.VarChar, equipment.driver ?? null)
       .input("LocationDWG", sql.VarChar, equipment.locationDWG ?? null)
       .input("PID", sql.Int, equipment.pid)
@@ -56,26 +56,26 @@ export async function insertTemplate(
       .input("CodeStd", sql.VarChar, equipment.codeStd ?? null)
       .input("CategoryID", sql.Int, equipment.categoryId)
       .input("ClientID", sql.Int, equipment.clientId)
-      .input("ProjID", sql.Int, equipment.projectId)
+      .input("ProjectID", sql.Int, equipment.projectId)
       .query(`
         INSERT INTO Sheets (
-          IsTemplate, SheetNameEng, SheetDescEng, SheetDescEng2,
+          IsTemplate, SheetName, SheetDesc, SheetDesc2,
           ClientDocNum, ClientProjNum, CompanyDocNum, CompanyProjNum,
           AreaID, PackageName, RevisionNum, RevisionDate,
           PreparedByID, PreparedByDate, VerifiedByID, VerifiedByDate, ApprovedByID, ApprovedByDate,
           EquipmentName, EquipmentTagNum, ServiceName, EquipSize, RequiredQty,
-          ItemLocation, ManuID, SuppID, InstallPackNum, ModelNumber, Driver,
-          LocationDWG, PID, InstallDWG, CodeStd, CategoryID, ClientID, ProjID
+          ItemLocation, ManuID, SuppID, InstallPackNum, ModelNum, Driver,
+          LocationDWG, PID, InstallDWG, CodeStd, CategoryID, ClientID, ProjectID
         )
         OUTPUT INSERTED.SheetID
         VALUES (
-          @IsTemplate, @SheetNameEng, @SheetDescEng, @SheetDescEng2,
+          @IsTemplate, @SheetName, @SheetDesc, @SheetDesc2,
           @ClientDocNum, @ClientProjNum, @CompanyDocNum, @CompanyProjNum,
           @AreaID, @PackageName, @RevisionNum, @RevisionDate,
           @PreparedByID, @PreparedByDate, @VerifiedByID, @VerifiedByDate, @ApprovedByID, @ApprovedByDate,
           @EquipmentName, @EquipmentTagNum, @ServiceName, @EquipSize, @RequiredQty,
-          @ItemLocation, @ManuID, @SuppID, @InstallPackNum, @ModelNumber, @Driver,
-          @LocationDWG, @PID, @InstallDWG, @CodeStd, @CategoryID, @ClientID, @ProjID
+          @ItemLocation, @ManuID, @SuppID, @InstallPackNum, @ModelNum, @Driver,
+          @LocationDWG, @PID, @InstallDWG, @CodeStd, @CategoryID, @ClientID, @ProjectID
         )
       `);
 
@@ -86,12 +86,12 @@ export async function insertTemplate(
       const subRes = await conn
         .request()
         .input("SheetID", sql.Int, newSheetId)
-        .input("SubNameEng", sql.VarChar, subsheet.name)
+        .input("SubName", sql.VarChar, subsheet.name)
         .input("OrderIndex", sql.Int, subIdx + 1)
         .query(`
-          INSERT INTO SubSheets (SheetID, SubNameEng, OrderIndex)
+          INSERT INTO SubSheets (SheetID, SubName, OrderIndex)
           OUTPUT INSERTED.SubID
-          VALUES (@SheetID, @SubNameEng, @OrderIndex)
+          VALUES (@SheetID, @SubName, @OrderIndex)
         `);
 
       const subId = subRes.recordset[0].SubID;
@@ -105,7 +105,7 @@ export async function insertTemplate(
           .input("UOM", sql.VarChar, tmpl.uom || null)
           .input("OrderIndex", sql.Int, tmplIdx + 1)
           .query(`
-            INSERT INTO InformationTemplates (SubID, LabelEng, InfoType, UOM, OrderIndex)
+            INSERT INTO InformationTemplates (SubID, Label, InfoType, UOM, OrderIndex)
             OUTPUT INSERTED.InfoTemplateID
             VALUES (@SubID, @Label, @Type, @UOM, @OrderIndex)
           `);
@@ -157,9 +157,9 @@ export async function updateDatasheetTemplate(
     await conn
       .request()
       .input("SheetID", sql.Int, sheetId)
-      .input("SheetNameEng", sql.VarChar, datasheet.sheetName)
-      .input("SheetDescEng", sql.VarChar, datasheet.sheetDesc)
-      .input("SheetDescEng2", sql.VarChar, datasheet.sheetDesc2 ?? null)
+      .input("SheetName", sql.VarChar, datasheet.sheetName)
+      .input("SheetDesc", sql.VarChar, datasheet.sheetDesc)
+      .input("SheetDesc2", sql.VarChar, datasheet.sheetDesc2 ?? null)
       .input("ClientDocNum", sql.Int, datasheet.clientDoc ?? null)
       .input("ClientProjNum", sql.Int, datasheet.clientProject ?? null)
       .input("CompanyDocNum", sql.Int, datasheet.companyDoc ?? null)
@@ -184,7 +184,7 @@ export async function updateDatasheetTemplate(
       .input("ManuID", sql.Int, equipment.manufacturerId)
       .input("SuppID", sql.Int, equipment.supplierId)
       .input("InstallPackNum", sql.VarChar, equipment.installPackNum)
-      .input("ModelNumber", sql.VarChar, equipment.modelNum)
+      .input("ModelNum", sql.VarChar, equipment.modelNum)
       .input("Driver", sql.VarChar, equipment.driver ?? null)
       .input("LocationDWG", sql.VarChar, equipment.locationDWG ?? null)
       .input("PID", sql.Int, equipment.pid)
@@ -192,12 +192,12 @@ export async function updateDatasheetTemplate(
       .input("CodeStd", sql.VarChar, equipment.codeStd ?? null)
       .input("CategoryID", sql.Int, equipment.categoryId)
       .input("ClientID", sql.Int, equipment.clientId)
-      .input("ProjID", sql.Int, equipment.projectId)
+      .input("ProjectID", sql.Int, equipment.projectId)
       .query(`
         UPDATE Sheets SET
-          SheetNameEng = @SheetNameEng,
-          SheetDescEng = @SheetDescEng,
-          SheetDescEng2 = @SheetDescEng2,
+          SheetName = @SheetName,
+          SheetDesc = @SheetDesc,
+          SheetDesc2 = @SheetDesc2,
           ClientDocNum = @ClientDocNum,
           ClientProjNum = @ClientProjNum,
           CompanyDocNum = @CompanyDocNum,
@@ -221,7 +221,7 @@ export async function updateDatasheetTemplate(
           ManuID = @ManuID,
           SuppID = @SuppID,
           InstallPackNum = @InstallPackNum,
-          ModelNumber = @ModelNumber,
+          ModelNum = @ModelNum,
           Driver = @Driver,
           LocationDWG = @LocationDWG,
           PID = @PID,
@@ -229,7 +229,7 @@ export async function updateDatasheetTemplate(
           CodeStd = @CodeStd,
           CategoryID = @CategoryID,
           ClientID = @ClientID,
-          ProjID = @ProjID
+          ProjectID = @ProjectID
         WHERE SheetID = @SheetID
       `);
 
@@ -252,12 +252,12 @@ export async function updateDatasheetTemplate(
       const subRes = await conn
         .request()
         .input("SheetID", sql.Int, sheetId)
-        .input("SubNameEng", sql.VarChar, subsheet.name)
+        .input("SubName", sql.VarChar, subsheet.name)
         .input("OrderIndex", sql.Int, subIdx + 1)
         .query(`
-          INSERT INTO SubSheets (SheetID, SubNameEng, OrderIndex)
+          INSERT INTO SubSheets (SheetID, SubName, OrderIndex)
           OUTPUT INSERTED.SubID
-          VALUES (@SheetID, @SubNameEng, @OrderIndex)
+          VALUES (@SheetID, @SubName, @OrderIndex)
         `);
 
       const subId = subRes.recordset[0].SubID;
@@ -271,7 +271,7 @@ export async function updateDatasheetTemplate(
           .input("UOM", sql.VarChar, tmpl.uom || null)
           .input("OrderIndex", sql.Int, tIdx + 1)
           .query(`
-            INSERT INTO InformationTemplates (SubID, LabelEng, InfoType, UOM, OrderIndex)
+            INSERT INTO InformationTemplates (SubID, Label, InfoType, UOM, OrderIndex)
             OUTPUT INSERTED.InfoTemplateID
             VALUES (@SubID, @Label, @Type, @UOM, @OrderIndex)
           `);

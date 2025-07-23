@@ -1,37 +1,67 @@
-// src/backend/middleware/authMiddleware.ts
-
 import { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
+import { JwtPayload as CustomJwtPayload } from "../../types/JwtPayload";
+import { checkUserPermission } from "../database/permissionQueries";
 
-export function mockUser(req: Request, res: Response, next: NextFunction) {
-  req.user = {
-    userId: 1,
-    roles: ["admin", "warehouse"],
-    permissions: [
-      // ✅ Inventory
-      "INVENTORY_VIEW",
-      "INVENTORY_CREATE",
-      "INVENTORY_EDIT",
-      "INVENTORY_DELETE",
-      "INVENTORY_TRANSACTION_CREATE",
-      "INVENTORY_MAINTENANCE_VIEW",
-      "INVENTORY_MAINTENANCE_CREATE",
-      // ✅ Datasheets
-      "DATASHEET_VIEW",
-      "DATASHEET_EDIT",
-      // ✅ Templates
-      "TEMPLATE_VIEW",
-      "TEMPLATE_EDIT"
-    ],
-  };
-  next();
-}
+const JWT_SECRET = process.env.JWT_SECRET!;
 
-export function checkRolePermission(requiredPermission: string) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user?.permissions.includes(requiredPermission)) {
-      res.status(403).json({ message: "Forbidden" });
-      return;      // ✅ return void
+export const verifyToken = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  const token = req.cookies.token;
+
+  if (!token) {
+    console.warn("⛔ No token received");
+    res.status(401).json({ message: "Unauthorized - No token" });
+    return;
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload;
+
+    if (!decoded.userId || !decoded.role) {
+      console.warn("⛔ Token payload missing required fields");
+      res.status(403).json({ message: "Invalid token payload" });
+      return;
     }
-    next();        // ✅ continue
+
+    req.user = {
+      userId: decoded.userId,
+      roleId: decoded.roleId,
+      role: decoded.role,
+      email: decoded.email,
+      name: decoded.name,
+      profilePic: decoded.profilePic,
+      permissions: decoded.permissions ?? [],
+    };
+
+    next();
+  } catch (err) {
+    console.error("❌ Token verification error:", err);
+    res.status(403).json({ message: "Invalid or expired session" });
+  }
+};
+
+export function requirePermission(permissionKey: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        res.status(403).send("Missing user in request");
+        return;
+      }
+
+      const hasPermission = await checkUserPermission(req.user.userId, permissionKey);
+      if (!hasPermission) {
+        res.status(403).send("Permission denied");
+        return;
+      }
+
+      next();
+    } catch (err) {
+      console.error("Permission middleware error:", err);
+      res.status(500).send("Server error");
+    }
   };
 }

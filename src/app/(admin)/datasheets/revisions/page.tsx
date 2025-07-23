@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import SecurePage from '@/components/security/SecurePage';
 
 type Sheet = {
   SheetID: number;
-  SheetNameEng: string;
+  SheetName: string;
   Status: string;
   RevisionNum: number;
   IsLatest: boolean;
@@ -12,9 +13,10 @@ type Sheet = {
 };
 
 export default function RevisionBrowserPage() {
+  type StatusType = "All" | "Draft" | "Verified" | "Approved";
   const [parents, setParents] = useState<Sheet[]>([]);
   const [revisions, setRevisions] = useState<Record<number, Sheet[]>>({});
-  const [filterStatus, setFilterStatus] = useState<"All" | "Draft" | "Verified" | "Approved">("All");
+  const [filterStatus, setFilterStatus] = useState<StatusType>("All");
   const router = useRouter();
 
   useEffect(() => {
@@ -65,61 +67,64 @@ export default function RevisionBrowserPage() {
   : [];
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Datasheet Revision Browser</h1>
+    <SecurePage requiredPermission="REVISIONS_VIEW">
+      <div className="p-6 max-w-6xl mx-auto">
+        <h1 className="text-2xl font-bold mb-4">Datasheet Revision Browser</h1>
 
-      <div className="mb-4">
-        <label className="mr-2 font-medium">Filter by Status:</label>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as any)}
-          className="px-3 py-1 rounded border"
-        >
-          <option value="All">All</option>
-          <option value="Draft">Draft</option>
-          <option value="Verified">Verified</option>
-          <option value="Approved">Approved</option>
-        </select>
-      </div>
-
-      {filteredParents.map((parent) => (
-        <div key={parent.SheetID} className="bg-white dark:bg-gray-800 p-4 rounded shadow mb-6">
-          <h2 className="text-lg font-semibold mb-2">{parent.SheetNameEng}</h2>
-          <ul className="space-y-2">
-            {revisions[parent.SheetID]?.map((rev) => (
-              <li key={rev.SheetID} className="border px-4 py-2 rounded flex justify-between items-center bg-gray-50 dark:bg-gray-700">
-                <span>
-                  Rev {rev.RevisionNum} — <strong>{rev.Status}</strong> {rev.IsLatest ? "✅ Latest" : ""}
-                </span>
-                <div className="space-x-2">
-                  <button
-                    onClick={() => router.push(`/datasheets/filled/${rev.SheetID}`)}
-                    className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-                  >View</button>
-                  <button
-                    onClick={async () => {
-                    const res = await fetch(`http://localhost:5000/api/datasheets/${rev.SheetID}/duplicate`, {
-                        method: "POST",
-                    });
-                    if (res.ok) {
-                        const data = await res.json();
-                        router.push(`/datasheets/filled/${data.newSheetId}`);
-                    } else {
-                        alert("Failed to duplicate revision.");
-                    }
-                    }}
-                    className="px-2 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm"
-                  >Duplicate</button>
-                  <button
-                    onClick={() => router.push(`/datasheets/filled/${rev.SheetID}?showLogs=true`)}
-                    className="px-2 py-1 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm"
-                  >Audit Log</button>
-                </div>
-              </li>
-            ))}
-          </ul>
+        <div className="mb-4">
+          <label className="mr-2 font-medium">Filter by Status:</label>
+          <select
+            title="Filter by Status"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as StatusType)}
+            className="px-3 py-1 rounded border"
+          >
+            <option value="All">All</option>
+            <option value="Draft">Draft</option>
+            <option value="Verified">Verified</option>
+            <option value="Approved">Approved</option>
+          </select>
         </div>
-      ))}
-    </div>
+
+        {filteredParents.map((parent) => (
+          <div key={parent.SheetID} className="bg-white dark:bg-gray-800 p-4 rounded shadow mb-6">
+            <h2 className="text-lg font-semibold mb-2">{parent.SheetName}</h2>
+            <ul className="space-y-2">
+              {revisions[parent.SheetID]?.map((rev) => (
+                <li key={rev.SheetID} className="border px-4 py-2 rounded flex justify-between items-center bg-gray-50 dark:bg-gray-700">
+                  <span>
+                    Rev {rev.RevisionNum} — <strong>{rev.Status}</strong> {rev.IsLatest ? "✅ Latest" : ""}
+                  </span>
+                  <div className="space-x-2">
+                    <button
+                      onClick={() => router.push(`/datasheets/filled/${rev.SheetID}`)}
+                      className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                    >View</button>
+                    <button
+                      onClick={async () => {
+                      const res = await fetch(`http://localhost:5000/api/datasheets/${rev.SheetID}/duplicate`, {
+                          method: "POST",
+                      });
+                      if (res.ok) {
+                          const data = await res.json();
+                          router.push(`/datasheets/filled/${data.newSheetId}`);
+                      } else {
+                          alert("Failed to duplicate revision.");
+                      }
+                      }}
+                      className="px-2 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm"
+                    >Duplicate</button>
+                    <button
+                      onClick={() => router.push(`/datasheets/filled/${rev.SheetID}?showLogs=true`)}
+                      className="px-2 py-1 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm"
+                    >Audit Log</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </SecurePage>
   );
 }

@@ -8,6 +8,8 @@ type ExportOptions = {
   language: string;
   sheetName: string;
   revisionNum: number;
+  clientName: string;
+  isTemplate: boolean;
 };
 
 export async function handleExport({
@@ -15,14 +17,16 @@ export async function handleExport({
   type,
   unitSystem,
   language,
-  sheetName,
-  revisionNum,
+  isTemplate,
 }: ExportOptions) {
   try {
+    const sheetType = isTemplate ? "templates" : "filledsheets";
+
     const response = await fetch(
-      `/api/backend/datasheets/${sheetId}/export/${type}?uom=${unitSystem}&lang=${language}`,
+      `/api/backend/${sheetType}/export/${sheetId}/${type}?uom=${unitSystem}&lang=${language}`,
       {
         method: "GET",
+        credentials: "include",
       }
     );
 
@@ -30,10 +34,17 @@ export async function handleExport({
       throw new Error(`Export failed with status ${response.status}`);
     }
 
-    const blob = await response.blob();
-    const extension = type === "pdf" ? "pdf" : "xlsx";
-    const filename = `${sheetName}-Rev-${revisionNum}-${unitSystem}-${language}.${extension}`;
+    // ✅ Extract filename from backend header
+    let filename = "export." + (type === "pdf" ? "pdf" : "xlsx");
+    const disposition = response.headers.get("Content-Disposition");
+    if (disposition && disposition.includes("filename*=")) {
+      const match = disposition.match(/filename\*=UTF-8''(.+)/);
+      if (match && match[1]) {
+        filename = decodeURIComponent(match[1]);
+      }
+    }
 
+    const blob = await response.blob();
     saveAs(blob, filename);
   } catch (error) {
     console.error("Export error:", error);

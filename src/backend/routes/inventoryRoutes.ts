@@ -21,7 +21,7 @@ import {
   getInventoryAuditLogs
 } from "../database/inventoryAuditQueries";
 
-import { checkRolePermission } from "../middleware/authMiddleware";
+import { verifyToken, requirePermission } from "../middleware/authMiddleware";
 import { getAllReferenceOptions } from "@/backend/database/ReferenceQueries";
 import { asyncHandler } from "@/backend/utils/asyncHandler";
 import { getInventoryItemOptions } from '../database/ReferenceQueries';
@@ -38,7 +38,7 @@ router.get("/reference-options", async (req, res) => {
     res.json({
       categories: data.categories.map((c: { id: number; name: string }) => ({
         categoryId: c.id,
-        categoryNameEng: c.name
+        CategoryName: c.name
       })),
       manufacturers: data.manufacturers.map((m: { id: number; name: string }) => ({
         manuId: m.id,
@@ -60,13 +60,13 @@ router.get("/reference-options", async (req, res) => {
 LIST ROUTES
 */
 // ✅ GET all items
-router.get("/", checkRolePermission("INVENTORY_VIEW"), async (req, res) => {
+router.get("/", verifyToken, requirePermission("INVENTORY_VIEW"), async (req, res) => {
   const data = await getAllInventoryItems();
   res.json(data);
 });
 
 // ✅ POST create item
-router.post("/", checkRolePermission("INVENTORY_CREATE"), async (req, res) => {
+router.post("/", verifyToken, requirePermission("INVENTORY_CREATE"), async (req, res) => {
   const newId = await createInventoryItem(req.body);
   res.status(201).json({ inventoryId: newId });
 });
@@ -86,14 +86,14 @@ router.get('/item-options', async (req, res) => {
 SUB-RESOURCE ROUTES
 */
 // ✅ GET stock transactions
-router.get("/:id/transactions", checkRolePermission("INVENTORY_VIEW"), async (req, res) => {
+router.get("/:id/transactions", verifyToken, requirePermission("INVENTORY_VIEW"), async (req, res) => {
   const id = parseInt(req.params.id);
   const transactions = await getInventoryTransactions(id);
   res.json(transactions);
 });
 
 // ✅ POST stock transaction
-router.post("/:id/transactions", checkRolePermission("INVENTORY_TRANSACTION_CREATE"), async (req, res) => {
+router.post("/:id/transactions", verifyToken, requirePermission("INVENTORY_TRANSACTION_CREATE"), async (req, res) => {
   await addInventoryTransaction({
     inventoryId: parseInt(req.params.id),
     ...req.body
@@ -102,14 +102,14 @@ router.post("/:id/transactions", checkRolePermission("INVENTORY_TRANSACTION_CREA
 });
 
 // ✅ GET maintenance logs
-router.get("/:id/maintenance", checkRolePermission("INVENTORY_MAINTENANCE_VIEW"), async (req, res) => {
+router.get("/:id/maintenance", verifyToken, requirePermission("INVENTORY_MAINTENANCE_VIEW"), async (req, res) => {
   const id = parseInt(req.params.id);
   const data = await getInventoryMaintenanceLogs(id);
   res.json(data);
 });
 
 // ✅ POST maintenance log
-router.post("/:id/maintenance", checkRolePermission("INVENTORY_MAINTENANCE_CREATE"), async (req, res) => {
+router.post("/:id/maintenance", verifyToken, requirePermission("INVENTORY_MAINTENANCE_CREATE"), async (req, res) => {
   await addInventoryMaintenanceLog({
     inventoryId: parseInt(req.params.id),
     ...req.body
@@ -118,7 +118,7 @@ router.post("/:id/maintenance", checkRolePermission("INVENTORY_MAINTENANCE_CREAT
 });
 
 // ✅ GET audit logs
-router.get("/:id/audit", checkRolePermission("INVENTORY_VIEW"), async (req, res) => {
+router.get("/:id/audit", verifyToken, requirePermission("INVENTORY_VIEW"), async (req, res) => {
   const id = parseInt(req.params.id);
   const data = await getInventoryAuditLogs(id);
   res.json(data);
@@ -147,7 +147,7 @@ router.get("/:id/can-delete", asyncHandler(async (req, res) => {
 GENERAL ROUTES
 */
 // ✅ GET single item
-router.get("/:id", checkRolePermission("INVENTORY_VIEW"), asyncHandler(async (req, res) => {
+router.get("/:id", verifyToken, requirePermission("INVENTORY_VIEW"), asyncHandler(async (req, res) => {
     const itemId = parseInt(req.params.id);
     const item = await getInventoryItemById(itemId);   // your existing DB call
     if (!item) return res.status(404).json({ message: "Item not found" });
@@ -155,7 +155,7 @@ router.get("/:id", checkRolePermission("INVENTORY_VIEW"), asyncHandler(async (re
 }));
 
 // ✅ PUT update item
-router.put("/:id", checkRolePermission("INVENTORY_EDIT"), asyncHandler(async (req, res) => {
+router.put("/:id", verifyToken, requirePermission("INVENTORY_EDIT"), asyncHandler(async (req, res) => {
   const inventoryId = parseInt(req.params.id);
   const data = req.body;
 
@@ -168,7 +168,7 @@ router.put("/:id", checkRolePermission("INVENTORY_EDIT"), asyncHandler(async (re
 }));
 
 // ✅ DELETE soft-delete item
-router.delete("/:id", checkRolePermission("INVENTORY_DELETE"), async (req, res) => {
+router.delete("/:id", verifyToken, requirePermission("INVENTORY_DELETE"), async (req, res) => {
   const id = parseInt(req.params.id);
   await softDeleteInventoryItem(id);
   res.status(204).send();

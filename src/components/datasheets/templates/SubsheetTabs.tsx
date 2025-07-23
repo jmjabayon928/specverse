@@ -7,12 +7,7 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
 } from '@heroicons/react/24/outline';
-
-type Subsheet = {
-  id: number;
-  name: string;
-  templates: any[];
-};
+import type { Subsheet } from "@/types/datasheetTemplate";
 
 type Props = {
   subsheets: Subsheet[];

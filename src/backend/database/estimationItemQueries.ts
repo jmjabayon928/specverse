@@ -15,7 +15,7 @@ export async function getItemsByPackageId(packageId: number) {
         ei.CreatedAt,
         ei.CreatedBy,
         u.FirstName + ' ' + u.LastName AS CreatedByName,
-        s.SheetNameEng AS ItemName,
+        s.SheetName AS ItemName,
         CASE 
           WHEN EXISTS (
             SELECT 1 
@@ -48,7 +48,7 @@ export async function getItemById(itemId: number) {
         ei.CreatedAt,
         ei.CreatedBy,
         u.FirstName + ' ' + u.LastName AS CreatedByName,
-        s.SheetNameEng AS ItemName
+        s.SheetName AS ItemName
       FROM EstimationItems ei
       LEFT JOIN Users u ON ei.CreatedBy = u.UserID
       LEFT JOIN Inventory i ON ei.ItemID = i.InventoryID
@@ -111,7 +111,7 @@ export async function updateItem(eItemId: number, data: {
         ei.CreatedAt,
         ei.CreatedBy,
         u.FirstName + ' ' + u.LastName AS CreatedByName,
-        s.SheetNameEng AS ItemName
+        s.SheetName AS ItemName
       FROM EstimationItems ei
       LEFT JOIN Users u ON ei.CreatedBy = u.UserID
       LEFT JOIN Inventory i ON ei.ItemID = i.InventoryID

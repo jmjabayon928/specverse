@@ -6,7 +6,7 @@ const router = express.Router();
 // GET /api/projects
 router.get("/", async (req, res) => {
   try {
-    const data = await getAllProjects(); // ← this should return ProjID and ProjName
+    const data = await getAllProjects(); // ← this should return ProjectID and ProjName
     res.json(data);
   } catch (err) {
     console.error("Failed to fetch projects:", err);

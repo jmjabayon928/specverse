@@ -196,3 +196,25 @@ export async function softDeleteInventoryItem(inventoryId: number) {
     .input("InventoryID", sql.Int, inventoryId)
     .query(`UPDATE InventoryItems SET IsActive = 0 WHERE InventoryID = @InventoryID`);
 }
+
+export async function getInventoryList(): Promise<{
+  InventoryID: number;
+  SheetName: string;
+  Quantity: number;
+  WarehouseName: string;
+  LastUpdated: string;
+}[]> {
+  const pool = await poolPromise;
+  const result = await pool.request().query(`
+    SELECT 
+      InventoryID,
+      ItemName AS SheetName,
+      QuantityOnHand AS Quantity,
+      Location AS WarehouseName,
+      UpdatedAt AS LastUpdated
+    FROM InventoryItems
+    WHERE IsActive = 1
+    ORDER BY ItemName
+  `);
+  return result.recordset;
+}

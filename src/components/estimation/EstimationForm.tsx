@@ -50,9 +50,9 @@ export default function EstimationForm({
 
         // ✅ Set selected project only after options are available
         if (defaultValues?.ProjectID) {
-          const match = data.find((p: Project) => p.ProjID === defaultValues.ProjectID);
+          const match = data.find((p: Project) => p.ProjectID === defaultValues.ProjectID);
           if (match) {
-            setValue('ProjectID', match.ProjID);
+            setValue('ProjectID', match.ProjectID);
           }
         }
       } catch (err) {
@@ -98,7 +98,7 @@ export default function EstimationForm({
         >
           <option value="">-- Select Project --</option>
           {projects.map((proj) => (
-            <option key={proj.ProjID} value={proj.ProjID}>
+            <option key={proj.ProjectID} value={proj.ProjectID}>
               {proj.ProjName}
             </option>
           ))}

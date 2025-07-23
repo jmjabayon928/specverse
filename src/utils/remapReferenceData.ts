@@ -10,7 +10,7 @@ export function remapReferenceData(rawData: RawReferenceData): ReferenceData {
   return {
     categories: rawData.categories.map(c => ({
       categoryId: c.id,
-      categoryNameEng: c.name,
+      CategoryName: c.name,
     })),
     suppliers: rawData.suppliers.map(s => ({
       suppId: s.id,

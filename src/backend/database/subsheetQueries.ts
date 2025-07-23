@@ -9,7 +9,7 @@ export async function getSubSheetsBySheetId(sheetId: number) {
     .request()
     .input("SheetID", sql.Int, sheetId)
     .query(`
-      SELECT SubID, SubNameEng, SubNameFr
+      SELECT SubID, SubName 
       FROM SubSheets
       WHERE SheetID = @SheetID
       ORDER BY SubID
@@ -25,9 +25,9 @@ export async function getTranslatedSubSheets(sheetId: number, languageCode: stri
     .input("Lang", sql.VarChar(10), languageCode)
     .query(`
       SELECT s.SubID, 
-             COALESCE(t.SubName, s.SubNameEng) AS SubName
+             COALESCE(t.SubName, s.SubName) AS SubName
       FROM SubSheets s
-      LEFT JOIN SubsheetTranslations t ON t.SubID = s.SubID AND t.LanguageCode = @Lang
+      LEFT JOIN SubsheetTranslations t ON t.SubID = s.SubID AND t.LangCode = @Lang
       WHERE s.SheetID = @SheetID
       ORDER BY s.SubID
     `);

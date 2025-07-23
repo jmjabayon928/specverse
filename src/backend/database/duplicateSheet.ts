@@ -14,11 +14,11 @@ export async function duplicateSheet(templateId: number, isTemplate = false): Pr
 
   // 🟢 Insert new Sheet
   const insertResult = await pool.request()
-    .input("SheetNameEng", sql.NVarChar, `${template.SheetNameEng}_Copy`)
+    .input("SheetName", sql.NVarChar, `${template.SheetName}_Copy`)
     .input("SheetNameFr", sql.NVarChar, template.SheetNameFr)
-    .input("SheetDescEng", sql.NVarChar, template.SheetDescEng)
+    .input("SheetDesc", sql.NVarChar, template.SheetDesc)
     .input("SheetDescFr", sql.NVarChar, template.SheetDescFr)
-    .input("SheetDescEng2", sql.NVarChar, template.SheetDescEng2)
+    .input("SheetDesc2", sql.NVarChar, template.SheetDesc2)
     .input("SheetDescFr2", sql.NVarChar, template.SheetDescFr2)
     .input("ClientDocNum", sql.Int, template.ClientDocNum)
     .input("ClientProjNum", sql.Int, template.ClientProjNum)
@@ -43,7 +43,7 @@ export async function duplicateSheet(templateId: number, isTemplate = false): Pr
     .input("SuppID", sql.Int, template.SuppID)
     .input("InstallPackNum", sql.NVarChar, template.InstallPackNum)
     .input("EquipSize", sql.Decimal(18, 4), template.EquipSize)
-    .input("ModelNumber", sql.NVarChar, template.ModelNumber)
+    .input("ModelNum", sql.NVarChar, template.ModelNum)
     .input("Driver", sql.NVarChar, template.Driver)
     .input("LocationDwg", sql.NVarChar, template.LocationDwg)
     .input("PID", sql.Int, template.PID)
@@ -51,29 +51,29 @@ export async function duplicateSheet(templateId: number, isTemplate = false): Pr
     .input("CodeStd", sql.NVarChar, template.CodeStd)
     .input("CategoryID", sql.Int, template.CategoryID)
     .input("ClientID", sql.Int, template.ClientID)
-    .input("ProjID", sql.Int, template.ProjID)
+    .input("ProjectID", sql.Int, template.ProjectID)
     .input("ParentSheetID", sql.Int, isTemplate ? null : template.SheetID)
     .input("Status", sql.NVarChar, isTemplate ? "Template" : "Draft")
     .input("IsLatest", sql.Bit, 1)
     .input("IsTemplate", sql.Bit, isTemplate ? 1 : 0)
     .query(`
       INSERT INTO Sheets (
-        SheetNameEng, SheetNameFr, SheetDescEng, SheetDescFr, SheetDescEng2, SheetDescFr2,
+        SheetName, SheetNameFr, SheetDesc, SheetDescFr, SheetDesc2, SheetDescFr2,
         ClientDocNum, ClientProjNum, CompanyDocNum, CompanyProjNum, AreaID, PackageName,
         RevisionNum, RevisionDate, PreparedByID, PreparedByDate, VerifiedByID, VerifiedByDate,
         ApprovedByID, ApprovedByDate, EquipmentName, EquipmentTagNum, ServiceName, RequiredQty,
-        ItemLocation, ManuID, SuppID, InstallPackNum, EquipSize, ModelNumber, Driver,
-        LocationDwg, PID, InstallDwg, CodeStd, CategoryID, ClientID, ProjID,
+        ItemLocation, ManuID, SuppID, InstallPackNum, EquipSize, ModelNum, Driver,
+        LocationDwg, PID, InstallDwg, CodeStd, CategoryID, ClientID, ProjectID,
         ParentSheetID, Status, IsLatest, IsTemplate
       )
       OUTPUT INSERTED.SheetID
       VALUES (
-        @SheetNameEng, @SheetNameFr, @SheetDescEng, @SheetDescFr, @SheetDescEng2, @SheetDescFr2,
+        @SheetName, @SheetNameFr, @SheetDesc, @SheetDescFr, @SheetDesc2, @SheetDescFr2,
         @ClientDocNum, @ClientProjNum, @CompanyDocNum, @CompanyProjNum, @AreaID, @PackageName,
         @RevisionNum, @RevisionDate, @PreparedByID, @PreparedByDate, @VerifiedByID, @VerifiedByDate,
         @ApprovedByID, @ApprovedByDate, @EquipmentName, @EquipmentTagNum, @ServiceName, @RequiredQty,
-        @ItemLocation, @ManuID, @SuppID, @InstallPackNum, @EquipSize, @ModelNumber, @Driver,
-        @LocationDwg, @PID, @InstallDwg, @CodeStd, @CategoryID, @ClientID, @ProjID,
+        @ItemLocation, @ManuID, @SuppID, @InstallPackNum, @EquipSize, @ModelNum, @Driver,
+        @LocationDwg, @PID, @InstallDwg, @CodeStd, @CategoryID, @ClientID, @ProjectID,
         @ParentSheetID, @Status, @IsLatest, @IsTemplate
       )
     `);
@@ -88,13 +88,13 @@ export async function duplicateSheet(templateId: number, isTemplate = false): Pr
   for (const subsheet of subsheets.recordset) {
     const subInsert = await pool.request()
       .input("SheetID", sql.Int, newSheetId)
-      .input("SubNameEng", sql.NVarChar, subsheet.SubNameEng)
+      .input("SubName", sql.NVarChar, subsheet.SubName)
       .input("SubNameFr", sql.NVarChar, subsheet.SubNameFr)
       .input("OrderIndex", sql.Int, subsheet.OrderIndex)
       .query(`
-        INSERT INTO SubSheets (SheetID, SubNameEng, SubNameFr, OrderIndex)
+        INSERT INTO SubSheets (SheetID, SubName, SubNameFr, OrderIndex)
         OUTPUT INSERTED.SubID
-        VALUES (@SheetID, @SubNameEng, @SubNameFr, @OrderIndex)
+        VALUES (@SheetID, @SubName, @SubNameFr, @OrderIndex)
       `);
 
     const newSubId = subInsert.recordset[0].SubID;
@@ -107,15 +107,15 @@ export async function duplicateSheet(templateId: number, isTemplate = false): Pr
     for (const template of templates.recordset) {
       const templateInsert = await pool.request()
         .input("SubID", sql.Int, newSubId)
-        .input("LabelEng", sql.NVarChar, template.LabelEng)
+        .input("Label", sql.NVarChar, template.Label)
         .input("LabelFr", sql.NVarChar, template.LabelFr)
         .input("InfoType", sql.NVarChar, template.InfoType)
         .input("UOM", sql.NVarChar, template.UOM)
         .input("OrderIndex", sql.Int, template.OrderIndex)
         .query(`
-          INSERT INTO InformationTemplates (SubID, LabelEng, LabelFr, InfoType, UOM, OrderIndex)
+          INSERT INTO InformationTemplates (SubID, Label, LabelFr, InfoType, UOM, OrderIndex)
           OUTPUT INSERTED.InfoTemplateID
-          VALUES (@SubID, @LabelEng, @LabelFr, @InfoType, @UOM, @OrderIndex)
+          VALUES (@SubID, @Label, @LabelFr, @InfoType, @UOM, @OrderIndex)
         `);
 
       const newTemplateId = templateInsert.recordset[0].InfoTemplateID;

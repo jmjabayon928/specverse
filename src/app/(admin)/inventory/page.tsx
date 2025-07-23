@@ -1,41 +1,48 @@
-import React from "react";
-import Link from "next/link";
-import { checkUserPermission } from "@/utils/permissionUtils";
-import InventoryListTable from "@/components/inventory/InventoryListTable";
-import InventoryFilters from "@/components/inventory/InventoryFilters";
+'use client';
 
-// Optional: fetch from API service
-async function getInventoryItems() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/backend/inventory`, {
-    cache: "no-store"
-  });
-  if (!res.ok) throw new Error("Failed to fetch inventory items");
-  return res.json();
-}
+import { useEffect, useState } from 'react';
+import { useSession } from '@/hooks/useSession';
+import InventoryPageClient from '@/components/inventory/InventoryPageClient';
+import SecurePage from '@/components/security/SecurePage';
 
-export default async function InventoryDashboardPage() {
-  const items = await getInventoryItems();
-  const canCreate = checkUserPermission("INVENTORY_CREATE");
+export default function InventoryPage() {
+  const { user, loading } = useSession();
+  const [inventory, setInventory] = useState<Array<{
+    InventoryID: number;
+    SheetName: string;
+    Quantity: number;
+    WarehouseName: string;
+  }>>([]);
+
+  useEffect(() => {
+    if (!loading && user) {
+      fetch('/api/backend/inventory', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      })
+        .then((res) => res.json())
+        .then((data) => setInventory(data || []));
+    }
+  }, [loading, user]);
+
+  const canEditStock = !!user?.permissions.includes('EDIT_STOCK_TRANSACTIONS');
+  const canEditMaintenance = !!user?.permissions.includes('EDIT_MAINTENANCE_LOGS');
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-gray-800">Inventory Management</h1>
-        {canCreate && (
-          <Link
-            href="/inventory/create"
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Create Item
-          </Link>
-        )}
-      </div>
-
-      {/* Filters section */}
-      <InventoryFilters />
-
-      {/* Inventory table */}
-      <InventoryListTable items={items} />
-    </div>
+    <SecurePage requiredPermission="INVENTORY_VIEW">
+      <InventoryPageClient
+        inventory={inventory.map((item) => ({
+          inventoryId: item.InventoryID,
+          SheetName: item.SheetName,
+          Quantity: item.Quantity,
+          WarehouseName: item.WarehouseName,
+        }))}
+        canEditStock={canEditStock}
+        canEditMaintenance={canEditMaintenance}
+      />
+    </SecurePage>
   );
 }

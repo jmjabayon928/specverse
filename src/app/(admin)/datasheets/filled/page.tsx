@@ -1,197 +1,213 @@
 // src/app/(admin)/datasheets/filled/page.tsx
 
 "use client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { format } from "date-fns";
-import { EyeIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 
-type DataSheet = {
-  SheetID: number;
-  ClientDocNum: string;
-  CompanyDocNum: string;
-  AreaName: string;
-  RevisionDate: string;
-  ClientID: number;
-  ClientName: string;
-  SheetNameEng: string;
-  SheetDescEng: string;
-  ManuName: string;
-  SuppName: string;
+import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic'; 
+const Select = dynamic(() => import('react-select'), { ssr: false });
+import Link from "next/link";
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { format } from 'date-fns';
+import SecurePage from '@/components/security/SecurePage';
+import { useSession } from "@/hooks/useSession";
+import FilledSheetActions from '@/components/datasheets/filled/FilledSheetActions';
+
+type FilledSheetRow = {
+  sheetId: number;
+  sheetName: string;
+  sheetDesc?: string;
+  categoryId: number;
+  categoryName: string;
+  preparedById: number;
+  preparedByName: string;
+  revisionDate: string;
+  status: string;
 };
 
-export default function DataSheetsPage() {
-  const [datasheets, setDatasheets] = useState<DataSheet[]>([]);
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 10;
-  const router = useRouter();
+type CategoryOption = {
+  CategoryID: number;
+  CategoryName: string;
+};
+
+type UserOption = {
+  UserID: number;
+  FirstName: string;
+  LastName: string;
+};
+
+type Option = {
+  value: number;
+  label: string;
+};
+
+export default function FilledSheetListPage() {
+  const [sheets, setSheets] = useState<FilledSheetRow[]>([]);
+  const [filtered, setFiltered] = useState<FilledSheetRow[]>([]);
+  const [categories, setCategories] = useState<Option[]>([]);
+  const [users, setUsers] = useState<Option[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<Option | null>(null);
+  const [userFilter, setUserFilter] = useState<Option | null>(null);
+  const [dateFrom, setDateFrom] = useState<Date | null>(null);
+  const [dateTo, setDateTo] = useState<Date | null>(null);
+  const { user } = useSession();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/backend/datasheets")
-      .then((response) => response.json())
-      .then((data) => {
-        // ✅ Check for either format
-        if (data && Array.isArray(data.data)) {
-          setDatasheets(data.data);
-        } else if (Array.isArray(data)) {
-          setDatasheets(data);
+    const fetchOptions = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/backend/filledsheets/reference-options", {
+          credentials: "include",
+        });
+        const data = await res.json();
+
+        // ✅ Properly typed and placed here:
+        if (Array.isArray(data.categories)) {
+          setCategories(
+            data.categories.map((c: CategoryOption) => ({
+              value: c.CategoryID,
+              label: c.CategoryName,
+            }))
+          );
         } else {
-          console.error("Unexpected datasheets response format:", data);
-          setDatasheets([]);
+          console.warn("⚠️ No categories found in response:", data);
+          setCategories([]);
         }
-      })
-      .catch((error) => console.error("Error fetching datasheets:", error));
+
+        if (Array.isArray(data.users)) {
+          setUsers(
+            data.users.map((u: UserOption) => ({
+              value: u.UserID,
+              label: `${u.FirstName} ${u.LastName}`,
+            }))
+          );
+        } else {
+          console.warn("⚠️ No users found in response:", data);
+          setUsers([]);
+        }
+      } catch (err) {
+        console.error("⛔ Failed to fetch reference options", err);
+      }
+    };
+
+    const fetchSheets = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch("http://localhost:5000/api/backend/filledsheets", {
+          credentials: "include",
+        });
+        const data = await res.json();
+        setSheets(Array.isArray(data) ? data : []);
+        setFiltered(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to fetch filled sheets", err);
+        setSheets([]);
+        setFiltered([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOptions();
+    fetchSheets();
   }, []);
 
-  // ✅ Type-safe filter
-  const filteredDatasheets = Array.isArray(datasheets)
-    ? datasheets.filter((sheet) =>
-        Object.values(sheet).some(
-          (value) =>
-            typeof value === "string" &&
-            value.toLowerCase().includes(searchTerm.toLowerCase())
-        )
-      )
-    : [];
-
-  const totalPages = Math.ceil(filteredDatasheets.length / rowsPerPage);
-  const startIndex = (currentPage - 1) * rowsPerPage;
-  const paginatedDatasheets = filteredDatasheets.slice(
-    startIndex,
-    startIndex + rowsPerPage
-  );
-
-  const handleDelete = async (sheetId: number) => {
-    if (!window.confirm("Are you sure you want to delete this datasheet?")) return;
-
-    try {
-      const response = await fetch(`http://localhost:5000/api/backend/datasheets/${sheetId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!response.ok) throw new Error("Failed to delete datasheet.");
-
-      alert("✅ Datasheet deleted successfully.");
-      window.location.reload();
-    } catch (error) {
-      console.error("⛔ Error deleting datasheet:", error);
-      alert("❌ Failed to delete datasheet.");
+  useEffect(() => {
+    let temp = [...sheets];
+    if (categoryFilter) {
+      temp = temp.filter(t => t.categoryId === categoryFilter.value);
     }
-  };
+    if (userFilter) {
+      temp = temp.filter(t => t.preparedById === userFilter.value);
+    }
+    if (dateFrom) {
+      temp = temp.filter(t => new Date(t.revisionDate) >= dateFrom);
+    }
+    if (dateTo) {
+      temp = temp.filter(t => new Date(t.revisionDate) <= dateTo);
+    }
+    setFiltered(temp);
+  }, [categoryFilter, userFilter, dateFrom, dateTo, sheets]);
 
   return (
-    <div className="p-4 md:p-6 mx-auto w-full max-w-screen-2xl">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-          Filled DataSheets
-        </h1>
+    <SecurePage requiredPermission="DATASHEETS_VIEW">
+      {loading ? (
+        <p className="text-center text-gray-500 py-4">Loading filled sheets...</p>
+      ) : (
+        <div className="p-6 space-y-6">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold">Filled Datasheets</h1>
+            <Link href="/datasheets/filled/create" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+              + New Filled Sheet
+            </Link>
+          </div>
 
-        {/* Search box */}
-        <div className="relative w-full sm:w-72">
-          <input
-            type="text"
-            placeholder="Search datasheets..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full p-3 pl-10 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          />
-          <MagnifyingGlassIcon className="absolute left-3 top-3 w-5 h-5 text-gray-500 dark:text-gray-400" />
-        </div>
-      </div>
+          <div className="bg-white p-4 rounded shadow-md grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Select
+              options={categories}
+              value={categoryFilter}
+              onChange={(selected) => setCategoryFilter(selected as Option | null)}
+              placeholder="Filter by Category"
+              isClearable
+            />
+            <Select
+              options={users}
+              value={userFilter}
+              onChange={(selected) => setUserFilter(selected as Option | null)}
+              placeholder="Filter by Prepared By"
+              isClearable
+            />
+            <DatePicker selected={dateFrom} onChange={setDateFrom} placeholderText="From Date" className="w-full border px-3 py-2 rounded" />
+            <DatePicker selected={dateTo} onChange={setDateTo} placeholderText="To Date" className="w-full border px-3 py-2 rounded" />
+          </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto shadow-md rounded-lg bg-white dark:bg-gray-800">
-        <table className="w-full border-collapse border border-gray-300 dark:border-gray-700">
-          <thead>
-            <tr className="bg-gray-100 dark:bg-gray-700">
-              <th className="border px-4 py-2 text-center">Actions</th>
-              <th className="border px-4 py-2">Client Doc#</th>
-              <th className="border px-4 py-2">Company Doc#</th>
-              <th className="border px-4 py-2">Area</th>
-              <th className="border px-4 py-2">Rev. Date</th>
-              <th className="border px-4 py-2">Client</th>
-              <th className="border px-4 py-2">Sheet Name</th>
-              <th className="border px-4 py-2">Sheet Desc.</th>
-              <th className="border px-4 py-2">Manufacturer</th>
-              <th className="border px-4 py-2">Supplier</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedDatasheets.length > 0 ? (
-              paginatedDatasheets.map((sheet) => (
-                <tr key={sheet.SheetID} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <td className="border px-4 py-2">
-                    <button
-                      onClick={() => router.push(`/datasheets/filled/${sheet.SheetID}`)}
-                      className="p-1 text-blue-500 hover:text-blue-700"
-                      title="View"
-                    >
-                      <EyeIcon className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => router.push(`/datasheets/filled/${sheet.SheetID}/edit`)}
-                      className="p-1 text-yellow-500 hover:text-yellow-700"
-                      title="Edit"
-                    >
-                      <PencilIcon className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(sheet.SheetID)}
-                      className="p-1 text-red-500 hover:text-red-700"
-                      title="Delete"
-                    >
-                      <TrashIcon className="w-5 h-5" />
-                    </button>
-                  </td>
-                  <td className="border px-4 py-2">{sheet.ClientDocNum}</td>
-                  <td className="border px-4 py-2">{sheet.CompanyDocNum}</td>
-                  <td className="border px-4 py-2">{sheet.AreaName}</td>
-                  <td className="border px-4 py-2">
-                    {sheet.RevisionDate
-                      ? format(new Date(sheet.RevisionDate), "MMM dd, yyyy")
-                      : "-"}
-                  </td>
-                  <td className="border px-4 py-2">{sheet.ClientName}</td>
-                  <td className="border px-4 py-2">{sheet.SheetNameEng}</td>
-                  <td className="border px-4 py-2">{sheet.SheetDescEng}</td>
-                  <td className="border px-4 py-2">{sheet.ManuName}</td>
-                  <td className="border px-4 py-2">{sheet.SuppName}</td>
+          <div className="overflow-x-auto border rounded bg-white">
+            <table className="min-w-full table-auto text-sm text-left">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-4 py-2">📄 Sheet Name</th>
+                  <th className="px-4 py-2">📝 Description</th>
+                  <th className="px-4 py-2">🏷 Category</th>
+                  <th className="px-4 py-2">👤 Prepared By</th>
+                  <th className="px-4 py-2">🗓 Revision Date</th>
+                  <th className="px-4 py-2">⚙️ Actions</th>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={10} className="border px-4 py-2 text-center">
-                  No datasheets found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      <div className="flex justify-center mt-4 space-x-4">
-        <button
-          onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-          disabled={currentPage === 1}
-          className="px-3 py-1 border rounded disabled:opacity-50"
-        >
-          ◀ Previous
-        </button>
-        <span className="self-center">
-          Page {currentPage} of {totalPages}
-        </span>
-        <button
-          onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-          disabled={currentPage === totalPages}
-          className="px-3 py-1 border rounded disabled:opacity-50"
-        >
-          Next ▶
-        </button>
-      </div>
-    </div>
+              </thead>
+              <tbody>
+                {filtered.map(t => (
+                  <tr key={t.sheetId} className="border-t">
+                    <td className="px-4 py-2 text-blue-600 hover:underline">
+                      <Link href={`/datasheets/filled/${t.sheetId}`}>{t.sheetName}</Link>
+                    </td>
+                    <td className="px-4 py-2">{t.sheetDesc || '-'}</td>
+                    <td className="px-4 py-2">{t.categoryName || '-'}</td>
+                    <td className="px-4 py-2">{t.preparedByName || '-'}</td>
+                    <td className="px-4 py-2">{t.revisionDate ? format(new Date(t.revisionDate), 'MMM dd, yyyy') : '-'}</td>
+                    <td className="px-4 py-2">
+                      {user && (
+                        <FilledSheetActions
+                          sheet={{
+                            sheetId: t.sheetId ?? 0,
+                            preparedBy: t.preparedById ?? 0,
+                            status: (t.status ?? "Draft") as "Draft" | "Rejected" | "Modified Draft" | "Verified" | "Approved",
+                            isTemplate: false, // because these are filled sheets
+                          }}
+                          user={user}
+                        />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="text-center py-4 text-gray-500">No filled datasheets found.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </SecurePage>
   );
 }

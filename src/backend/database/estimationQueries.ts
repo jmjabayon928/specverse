@@ -39,7 +39,7 @@ export async function getEstimationById(id: number) {
         ) AS TotalMaterialCost
       FROM Estimations e
       LEFT JOIN Clients c ON e.ClientID = c.ClientID
-      LEFT JOIN Projects p ON e.ProjectID = p.ProjID
+      LEFT JOIN Projects p ON e.ProjectID = p.ProjectID
       LEFT JOIN Users u1 ON e.CreatedBy = u1.UserID
       LEFT JOIN Users u2 ON e.VerifiedBy = u2.UserID
       LEFT JOIN Users u3 ON e.ApprovedBy = u3.UserID
@@ -137,7 +137,7 @@ export async function getFilteredEstimations(
       e.CreatedAt
     FROM Estimations e
     LEFT JOIN Clients c ON e.ClientID = c.ClientID
-    LEFT JOIN Projects p ON e.ProjectID = p.ProjID
+    LEFT JOIN Projects p ON e.ProjectID = p.ProjectID
     LEFT JOIN Users u1 ON e.CreatedBy = u1.UserID
     WHERE 
       (e.Title LIKE @search OR e.Description LIKE @search)
@@ -200,7 +200,7 @@ export async function getFilteredEstimationsWithPagination(
       COUNT(*) OVER() AS TotalCount
     FROM Estimations e
     LEFT JOIN Clients c ON e.ClientID = c.ClientID
-    LEFT JOIN Projects p ON e.ProjectID = p.ProjID
+    LEFT JOIN Projects p ON e.ProjectID = p.ProjectID
     LEFT JOIN Users u1 ON e.CreatedBy = u1.UserID
     WHERE 
       (e.Title LIKE @search OR e.Description LIKE @search)

@@ -279,7 +279,7 @@ router.get("/clients", async (req, res) => {
 router.get("/projects", async (req, res) => {
   try {
     const pool = await poolPromise;
-    const result = await pool.query(`SELECT ProjID, ProjName FROM Projects`);
+    const result = await pool.query(`SELECT ProjectID, ProjName FROM Projects`);
     res.json(result.recordset); // ✅ Should return array
   } catch (err) {
     console.error("Error fetching projects:", err);
@@ -646,7 +646,8 @@ router.delete("/items/:id", async (req, res) => {
 // ==============================
 
 // GET /api/estimation/:id (Get one estimation)
-router.get("/:id", async (req, res) => {
+router.get("/detail/:id", async (req, res) => {
+  console.log("💥 getEstimationById triggered with:", req.params.id);
   const id = parseInt(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid EstimationID" });
 

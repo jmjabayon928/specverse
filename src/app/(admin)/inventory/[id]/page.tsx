@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { LayoutDashboard, FileText, Wrench, ClipboardList } from "lucide-react";
 import { getInventoryItemById } from "@/backend/database/inventoryQueries";
-import { getAllReferenceOptions } from "@/backend/database/ReferenceQueries";
+import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
 import InventoryDetails from "@/components/inventory/InventoryDetails";
 import InventoryTabLink from "@/components/inventory/InventoryTabLink";
 import InventoryTabContent from "@/components/inventory/InventoryTabContent";
@@ -21,7 +21,7 @@ export default async function InventoryDetailPage({
   const item = await getInventoryItemById(itemId);
   if (!item) return notFound();
 
-  const { categories, suppliers, manufacturers } = await getAllReferenceOptions();
+  const { categories, suppliers, manufacturers } = await fetchReferenceOptions();
   const activeTab = searchParams?.tab ?? "overview";
 
   return (

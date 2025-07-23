@@ -20,7 +20,7 @@ router.get("/", async (req, res) => {
     console.log("✅ Database Connected");
 
     const result = await pool.request().query(
-      "SELECT CategoryID, CategoryCode, CategoryNameEng, CategoryNameFr FROM Categories"
+      "SELECT CategoryID, CategoryCode, CategoryName, CategoryNameFr FROM Categories"
     );
 
     console.log("✅ Query Successful: ", result.recordset);

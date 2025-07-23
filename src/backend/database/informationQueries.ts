@@ -19,9 +19,8 @@ export async function getInformationBySubSheetId(subId: number, sheetId: number)
     .input("SheetID", sql.Int, sheetId)
     .query(`
       SELECT 
-        T.InfoTemplateID,
-        T.LabelEng, T.LabelFr, T.InfoType,
-        V.InfoValue, V.UOM
+        T.InfoTemplateID, T.Label, 
+		T.InfoType, V.InfoValue, V.UOM
       FROM InformationTemplates T
       LEFT JOIN InformationValues V 
         ON T.InfoTemplateID = V.InfoTemplateID AND V.SheetID = @SheetID
@@ -42,11 +41,11 @@ export async function getTranslatedTemplateLabels(sheetId: number, languageCode:
     .input("Lang", sql.VarChar(10), languageCode)
     .query(`
       SELECT t.InfoTemplateID, 
-             COALESCE(tr.Label, t.LabelEng) AS Label
+             COALESCE(tr.Label, t.Label) AS Label
       FROM InformationTemplates t
       INNER JOIN SubSheets s ON t.SubID = s.SubID
-      LEFT JOIN InformationTemplateTranslations tr
-        ON tr.InfoTemplateID = t.InfoTemplateID AND tr.LanguageCode = @Lang
+      LEFT JOIN InfoTemplateTranslations tr
+        ON tr.InfoTemplateID = t.InfoTemplateID AND tr.LangCode = @Lang
       WHERE s.SheetID = @SheetID
     `);
 

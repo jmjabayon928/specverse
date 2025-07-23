@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 import { useParams } from "next/navigation";
 import AppSidebar from "@/layout/AppSidebar";
 import AppHeader from "@/layout/AppHeader";
-import SidebarWidget from "@/layout/SidebarWidget";
-import Backdrop from "@/layout/Backdrop";
+//import SidebarWidget from "@/layout/SidebarWidget";
+//import Backdrop from "@/layout/Backdrop";
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline"; // Icons
 
 type Client = {
@@ -23,7 +23,7 @@ export default function ClientDetailPage() {
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error] = useState("");
   const router = useRouter();
 
   useEffect(() => {

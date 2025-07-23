@@ -28,3 +28,10 @@ export interface InventoryItemTranslation {
   itemNameTranslation: string;
   descriptionTranslation?: string;
 }
+
+export interface InventoryListItem {
+  inventoryId: number;
+  SheetName: string;
+  Quantity: number;
+  WarehouseName: string;
+}

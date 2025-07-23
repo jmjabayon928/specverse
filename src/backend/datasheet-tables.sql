@@ -103,7 +103,7 @@ CREATE TABLE Employees
 CREATE TABLE Information
 (
 	InfoID	INT IDENTITY(1,1) PRIMARY KEY,
-	LabelEng VARCHAR(150) NOT NULL, -- for english
+	Label VARCHAR(150) NOT NULL, -- for english
 	LabelFr VARCHAR(150) NOT NULL, -- for french
 	InfoType VARCHAR(30) NOT NULL,
 	InfoValue1 VARCHAR(255) NOT NULL, -- for SI value
@@ -167,7 +167,7 @@ CREATE TABLE Notes
 
 CREATE TABLE Projects
 (
-	ProjID INT IDENTITY(1,1) PRIMARY KEY,
+	ProjectID INT IDENTITY(1,1) PRIMARY KEY,
 	ClientID INT NOT NULL,
 	ClientProjNum VARCHAR(15) NOT NULL,
 	ProjNum VARCHAR(15) NOT NULL,
@@ -212,11 +212,11 @@ CREATE TABLE Sessions
 CREATE TABLE Sheets 
 (
 	SheetID	INT IDENTITY(1,1) PRIMARY KEY,
-	SheetNameEng VARCHAR(255) NOT NULL UNIQUE, -- for english
+	SheetName VARCHAR(255) NOT NULL UNIQUE, -- for english
 	SheetNameFr VARCHAR(255) NOT NULL UNIQUE, -- for french
-	SheetDescEng VARCHAR(255) NOT NULL, -- for english
+	SheetDesc VARCHAR(255) NOT NULL, -- for english
 	SheetDescFr VARCHAR(255) NOT NULL, -- for french
-	SheetDescEng2 VARCHAR(255) NOT NULL, -- for english
+	SheetDesc2 VARCHAR(255) NOT NULL, -- for english
 	SheetDescFr2 VARCHAR(255) NOT NULL, -- for french
 	ClientDocNum INT NULL, -- client document number
 	CompanyDocNum INT NULL, -- Company is a company name, this can be updated. DocNum means document number
@@ -239,20 +239,20 @@ CREATE TABLE Sheets
 	SuppID INT NOT NULL,
 	InstallPackNum VARCHAR(100) NOT NULL, 
 	EquipSize INT NOT NULL,
-	ModelNumber VARCHAR(50) NOT NULL, 
+	ModelNum VARCHAR(50) NOT NULL, 
 	Driver VARCHAR(150) NULL, 
 	LocationDwg VARCHAR(255) NULL, 
 	PID INT NOT NULL,
 	InstallDwg VARCHAR(255) NULL, -- installation drawing
 	CodeStd VARCHAR(255) NULL, 
 	CategoryID INT NULL,
-	ProjID INT NULL,
+	ProjectID INT NULL,
 	CONSTRAINT FK_Sheets_Categories FOREIGN KEY (CategoryID) REFERENCES Categories(CategoryID),
 	CONSTRAINT FK_Sheets_Areas FOREIGN KEY (AreaID) REFERENCES Areas(AreaID),
 	CONSTRAINT FK_PreparedBy FOREIGN KEY (PreparedByID) REFERENCES Employees(EmployeeID),
 	CONSTRAINT FK_VerifiedBy FOREIGN KEY (VerifiedByID) REFERENCES Employees(EmployeeID),
 	CONSTRAINT FK_ApprovedBy FOREIGN KEY (ApprovedByID) REFERENCES Employees(EmployeeID),
-	CONSTRAINT FK_Sheets_Projects FOREIGN KEY (ProjID) REFERENCES Projects(ProjID),
+	CONSTRAINT FK_Sheets_Projects FOREIGN KEY (ProjectID) REFERENCES Projects(ProjectID),
 	CONSTRAINT FK_Sheets_Manufacturers FOREIGN KEY (ManuID) REFERENCES Manufacturers(ManuID),
 	CONSTRAINT FK_Sheets_Suppliers FOREIGN KEY (SuppID) REFERENCES Suppliers(SuppID)
 );
@@ -261,7 +261,7 @@ CREATE TABLE Sheets
 CREATE TABLE SubSheets
 (
 	SubID INT IDENTITY(1,1) PRIMARY KEY,
-	SubNameEng VARCHAR(150) NOT NULL,
+	SubName VARCHAR(150) NOT NULL,
 	SubNameFr VARCHAR(150) NOT NULL,
 	SheetID INT NOT NULL,
 	CONSTRAINT FK_SubSheets_Sheets FOREIGN KEY (SheetID) REFERENCES Sheets(SheetID)

@@ -33,8 +33,12 @@ export default function EditClientPage() {
         }
         const data = await response.json();
         setClient(data);
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err) {
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError("An unknown error occurred.");
+        }
       } finally {
         setLoading(false);
       }
@@ -68,8 +72,12 @@ export default function EditClientPage() {
 
       alert("Client updated successfully!");
       router.push("/clients");
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unknown error occurred.");
+      }
     } finally {
       setLoading(false);
     }
