@@ -1,3 +1,4 @@
+// src/components/security/DevSecurityWarning.tsx
 'use client';
 
 import { DEV_SECURITY_CHECKS_ENABLED } from '@/config/devconfig';

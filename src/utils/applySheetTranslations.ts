@@ -9,14 +9,6 @@ export function applySheetTranslations(
 ): UnifiedSheet {
   if (!translations) return sheet;
 
-  /*
-  console.log("🧾 Applying Translations:");
-  console.log("➡️ Sheet-Level Labels:", translations.sheet);
-  console.log("➡️ Subsheet Labels:", translations.subsheets);
-  console.log("➡️ Field Labels:", translations.labels);
-  console.log("➡️ Option Labels:", translations.options);
-  */
-
   const {
     sheet: sheetLabelMap,
     subsheets: subsheetLabelMap,
@@ -37,30 +29,10 @@ export function applySheetTranslations(
       const translatedSubName =
         templateSubId !== -1 ? subsheetLabelMap?.[String(templateSubId)] : undefined;
 
-      /*
-      console.log("🔠 Subsheet ID Mapping:", {
-        subsheetName: subsheet.name,
-        originalId: subsheet.originalId,
-        id: subsheet.id,
-        resolvedId: templateSubId,
-        translatedName: translatedSubName,
-      });
-      */
-
       const translatedFields = subsheet.fields.map((field) => {
         const templateFieldId = field.originalId ?? field.id ?? -1;
         const translatedLabel = templateFieldId !== -1 ? fieldLabelMap?.[String(templateFieldId)] : undefined;
         const translatedOptions = templateFieldId !== -1 ? optionLabelMap?.[String(templateFieldId)] : undefined;
-
-        /*
-        console.log("🏷️ Field ID Mapping:", {
-          fieldLabel: field.label,
-          originalId: field.originalId,
-          id: field.id,
-          resolvedId: templateFieldId,
-          translatedLabel,
-        });
-        */
 
         return {
           ...field,

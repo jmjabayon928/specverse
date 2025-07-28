@@ -5,19 +5,9 @@ import { UnifiedSheet, UnifiedSubsheet, InfoField } from "@/types/sheet";
 import { insertAuditLog } from "../database/auditQueries";
 import { notifyUsers } from "../utils/notifyUsers";
 import { getSheetTranslations } from "@/backend/services/translationService";
+import { applySheetTranslations } from "@/utils/applySheetTranslations";
 import { convertToUSC } from "@/utils/unitConversionTable";
 
-
-type TemplateRow = {
-  InfoTemplateID: number;
-  Label: string;
-  InfoType: string;
-  UOM: string;
-};
-
-type OptionRow = {
-  OptionValue: string;
-};
 
 export async function createTemplate(data: UnifiedSheet, userId: number): Promise<number> {
   const pool = await poolPromise;
@@ -223,7 +213,7 @@ export async function getTemplateDetailsById(
         s.ModifiedByDate,
         s.RejectedByID,
         u5.FirstName + ' ' + u5.LastName AS rejectedByName,
-        s.RejectedByDate AS rejectedByDate,
+        s.RejectedByDate,
         s.TemplateID,
         s.ParentSheetID
       FROM Sheets s
@@ -277,7 +267,7 @@ export async function getTemplateDetailsById(
     rejectComment: row.RejectComment,
     rejectedById: row.RejectedByID,
     rejectedByName: row.rejectedByName,
-    rejectedByDate: row.rejectedByDate?.toISOString().split("T")[0] ?? "",
+    rejectedByDate: row.RejectedByDate?.toISOString().split("T")[0] ?? "",
     modifiedById: row.ModifiedByID,
     modifiedByName: row.modifiedByName,
     modifiedByDate: row.ModifiedByDate?.toISOString().split("T")[0] ?? "",
@@ -311,12 +301,7 @@ export async function getTemplateDetailsById(
   // Fetch subsheets and info fields
   const subsheetResult = await pool.request()
     .input("SheetID", sql.Int, templateId)
-    .query(`
-      SELECT s.SubID, s.SubName, s.OrderIndex
-      FROM SubSheets s
-      WHERE s.SheetID = @SheetID
-      ORDER BY s.OrderIndex
-    `);
+    .query(`SELECT SubID, SubName, OrderIndex FROM SubSheets WHERE SheetID = @SheetID ORDER BY OrderIndex`);
 
   const subsheets: UnifiedSubsheet[] = [];
 
@@ -324,14 +309,14 @@ export async function getTemplateDetailsById(
     const templateResult = await pool.request()
       .input("SubID", sql.Int, sub.SubID)
       .query(`
-        SELECT t.InfoTemplateID, t.Label, t.InfoType, t.UOM
-        FROM InformationTemplates t
-        WHERE t.SubID = @SubID
-        ORDER BY t.OrderIndex
+        SELECT InfoTemplateID, Label, InfoType, UOM, Required
+        FROM InformationTemplates
+        WHERE SubID = @SubID
+        ORDER BY OrderIndex
       `);
 
     const fields: InfoField[] = await Promise.all(
-      templateResult.recordset.map(async (t: TemplateRow) => {
+      templateResult.recordset.map(async (t) => {
         const optionResult = await pool.request()
           .input("InfoTemplateID", sql.Int, t.InfoTemplateID)
           .query(`SELECT OptionValue FROM InformationTemplateOptions WHERE InfoTemplateID = @InfoTemplateID`);
@@ -339,9 +324,7 @@ export async function getTemplateDetailsById(
         let displayUOM = t.UOM;
         if (uom === "USC" && t.UOM) {
           const result = convertToUSC("1", t.UOM);
-          if (result) {
-            displayUOM = result.unit;
-          }
+          if (result) displayUOM = result.unit;
         }
 
         return {
@@ -350,8 +333,8 @@ export async function getTemplateDetailsById(
           infoType: t.InfoType as "int" | "decimal" | "varchar",
           uom: displayUOM,
           sortOrder: 1,
-          required: false,
-          options: optionResult.recordset.map((r: OptionRow) => r.OptionValue),
+          required: t.Required === true || t.Required === 1,
+          options: optionResult.recordset.map((o) => o.OptionValue),
         };
       })
     );
@@ -365,10 +348,13 @@ export async function getTemplateDetailsById(
 
   datasheet.subsheets = subsheets;
 
-  // Fetch translations (server-side)
+  // Fetch translations
   const translations = await getSheetTranslations(templateId, lang);
 
-  return { datasheet, translations };
+  // Apply translation and return
+  const translatedSheet = applySheetTranslations(datasheet, translations);
+
+  return { datasheet: translatedSheet, translations };
 }
 
 export async function updateTemplate(sheetId: number, data: UnifiedSheet, userId: number): Promise<number> {

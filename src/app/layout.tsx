@@ -6,7 +6,6 @@ import { SidebarProvider } from "@/context/SidebarContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { Toaster } from "react-hot-toast";
 import LayoutWithSidebar from "@/layout/LayoutWithSidebar";
-import SessionDebug from "@/components/debug/SessionDebug";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -25,7 +24,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 className: "z-[9999]", 
               }}
             />
-            <SessionDebug />
           </SidebarProvider>
         </ThemeProvider>
       </body>

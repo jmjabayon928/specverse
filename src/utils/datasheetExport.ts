@@ -17,11 +17,15 @@ export async function handleExport({
   type,
   unitSystem,
   language,
+  sheetName,
+  revisionNum,
+  clientName,
   isTemplate,
 }: ExportOptions) {
   try {
     const sheetType = isTemplate ? "templates" : "filledsheets";
 
+    // ✅ Match backend route style: /export/:id/pdf
     const response = await fetch(
       `/api/backend/${sheetType}/export/${sheetId}/${type}?uom=${unitSystem}&lang=${language}`,
       {
@@ -34,8 +38,10 @@ export async function handleExport({
       throw new Error(`Export failed with status ${response.status}`);
     }
 
-    // ✅ Extract filename from backend header
-    let filename = "export." + (type === "pdf" ? "pdf" : "xlsx");
+    // ✅ Fallback filename
+    let filename = `${isTemplate ? "Template" : "FilledSheet"}-${clientName}-${sheetName}-RevNo-${revisionNum}-${unitSystem}-${language}.${type === "pdf" ? "pdf" : "xlsx"}`;
+
+    // ✅ Use server-provided filename if available
     const disposition = response.headers.get("Content-Disposition");
     if (disposition && disposition.includes("filename*=")) {
       const match = disposition.match(/filename\*=UTF-8''(.+)/);

@@ -69,3 +69,11 @@ export function ReportsIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function AnalyticsIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg width={24} height={24} viewBox="0 0 24 24" fill="currentColor" {...props}>
+      <path d="M4 20a1 1 0 0 1-1-1v-4a1 1 0 0 1 2 0v4a1 1 0 0 1-1 1zm5-2a1 1 0 0 1-1-1v-8a1 1 0 0 1 2 0v8a1 1 0 0 1-1 1zm5 2a1 1 0 0 1-1-1v-11a1 1 0 0 1 2 0v11a1 1 0 0 1-1 1zm5-4a1 1 0 0 1-1-1v-6a1 1 0 0 1 2 0v6a1 1 0 0 1-1 1z" />
+    </svg>
+  );
+}

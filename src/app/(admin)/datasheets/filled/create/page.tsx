@@ -1,7 +1,7 @@
 // src/app/(admin)/datasheets/filled/create/page.tsx
 
 import React from "react";
-import { getTemplateDetailsById } from "@/backend/database/templateViewQueries";
+import { getTemplateDetailsById } from "@/backend/services/templateService";
 import FilledSheetForm from "./FilledSheetForm";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import { notFound } from "next/navigation";

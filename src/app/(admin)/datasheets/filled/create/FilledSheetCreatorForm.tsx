@@ -32,7 +32,7 @@ export default function FilledSheetCreatorForm({ template, translations, languag
     if (language === "eng" || !translations) {
       setTranslatedSheet(template);
     } else {
-      const translated = applySheetTranslations(template, translations, language);
+      const translated = applySheetTranslations(template, translations);
       setTranslatedSheet(translated);
     }
   }, [language, template, translations]);

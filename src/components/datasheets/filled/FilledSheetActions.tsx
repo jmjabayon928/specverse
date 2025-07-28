@@ -1,3 +1,4 @@
+// src/components/datasheets/filled/FilledSheetActions.tsx
 "use client";
 
 import React from "react";
@@ -139,6 +140,7 @@ export default function FilledSheetActions({
           language={language}
           isTemplate={false}
           clientName={clientName}
+          iconSize={iconSize}
         />
       )}
     </div>

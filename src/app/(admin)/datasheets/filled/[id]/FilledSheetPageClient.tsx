@@ -20,6 +20,10 @@ interface Props {
   defaultUnitSystem: "SI" | "USC";
 }
 
+function getUILabel(key: string, language: string) {
+  return labelTranslations[key]?.[language] ?? key;
+}
+
 const FilledSheetPageClient: React.FC<Props> = ({
   sheetId,
   user,
@@ -108,7 +112,10 @@ const FilledSheetPageClient: React.FC<Props> = ({
           </div>
           <div>
             <h1 className="text-xl font-semibold text-gray-900">
-              {labelTranslations[filledSheet.status ?? "Draft"]?.[lang] ?? filledSheet.status} –{" "}
+              {getUILabel("DataSheet", lang)} –{" "}
+              {labelTranslations[filledSheet.status ?? "Draft"]?.[lang] ?? filledSheet.status}
+            </h1>
+            <h1 className="text-xl font-semibold text-gray-900">
               {translatedSheet?.sheetName ?? filledSheet.sheetName}
             </h1>
             <h2 className="text-md text-gray-800">{translatedSheet?.sheetDesc}</h2>

@@ -1,3 +1,4 @@
+// src/utils/generateDatasheetPDF.ts
 import puppeteer from "puppeteer";
 import fs from "fs";
 import path from "path";
@@ -61,10 +62,17 @@ export async function generateDatasheetPDF(
         let uomLabel = field.uom || "";
         let value = field.value ?? "";
 
-        if (isUSC && field.uom && field.value != null) {
-          const converted = convertToUSC(String(field.value), field.uom);
-          value = converted?.value ?? field.value;
-          uomLabel = converted?.unit ?? field.uom;
+        if (isUSC && field.uom) {
+          if (field.value != null && field.value !== "") {
+            const converted = convertToUSC(String(field.value), field.uom);
+            value = converted?.value ?? field.value;
+            uomLabel = converted?.unit ?? field.uom;
+          } else {
+            // Show converted UOM only, no value
+            const converted = convertToUSC("0", field.uom); // dummy value to extract USC unit
+            uomLabel = converted?.unit ?? field.uom;
+            value = "";
+          }
         }
 
         return `

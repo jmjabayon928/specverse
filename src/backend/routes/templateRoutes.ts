@@ -1,5 +1,3 @@
-// src/backend/routes/templateRoutes.ts
-
 import express, { RequestHandler } from "express";
 import { verifyToken, requirePermission } from "../middleware/authMiddleware";
 import * as controller from "../controllers/templateController";
@@ -7,7 +5,7 @@ import { auditAction } from "../middleware/auditMiddleware";
 
 const router = express.Router();
 
-// Create Template
+// 🔹 Create Template
 router.post(
   "/create",
   verifyToken,
@@ -16,7 +14,7 @@ router.post(
   controller.createTemplateHandler
 );
 
-// Edit Template
+// 🔹 Edit Template
 router.put(
   "/:id",
   verifyToken,
@@ -25,15 +23,7 @@ router.put(
   controller.editTemplate
 );
 
-// Get Template Details
-router.get(
-  "/:id/detail",
-  verifyToken,
-  requirePermission("TEMPLATE_VIEW") as RequestHandler,
-  controller.getTemplateDetail
-);
-
-// Verify Template
+// 🔹 Verify Template
 router.post(
   "/:id/verify",
   verifyToken,
@@ -42,7 +32,7 @@ router.post(
   controller.verifyTemplateHandler
 );
 
-// Approve Template
+// 🔹 Approve Template
 router.post(
   "/:id/approve",
   verifyToken,
@@ -51,7 +41,7 @@ router.post(
   controller.approveTemplateHandler
 );
 
-// Revise Template
+// 🔹 Revise Template
 router.post(
   "/:id/revise",
   verifyToken,
@@ -60,7 +50,7 @@ router.post(
   controller.reviseTemplate
 );
 
-// Delete Template
+// 🔹 Delete Template
 router.delete(
   "/:id",
   verifyToken,
@@ -69,7 +59,37 @@ router.delete(
   controller.deleteTemplate
 );
 
-// Get All Templates
+// 🔹 Export PDF
+router.get(
+  "/export/:id/pdf",
+  verifyToken,
+  controller.exportTemplatePDF
+);
+
+// 🔹 Export Excel
+router.get(
+  "/export/:id/excel",
+  verifyToken,
+  controller.exportTemplateExcel
+);
+
+// 🔹 View Template for Edit Page (no translation/uom)
+router.get(
+  "/:id/detail",
+  verifyToken,
+  requirePermission("TEMPLATE_VIEW") as RequestHandler,
+  controller.getTemplateDetailForEdit
+);
+
+// 🔹 View Template with Translation + UOM (for public/detail view)
+router.get(
+  "/:id",
+  verifyToken,
+  requirePermission("TEMPLATE_VIEW") as RequestHandler,
+  controller.getTemplateDetails
+);
+
+// 🔹 Get All Templates
 router.get(
   "/",
   verifyToken,
@@ -77,14 +97,11 @@ router.get(
   controller.getAllTemplates
 );
 
-// Get Reference Options
+// 🔹 Reference Dropdowns
 router.get(
   "/reference-options",
   verifyToken,
   controller.getTemplateReferenceOptions
 );
-
-router.get("/", verifyToken, controller.getAllTemplates);
-router.get("/reference-options", verifyToken, controller.getTemplateReferenceOptions);
 
 export default router;

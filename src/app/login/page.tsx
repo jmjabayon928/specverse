@@ -26,7 +26,7 @@ export default function LoginPage() {
       const res = await fetch("/api/backend/auth/session", {
         credentials: "include",
       });
-      if (res.ok) router.push("/");
+      if (res.ok) router.push("/dashboard");
     };
     checkSession();
   }, [router]);
@@ -67,7 +67,7 @@ export default function LoginPage() {
       }
 
       // ✅ Redirect to home on success
-      router.push("/");
+      router.push("/dashboard");
     } catch (err) {
       console.error("Login error:", err);
       setError("Something went wrong. Please try again.");

@@ -1,4 +1,3 @@
-// src/app/(admin)/datasheets/templates/[id]/TemplateViewer.tsx
 "use client";
 
 import React from "react";
@@ -15,9 +14,8 @@ function safeFormatDate(input: string | Date | null | undefined): string {
 const getUILabel = (key: string, lang: string): string =>
   labelTranslations[key]?.[lang] ?? key;
 
-const getLabel = (key: string, map?: Record<string, string>, fallback = key): string => {
-  return map?.[key] ?? fallback;
-};
+const getLabel = (key: string, map?: Record<string, string>, fallback = key): string =>
+  map?.[key] ?? fallback;
 
 interface Props {
   data: UnifiedSheet;
@@ -41,6 +39,11 @@ export default function TemplateViewer({
   const subsheetLabelMap = translations?.subsheetLabelMap || {};
   const optionMap = translations?.optionMap || {};
 
+  const getConvertedUOM = (uom?: string) => {
+    if (!uom) return "";
+    return unitSystem === "USC" ? convertToUSC("1", uom).unit : uom;
+  };
+
   return (
     <div className="space-y-6">
       {/* Datasheet Details */}
@@ -50,64 +53,31 @@ export default function TemplateViewer({
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
-            "SheetName", "SheetDesc", "SheetDesc2", "AreaName", "PackageName",
-            "RevisionNum", "RevisionDate", "ClientDocNum", "ClientProjectNum",
-            "CompanyDocNum", "CompanyProjectNum",
+            "sheetName", "sheetDesc", "sheetDesc2",
+            "clientDocNum", "clientProjectNum", "companyDocNum", "companyProjectNum",
+            "areaName", "packageName", "revisionNum", "revisionDate",
+            "preparedByName", "preparedByDate",
+            "modifiedByName", "modifiedByDate",
+            "rejectedByName", "rejectedByDate", "rejectComment",
+            "verifiedByName", "verifiedDate",
+            "approvedByName", "approvedDate"
           ].map((key) => {
-            const rawValue = data[key.charAt(0).toLowerCase() + key.slice(1) as keyof UnifiedSheet];
-            const isDate = key.toLowerCase().includes("date");
-            const value = isDate
-              ? safeFormatDate(rawValue as string | Date | null | undefined)
-              : String(rawValue ?? "-");
-            return (
-              <div key={key}>
-                <label className="font-medium text-sm text-gray-700">
-                  {getLabel(key, fieldLabelMap, getUILabel(key, language))}
-                </label>
-                <div className="bg-gray-100 text-gray-900 rounded px-3 py-2">
-                  {value}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </fieldset>
-
-      {/* Audit Trail */}
-      <fieldset className="border rounded p-4">
-        <div className="text-xl font-semibold mb-4">
-          {getUILabel("Audit Trail", language)}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            "preparedByName", "preparedByDate", "modifiedByName", "modifiedByDate",
-            "rejectedByName", "rejectedByDate", "verifiedByName", "verifiedDate",
-            "approvedByName", "approvedDate",
-          ].map((key) => {
+            const label = getUILabel(key, language);
             const rawValue = data[key as keyof UnifiedSheet];
             const isDate = key.toLowerCase().includes("date");
             const value = isDate
               ? safeFormatDate(rawValue as string | Date | null | undefined)
               : String(rawValue ?? "-");
+
             return (
-              <div key={key}>
-                <label className="font-medium text-sm text-gray-700">
-                  {getUILabel(key, language)}
-                </label>
-                <div className="bg-gray-100 text-gray-900 rounded px-3 py-2">
+              <div key={key} className={key === "rejectComment" ? "md:col-span-2" : ""}>
+                <label className="font-medium text-sm text-gray-700">{label}</label>
+                <div className="bg-gray-100 text-gray-900 rounded px-3 py-2 whitespace-pre-line">
                   {value}
                 </div>
               </div>
             );
           })}
-          <div className="md:col-span-2">
-            <label className="font-medium text-sm text-gray-700">
-              {getUILabel("rejectComment", language)}
-            </label>
-            <div className="bg-gray-100 text-gray-900 rounded px-3 py-2">
-              {data.rejectComment ?? "-"}
-            </div>
-          </div>
         </div>
       </fieldset>
 
@@ -118,18 +88,20 @@ export default function TemplateViewer({
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
-            "EquipmentName", "EquipmentTagNum", "ServiceName", "RequiredQty", "ItemLocation",
-            "ManuName", "SuppName", "InstallPackNum", "EquipSize", "ModelNum", "Driver",
-            "LocationDwg", "PID", "InstallDwg", "CodeStd", "CategoryName", "ClientName", "ProjectName",
+            "equipmentName", "equipmentTagNum", "serviceName", "requiredQty", "itemLocation",
+            "manuName", "suppName", "installPackNum", "equipSize", "modelNum", "driver",
+            "locationDwg", "pid", "installDwg", "codeStd", "categoryName", "clientName", "projectName",
           ].map((key) => {
-            const raw = data[key.charAt(0).toLowerCase() + key.slice(1) as keyof UnifiedSheet];
-            const value = typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean"
-              ? String(raw)
-              : "-";
+            const raw = data[key as keyof UnifiedSheet];
+            const value =
+              typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean"
+                ? String(raw)
+                : "-";
+
             return (
               <div key={key}>
                 <label className="font-medium text-sm text-gray-700">
-                  {getLabel(key, fieldLabelMap, getUILabel(key, language))}
+                  {getUILabel(key, language)}
                 </label>
                 <div className="bg-gray-100 text-gray-900 rounded px-3 py-2">
                   {value}
@@ -167,16 +139,15 @@ export default function TemplateViewer({
                   const options = f.options?.length
                     ? optionMap[f.originalId?.toString() ?? ""] ?? f.options
                     : null;
-                  const uom = unitSystem === "USC" && f.uom
-                    ? convertToUSC("0", f.uom).unit
-                    : f.uom ?? "-";
+                  const uom = getConvertedUOM(f.uom);
 
                   return (
                     <tr key={j} className={j % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                       <td className="border px-2 py-1">
-                        {f.required && <span className="text-red-500 font-bold">*</span>} {label}
+                        {f.required && <span className="text-red-500 font-bold mr-1">*</span>}
+                        {label}
                       </td>
-                      <td className="border px-2 py-1">{uom}</td>
+                      <td className="border px-2 py-1">{uom || "-"}</td>
                       <td className="border px-2 py-1">
                         {options?.length ? options.join(", ") : "-"}
                       </td>

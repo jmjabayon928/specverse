@@ -5,6 +5,8 @@ import { poolPromise } from "../config/db";
 import { unifiedSheetSchema } from "@/validation/sheetSchema";
 import { createTemplate, updateTemplate, verifyTemplate, approveTemplate } from "../services/templateService";
 import { getTemplateDetailsById } from "../services/templateService";
+import { generateDatasheetPDF } from "@/utils/generateDatasheetPDF";
+import { generateDatasheetExcel } from "@/utils/generateDatasheetExcel";
 
 export const createTemplateHandler = async (req: Request, res: Response) => {
   try {
@@ -39,24 +41,54 @@ export const editTemplate: RequestHandler = async (req, res): Promise<void> => {
   }
 };
 
-export const getTemplateDetail: RequestHandler = async (req, res) => {
+export const getTemplateDetailForEdit: RequestHandler = async (req, res) => {
   try {
     const templateId = parseInt(req.params.id, 10);
+
     if (isNaN(templateId)) {
+      console.warn("⚠️ Invalid template ID in getTemplateDetailForEdit:", req.params.id);
       res.status(400).json({ error: "Invalid template ID" });
       return;
     }
 
-    const data = await getTemplateDetailsById(templateId);
-    if (!data) {
+    const lang = "eng";
+    const uom: "SI" | "USC" = "SI";
+
+    const result = await getTemplateDetailsById(templateId, lang, uom);
+    if (!result) {
+      console.warn(`⚠️ Template not found with ID: ${templateId}`);
       res.status(404).json({ error: "Template not found" });
       return;
     }
 
-    res.status(200).json(data);
+    res.status(200).json(result);
   } catch (error) {
-    console.error("❌ getTemplateDetail error:", error);
+    console.error("❌ getTemplateDetailForEdit error:", error);
     res.status(500).json({ error: "Failed to fetch template details" });
+  }
+};
+
+export const getTemplateDetails: RequestHandler = async (req, res) => {
+  try {
+    const sheetId = parseInt(req.params.id, 10);
+    if (isNaN(sheetId)) {
+      res.status(400).json({ error: "Invalid template ID" });
+      return;
+    }
+
+    const lang = String(req.query.lang || "eng");
+    const uom = req.query.uom === "USC" ? "USC" : "SI";
+
+    const result = await getTemplateDetailsById(sheetId, lang, uom);
+    if (!result) {
+      res.status(404).json({ error: "Template not found" });
+      return;
+    }
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("❌ getTemplateDetails error:", error);
+    res.status(500).json({ error: "Failed to fetch translated template details" });
   }
 };
 
@@ -101,6 +133,64 @@ export const reviseTemplate = async (req: Request, res: Response) => {
 
 export const deleteTemplate = async (req: Request, res: Response) => {
   res.status(200).json({ message: "Delete Template - TODO" });
+};
+
+export const exportTemplatePDF: RequestHandler = async (req, res) => {
+  try {
+    const sheetId = parseInt(req.params.id);
+    const lang = (req.query.lang as string) || "eng";
+    const uom = (req.query.uom as string as "SI" | "USC") || "SI";
+
+    const result = await getTemplateDetailsById(sheetId, lang, uom);
+    if (!result) {
+      res.status(404).send("Template not found.");
+      return;
+    }
+
+    const { datasheet } = result;
+    const { buffer, fileName } = await generateDatasheetPDF(datasheet, lang, uom);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    res.send(buffer);
+  } catch (error) {
+    console.error("❌ Error exporting template PDF:", error);
+    res.status(500).send("Failed to generate PDF.");
+  }
+};
+
+export const exportTemplateExcel: RequestHandler = async (req, res) => {
+  try {
+    const sheetId = parseInt(req.params.id);
+    const lang = (req.query.lang as string) || "eng";
+    const uom = (req.query.uom as string as "SI" | "USC") || "SI";
+
+    const result = await getTemplateDetailsById(sheetId, lang, uom);
+    if (!result) {
+      res.status(404).send("Template not found.");
+      return;
+    }
+
+    const { datasheet } = result;
+    const buffer = await generateDatasheetExcel(datasheet, lang, uom);
+
+    // Utility to sanitize filename segments
+    const clean = (s: string | number | null | undefined) =>
+      String(s ?? "")
+        .replace(/[\/\\?%*:|"<>]/g, "")
+        .trim()
+        .replace(/\s+/g, "_");
+
+    const fileName = `Template-${clean(datasheet.clientName)}-${clean(datasheet.sheetName)}-RevNo-${clean(datasheet.revisionNum)}-${uom}-${lang}.xlsx`;
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    res.send(buffer);
+  } catch (error) {
+    console.error("❌ Error exporting template Excel:", error);
+    res.status(500).send("Failed to generate Excel.");
+  }
 };
 
 export const getAllTemplates = async (req: Request, res: Response) => {

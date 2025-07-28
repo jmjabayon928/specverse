@@ -111,6 +111,12 @@ const conversionTable: ConversionEntry[] = [
     convertToSI: val => val / 4.40287,
   },
   {
+    siUnit: 'm³/min',
+    uscUnit: 'cfm',
+    convertToUSC: val => val * 35.3147,
+    convertToSI: val => val / 35.3147,
+  },
+  {
     siUnit: 'L/min',
     uscUnit: 'gpm',
     convertToUSC: val => val * 0.264172,

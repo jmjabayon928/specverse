@@ -1,30 +1,28 @@
-"use client";
+// src/app/page.tsx
+import React from "react";
+import getUserSession from "@/utils/sessionUtils.server";
+import DashboardClient from "@/app/(admin)/dashboard/DashboardClient";
 
-import { useSession } from "@/hooks/useSession";
-import AdminDashboard from "@/components/dashboard/AdminDashboard";
-import SupervisorDashboard from "@/components/dashboard/SupervisorDashboard";
-import EngineerDashboard from "@/components/dashboard/EngineerDashboard";
-import ViewerDashboard from "@/components/dashboard/ViewerDashboard";
+export default async function HomePage() {
+  const user = await getUserSession();
 
-export default function HomePage() {
-  const { user } = useSession();
-
-  if (!user) return <div className="text-center p-6">Loading...</div>;
-
-  switch (user.role?.toLowerCase()) {
-    case "admin":
-      return <AdminDashboard />;
-    case "supervisor":
-      return <SupervisorDashboard />;
-    case "engineer":
-      return <EngineerDashboard />;
-    case "viewer":
-      return <ViewerDashboard />;
-    default:
-      return (
-        <div className="text-red-600 p-6">
-          Unknown role: {user.role}. Please contact system administrator.
-        </div>
-      );
+  if (!user) {
+    return <div className="p-4">Please log in to view your dashboard.</div>;
   }
+
+  const role = user.role;
+
+  // If Viewer, show a placeholder or limited access notice
+  if (role === "Viewer") {
+    return (
+      <div className="p-6 text-center">
+        <h1 className="text-xl font-semibold mb-2">Welcome to SpecVerse</h1>
+        <p className="text-gray-700">
+          You are logged in as a Viewer. Dashboard charts are not available for your role.
+        </p>
+      </div>
+    );
+  }
+
+  return <DashboardClient user={user} />;
 }

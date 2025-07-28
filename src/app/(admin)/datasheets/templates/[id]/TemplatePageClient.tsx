@@ -1,3 +1,4 @@
+// src/app/(admin)/datasheets/templates/[id]/TemplatePageClient.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -6,7 +7,6 @@ import SheetHeaderBar from "@/components/datasheets/SheetHeaderBar";
 import TemplateActions from "@/components/datasheets/templates/TemplateActions";
 import TemplateViewer from "./TemplateViewer";
 import { translations as labelTranslations } from "@/constants/translations";
-import { applySheetTranslations } from "@/utils/applySheetTranslations";
 import type { UserSession } from "@/types/session";
 import type { UnifiedSheet, SheetStatus } from "@/types/sheet";
 import type { SheetTranslations } from "@/types/translation";
@@ -20,6 +20,10 @@ interface Props {
   initialTranslations: SheetTranslations | null;
 }
 
+function getUILabel(key: string, language: string) {
+  return labelTranslations[key]?.[language] ?? key;
+}
+
 const TemplatePageClient: React.FC<Props> = ({
   sheetId,
   user,
@@ -28,29 +32,48 @@ const TemplatePageClient: React.FC<Props> = ({
   defaultUnitSystem,
   initialTranslations,
 }) => {
-  const [lang, setLang] = useState<string>(() => {
-    const cookie = document.cookie.split("; ").find((c) => c.startsWith("lang="));
-    return cookie ? decodeURIComponent(cookie.split("=")[1]) : defaultLanguage;
-  });
-
-  const [unitSystem, setUnitSystem] = useState<"SI" | "USC">(() => {
-    const cookie = document.cookie.split("; ").find((c) => c.startsWith("unitSystem="));
-    return cookie?.includes("USC") ? "USC" : defaultUnitSystem;
-  });
-
-  const [translatedTemplate, setTranslatedTemplate] = useState<UnifiedSheet>(template);
-  const [translations, setTranslations] = useState<SheetTranslations | null>(null);
+  const [lang, setLang] = useState<string>(defaultLanguage);
+  const [unitSystem, setUnitSystem] = useState<"SI" | "USC">(defaultUnitSystem);
 
   useEffect(() => {
-    if (lang === "eng") {
-      setTranslatedTemplate(template);
-      setTranslations(null);
-    } else {
-      const translated = applySheetTranslations(template, initialTranslations);
-      setTranslatedTemplate(translated);
-      setTranslations(initialTranslations);
+    const cookie = document.cookie.split("; ").find((c) => c.startsWith("lang="));
+    if (cookie) {
+      setLang(decodeURIComponent(cookie.split("=")[1]));
     }
-  }, [lang, sheetId, template, initialTranslations]);
+  }, []);
+
+  useEffect(() => {
+    const cookie = document.cookie.split("; ").find((c) => c.startsWith("unitSystem="));
+    if (cookie?.includes("USC")) {
+      setUnitSystem("USC");
+    }
+  }, []);
+
+  const [translatedTemplate, setTranslatedTemplate] = useState<UnifiedSheet>(template);
+  const [translations, setTranslations] = useState<SheetTranslations | null>(initialTranslations);
+
+  useEffect(() => {
+    const fetchTemplateWithTranslations = async () => {
+      try {
+        const res = await fetch(
+          `/api/backend/templates/${sheetId}?lang=${lang}&uom=${unitSystem}`
+        );
+        if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
+        const data = await res.json();
+        setTranslatedTemplate(data.datasheet);
+        setTranslations(data.translations);
+      } catch (err) {
+        console.error("Error loading translated template:", err);
+      }
+    };
+
+    if (lang === "eng" && unitSystem === "SI") {
+      setTranslatedTemplate(template);
+      setTranslations(initialTranslations);
+    } else {
+      fetchTemplateWithTranslations();
+    }
+  }, [lang, unitSystem, sheetId, template, initialTranslations]);
 
   const handleLangChange = (newLang: string) => {
     document.cookie = `lang=${encodeURIComponent(newLang)}; path=/; max-age=31536000`;
@@ -86,7 +109,10 @@ const TemplatePageClient: React.FC<Props> = ({
           </div>
           <div>
             <h1 className="text-xl font-semibold text-gray-900">
-              {labelTranslations[template.status ?? "Draft"]?.[lang] ?? template.status} –{" "}
+              {getUILabel("Template", lang)} –{" "}
+              {labelTranslations[template.status ?? "Draft"]?.[lang] ?? template.status}
+            </h1>
+            <h1 className="text-xl font-semibold text-gray-900">
               {translatedTemplate?.sheetName ?? template.sheetName}
             </h1>
             <h2 className="text-md text-gray-800">{translatedTemplate?.sheetDesc}</h2>
@@ -102,16 +128,23 @@ const TemplatePageClient: React.FC<Props> = ({
             onUnitToggle={handleUnitToggle}
           />
           <TemplateActions
-            template={{
+            sheet={{
               sheetId,
               status:
-                "Draft|Rejected|Modified Draft|Verified|Approved".includes(template.status ?? "")
+                "Draft|Rejected|Modified Draft|Verified|Approved".includes(
+                  template.status ?? ""
+                )
                   ? (template.status as SheetStatus)
                   : "Draft",
               preparedBy: template.preparedById ?? 0,
               isTemplate: true,
             }}
             user={user}
+            unitSystem={unitSystem}
+            language={lang}
+            clientName={template.clientName ?? "Client"}
+            sheetName={template.sheetName ?? "Template"}
+            revisionNum={template.revisionNum ?? 0}
           />
         </div>
       </div>

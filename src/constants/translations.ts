@@ -650,4 +650,22 @@ export const translations: Record<string, Record<string, string>> = {
     zh: "设备详情",
     ar: "تفاصيل الجهاز",
   },
+  Template: {
+    eng: "Template",
+    fr: "Modèle",
+    de: "Vorlage",
+    es: "Plantilla",
+    zh: "模板",
+    ru: "Шаблон",
+    ar: "قالب",
+  },
+  DataSheet: {
+    eng: "Data Sheet",
+    fr: "Fiche technique",
+    de: "Datenblatt",
+    es: "Hoja de datos",
+    zh: "数据表",
+    ru: "Технический паспорт",
+    ar: "ورقة بيانات",
+  },
 };

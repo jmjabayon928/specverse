@@ -12,9 +12,10 @@ import {
 import {
   EstimationIcon,
   DataSheetsIcon,
-  AdministrationIcon,
+  //AdministrationIcon,
   InventoryIcon,
   ReportsIcon,
+  AnalyticsIcon,
 } from "../components/icons/index";
 
 const userRole = "admin";
@@ -78,6 +79,17 @@ const navItems: NavItem[] = [
     ],
   },
   {
+    icon: <AnalyticsIcon />,
+    name: "Analytics",
+    path: "/dashboard/analytics",
+  },
+  {
+    icon: <ReportsIcon />,
+    name: "Reports",
+    path: "/dashboard/reports",
+  },
+  /*
+  {
     icon: <ReportsIcon />,
     name: "Reports",
     roles: ["admin", "manager", "estimator"],
@@ -96,6 +108,7 @@ const navItems: NavItem[] = [
       { name: "System Settings", path: "/admin/settings", pro: false },
     ],
   },
+  */
 ];
 
 const AppSidebar: React.FC = () => {

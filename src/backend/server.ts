@@ -23,6 +23,8 @@ import authRoutes from "./routes/authRoutes";
 import permissionRoutes from './routes/permissionRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import referenceRoutes from "@/backend/routes/referenceRoutes";
+import statsRoutes from "./routes/statsRoutes";
+import reportsRoutes from "./routes/reportsRoutes";
 
 // Initialize environment variables
 dotenv.config();
@@ -63,8 +65,9 @@ app.use("/api/backend/auth", authRoutes);
 app.use("/api", labelRoutes); 
 app.use('/api/backend', permissionRoutes);
 app.use("/api/backend/notifications", notificationRoutes);
-app.use("/api/backend/estimation", estimationRoutes);
 app.use("/api/backend", referenceRoutes);
+app.use("/api/backend/stats", statsRoutes);
+app.use("/api/backend/reports", reportsRoutes);
 
 // ✅ Health check route
 app.get("/api/health", (req: Request, res: Response) => {
