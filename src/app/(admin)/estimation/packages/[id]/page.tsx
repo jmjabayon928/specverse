@@ -1,3 +1,4 @@
+// src/app/(admin)/estimation/packages/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -44,13 +45,11 @@ export default function PackageDetailPage() {
             <tbody>
             {items.length > 0 ? (
                 items.map((item) => (
-                <tr key={item.ItemID} className="border-t">
-                    <td className="px-4 py-2">{item.PartName}</td>
+                <tr key={item.EItemID} className="border-t">
+                    <td className="px-4 py-2">{item.ItemName ?? "Unnamed"}</td>
                     <td className="px-4 py-2">{item.Quantity}</td>
-                    <td className="px-4 py-2">${item.UnitCost.toFixed(2)}</td>
-                    <td className="px-4 py-2">
-                    ${(item.Quantity * item.UnitCost).toFixed(2)}
-                    </td>
+                    <td className="px-4 py-2">${(item.UnitCost ?? 0).toFixed(2)}</td>
+                    <td className="px-4 py-2">${((item.Quantity ?? 0) * (item.UnitCost ?? 0)).toFixed(2)}</td>
                     <td className="px-4 py-2">
                     <a
                         href={`/estimation/quotes/${item.ItemID}`}
@@ -83,9 +82,12 @@ export default function PackageDetailPage() {
         <div className="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow border mt-4">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Add New Item</h2>
           <ItemForm
-            packageId={packageId}
+            mode="create"
             estimationId={pkg.EstimationID}
+            packageId={packageId}
+            items={items}
             onSuccess={() => window.location.reload()}
+            onCancel={() => setShowForm(false)}
           />
         </div>
       )}

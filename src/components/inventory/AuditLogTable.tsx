@@ -1,3 +1,4 @@
+// src/components/inventory/AuditLogTable.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -26,15 +27,32 @@ export default function AuditLogTable({ inventoryId }: Props) {
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/backend/inventory/${inventoryId}/audit`
         );
-        if (!res.ok) throw new Error("Failed to load audit logs");
+
+        if (!res.ok) {
+          const contentType = res.headers.get("content-type");
+          let errorMessage = `Error ${res.status}`;
+
+          // If response is JSON, try to extract error message
+          if (contentType && contentType.includes("application/json")) {
+            const errorJson = await res.json();
+            errorMessage += `: ${errorJson.message || JSON.stringify(errorJson)}`;
+          } else {
+            const text = await res.text();
+            errorMessage += `: ${text}`;
+          }
+
+          throw new Error(errorMessage);
+        }
+
         const data = await res.json();
         setLogs(data);
       } catch (err) {
-        console.error(err);
+        console.error("Audit fetch failed:", err);
       } finally {
         setLoading(false);
       }
     }
+
     fetchLogs();
   }, [inventoryId]);
 

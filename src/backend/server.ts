@@ -52,14 +52,14 @@ app.use(morgan("dev"));
 
 // ✅ Mount API routes
 app.use("/api/users", userRoutes);
-app.use("/api/clients", clientsRoutes);
+app.use("/api/backend/clients", clientsRoutes);
 app.use("/api/categories", categoriesRoutes);
 app.use("/api/backend/datasheets", datasheetsRoutes); 
 app.use("/api/backend/inventory", inventoryRoutes); 
 app.use("/api/backend/estimation", estimationRoutes);
 app.use("/api/backend/templates", templateRoutes);
 app.use("/api/backend/filledsheets", filledSheetRoutes);
-app.use("/api/projects", projectsRoutes);
+app.use("/api/backend/projects", projectsRoutes);
 app.use("/api/languages", languageRoutes);
 app.use("/api/backend/auth", authRoutes);
 app.use("/api", labelRoutes); 

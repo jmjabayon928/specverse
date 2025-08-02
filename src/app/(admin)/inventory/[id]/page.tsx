@@ -1,3 +1,4 @@
+// src/app/(admin)/inventory/[id]/page.tsx
 import { notFound } from "next/navigation";
 import { LayoutDashboard, FileText, Wrench, ClipboardList } from "lucide-react";
 import { getInventoryItemById } from "@/backend/database/inventoryQueries";
@@ -55,16 +56,20 @@ export default async function InventoryDetailPage({
         </div>
 
         <div className="p-4 bg-white rounded-md shadow-sm border">
-          {activeTab === "overview" && (
+          {activeTab === "overview" ? (
             <InventoryDetails
-              inventoryId={itemId}
+              item={item} // ✅ Add this line
               categories={categories}
               suppliers={suppliers}
               manufacturers={manufacturers}
             />
-          )}
-          {activeTab !== "overview" && (
-            <InventoryTabContent inventoryId={itemId} activeTab={activeTab} />
+          ) : (
+            <InventoryTabContent
+              inventoryId={itemId}
+              activeTab={activeTab}
+              canEditStock={true}
+              canEditMaintenance={true}
+            />
           )}
         </div>
       </div>

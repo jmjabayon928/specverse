@@ -18,6 +18,11 @@ type UserRoleData = {
   total: number;
 };
 
+type RawUserRoleData = {
+  RoleName: string;
+  Total: number;
+};
+
 const ActiveUsersByRole: React.FC = () => {
   const [data, setData] = useState<UserRoleData[]>([]);
 
@@ -26,8 +31,16 @@ const ActiveUsersByRole: React.FC = () => {
       try {
         const res = await fetch("/api/backend/stats/active-users-by-role");
         if (!res.ok) throw new Error("Failed to fetch active users by role");
-        const json = await res.json();
-        setData(json);
+
+        const json: RawUserRoleData[] = await res.json();
+
+        const mapped: UserRoleData[] = json.map((item) => ({
+          roleName: item.RoleName,
+          total: item.Total,
+        }));
+
+        console.log("Active users by role chart data:", mapped);
+        setData(mapped);
       } catch (error) {
         console.error("Active users by role fetch error:", error);
       }

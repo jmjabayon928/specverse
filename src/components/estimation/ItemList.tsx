@@ -1,3 +1,4 @@
+// src/components/estimation/ItemList.tsx
 import React from "react";
 import { EstimationItem } from "@/types/estimation";
 
@@ -23,11 +24,11 @@ export default function ItemList({ items, onViewQuotes }: ItemListProps) {
                 <tbody>
                     {items.map(item => (
                         <tr key={item.ItemID} className="border-b">
-                            <td className="px-4 py-2">{item.PartName}</td>
+                            <td className="px-4 py-2">{item.ItemName}</td>
                             <td className="px-4 py-2">{item.Quantity}</td>
-                            <td className="px-4 py-2">{item.UnitOfMeasure ?? "-"}</td>
-                            <td className="px-4 py-2">${item.UnitCost.toFixed(2)}</td>
-                            <td className="px-4 py-2">${(item.Quantity * item.UnitCost).toFixed(2)}</td>
+                            <td className="px-4 py-2">{item.UOM ?? "-"}</td>
+                            <td className="px-4 py-2">{item.UnitCost !== undefined ? `$${item.UnitCost.toFixed(2)}` : '-'}</td>
+                            <td className="px-4 py-2">{item.UnitCost !== undefined ? `$${(item.Quantity * item.UnitCost).toFixed(2)}` : '-'}</td>
                             <td className="px-4 py-2">
                                 <button
                                     onClick={() => onViewQuotes?.(item.ItemID)}

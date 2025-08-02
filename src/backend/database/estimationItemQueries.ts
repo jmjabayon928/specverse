@@ -15,7 +15,9 @@ export async function getItemsByPackageId(packageId: number) {
         ei.CreatedAt,
         ei.CreatedBy,
         u.FirstName + ' ' + u.LastName AS CreatedByName,
-        s.SheetName AS ItemName,
+        inv.ItemName, 
+		inv.UOM, 
+        inv.UnitCost,
         CASE 
           WHEN EXISTS (
             SELECT 1 
@@ -25,8 +27,7 @@ export async function getItemsByPackageId(packageId: number) {
         END AS HasSelectedQuote
       FROM EstimationItems ei
         LEFT JOIN Users u ON ei.CreatedBy = u.UserID
-        LEFT JOIN Inventory i ON ei.ItemID = i.InventoryID
-        LEFT JOIN Sheets s ON i.SheetID = s.SheetID
+        LEFT JOIN InventoryItems inv ON ei.ItemID = inv.InventoryItemID
       WHERE ei.PackageID = @PackageID
     `);
 

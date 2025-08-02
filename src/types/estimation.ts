@@ -67,9 +67,11 @@ export interface EstimationItem {
   Description?: string;
   CreatedAt?: string;
   CreatedBy?: number;
-  CreatedByName?: string; 
+  CreatedByName?: string;
   ItemName?: string; 
+  UnitCost?: number; 
   HasSelectedQuote?: boolean;
+  UOM?: string;
 }
 
 export interface EstimationQuote {
@@ -101,16 +103,18 @@ export interface SupplierQuote {
     QuoteID: number;
     ItemID: number;
     SupplierID: number;
-    SupplierName: string;
     QuotedUnitCost: number;
-    ExpectedDeliveryDays?: number;
-    CurrencyCode?: string;
+    ExpectedDeliveryDays: number;
+    CurrencyCode: string;
     IsSelected: boolean;
-    Notes?: string;
+    Notes: string;
+    SupplierQuoteReference: string;
+    TotalQuotedCost: number;
+    SupplierCurrency: string;
+    SupplierDeliveryDays: number;
+    ItemName: string;
+    SupplierName: string;
     CreatedAt?: string;
-    CreatedBy?: number;
-    ModifiedAt?: string;
-    ModifiedBy?: number;
 }
 
 // Input for Create/Update Supplier Quote

@@ -1,6 +1,7 @@
+// src/backend/routes/inventoryRoutes.ts
 import express from "express";
 import {
-  getAllInventoryItems,
+  getInventoryList,
   getInventoryItemById,
   createInventoryItem,
   updateInventoryItem,
@@ -9,7 +10,10 @@ import {
 
 import {
   getInventoryTransactions,
-  addInventoryTransaction
+  addInventoryTransaction,
+  getAllInventoryTransactions,
+  getAllInventoryMaintenanceLogs,
+  getAllInventoryAuditLogs,
 } from "../database/inventoryTransactionQueries";
 
 import {
@@ -18,11 +22,15 @@ import {
 } from "../database/inventoryMaintenanceQueries";
 
 import {
+  getAllInventoryItemsHandler
+} from "../controllers/inventoryController";
+
+import {
   getInventoryAuditLogs
 } from "../database/inventoryAuditQueries";
 
 import { verifyToken, requirePermission } from "../middleware/authMiddleware";
-import { getAllReferenceOptions } from "@/backend/database/ReferenceQueries";
+import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
 import { asyncHandler } from "@/backend/utils/asyncHandler";
 import { getInventoryItemOptions } from '../database/ReferenceQueries';
 
@@ -34,20 +42,20 @@ FIXED ROUTES
 // This endpoint is used to fetch reference data for dropdowns and other UI elements
 router.get("/reference-options", async (req, res) => {
   try {
-    const data = await getAllReferenceOptions();
+    const data = await fetchReferenceOptions(); // ✅ updated
     res.json({
       categories: data.categories.map((c: { id: number; name: string }) => ({
         categoryId: c.id,
-        CategoryName: c.name
+        CategoryName: c.name,
       })),
       manufacturers: data.manufacturers.map((m: { id: number; name: string }) => ({
         manuId: m.id,
-        manuName: m.name
+        manuName: m.name,
       })),
       suppliers: data.suppliers.map((s: { id: number; name: string }) => ({
         suppId: s.id,
-        suppName: s.name
-      }))
+        suppName: s.name,
+      })),
     });
   } catch (err) {
     console.error("Error fetching reference options:", err);
@@ -55,13 +63,12 @@ router.get("/reference-options", async (req, res) => {
   }
 });
 
-
 /*
 LIST ROUTES
 */
 // ✅ GET all items
 router.get("/", verifyToken, requirePermission("INVENTORY_VIEW"), async (req, res) => {
-  const data = await getAllInventoryItems();
+  const data = await getInventoryList();
   res.json(data);
 });
 
@@ -142,10 +149,12 @@ router.get("/:id/can-delete", asyncHandler(async (req, res) => {
   res.json({ canDelete });
 }));
 
-
 /*
 GENERAL ROUTES
 */
+// ✅ GET all inventory items (for dropdowns or selection)
+router.get("/all", verifyToken, getAllInventoryItemsHandler);
+
 // ✅ GET single item
 router.get("/:id", verifyToken, requirePermission("INVENTORY_VIEW"), asyncHandler(async (req, res) => {
     const itemId = parseInt(req.params.id);
@@ -173,5 +182,23 @@ router.delete("/:id", verifyToken, requirePermission("INVENTORY_DELETE"), async 
   await softDeleteInventoryItem(id);
   res.status(204).send();
 });
+
+// Get all stock transactions
+router.get("/all/transactions", verifyToken, requirePermission("INVENTORY_VIEW"), asyncHandler(async (req, res) => {
+  const data = await getAllInventoryTransactions(); // New function
+  res.json(data);
+}));
+
+// Get all maintenance logs
+router.get("/all/maintenance", verifyToken, requirePermission("INVENTORY_MAINTENANCE_VIEW"), asyncHandler(async (req, res) => {
+  const data = await getAllInventoryMaintenanceLogs(); // New function
+  res.json(data);
+}));
+
+// Get all audit logs
+router.get("/all/audit", verifyToken, requirePermission("INVENTORY_VIEW"), asyncHandler(async (req, res) => {
+  const data = await getAllInventoryAuditLogs(); // New function
+  res.json(data);
+}));
 
 export default router;

@@ -115,6 +115,24 @@ This enables **true no-code datasheet configuration** — a huge time and cost s
 
 ---
 
+## 📘 Planned Modules
+
+### 🧑‍🔧 Labor Costing (Upcoming)
+
+A new module to support structured labor cost estimation per role, package, or task. Based on industrial and EPC best practices:
+
+- Role-based labor breakdowns (e.g., Welder, Supervisor, Electrician)
+- Per-package or per-item labor allocation
+- Reference-based productivity standards (e.g., weld-inches/day)
+- Optional manual overrides with audit logs
+- Derived cost calculation: `Qty × Hours × Rate`
+- Smart forecasting using Labor Standards (e.g., manhour tables)
+- Integration with Estimation exports and dashboards
+
+This module will support both manual entry and auto-suggestion based on scope and productivity metrics, with full reporting and approval support.
+
+---
+
 ## 🧰 Test Data Simulation (For Demos)
 
 To populate dashboards and reports for testing or demos:
@@ -200,4 +218,4 @@ Setup environment variables:
 Jeff Martin Abayon
 📍 Calgary, Canada
 📧 jmjabayon@gmail.com
-💼 [LinkedIn Profile](https://www.linkedin.com/in/jeff-martin-abayon-calgary/)
+💼 LinkedIn Profile(https://www.linkedin.com/in/jeff-martin-abayon-calgary/)

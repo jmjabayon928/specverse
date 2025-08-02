@@ -99,14 +99,14 @@ export const getInventoryForecastFromDB = async () => {
 
   const result = await pool.request().query(`
     SELECT 
-      FORMAT(t.PerformedAt, 'yyyy-MM') AS Month,
-      i.ItemName,
-      SUM(t.QuantityChanged) AS TotalQuantity
+      FORMAT(t.PerformedAt, 'yyyy-MM') AS month,
+      i.ItemName AS itemName,
+      SUM(t.QuantityChanged) AS totalQuantity
     FROM InventoryTransactions t
-      JOIN InventoryItems i ON t.InventoryID = i.InventoryID
+    JOIN InventoryItems i ON t.InventoryID = i.InventoryID
     WHERE t.PerformedAt IS NOT NULL
     GROUP BY FORMAT(t.PerformedAt, 'yyyy-MM'), i.ItemName
-    ORDER BY Month, i.ItemName;
+    ORDER BY month, itemName;
   `);
 
   return result.recordset;

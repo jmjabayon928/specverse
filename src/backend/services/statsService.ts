@@ -70,7 +70,7 @@ export async function getEstimationTotalsByProject(): Promise<{ project: string;
   const result = await pool.request().query(`
     SELECT 
       p.ProjName AS project,
-      SUM(e.TotalLaborCost + e.TotalLaborCost) AS total
+      SUM(e.TotalLaborCost + e.TotalMaterialCost) AS total
     FROM Estimations e
     JOIN Projects p ON e.ProjectID = p.ProjectID
     GROUP BY p.ProjName

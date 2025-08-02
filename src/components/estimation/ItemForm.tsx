@@ -1,3 +1,4 @@
+// src/components/estimation/ItemForm.tsx
 "use client";
 
 import { useForm } from "react-hook-form";
@@ -5,6 +6,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "react-hot-toast";
 import { itemSchema, ItemFormValues } from "@/validation/estimationSchema";
 import { EstimationItem } from "@/types/estimation";
+
+interface InventoryItemOption {
+  itemCode: number;
+  itemName: string;
+  uom?: string;
+}
 
 interface ItemFormProps {
   mode: "create" | "edit";
@@ -14,6 +21,7 @@ interface ItemFormProps {
   items: EstimationItem[];
   onSuccess: () => void;
   onCancel: () => void;
+  inventoryItems: InventoryItemOption[]; // ✅ NEW PROP
 }
 
 export default function ItemForm({
@@ -24,6 +32,7 @@ export default function ItemForm({
   items,
   onSuccess,
   onCancel,
+  inventoryItems, // ✅ RECEIVED HERE
 }: ItemFormProps) {
   const {
     register,
@@ -62,14 +71,12 @@ export default function ItemForm({
         }),
       });
 
-      // ✅ Handle backend duplicate error
       if (res.status === 409) {
         const data = await res.json();
         toast.error(data.message);
         return;
       }
 
-      // ✅ Fallback generic error handler
       if (!res.ok) throw new Error('Save failed');
 
       onSuccess();
@@ -83,17 +90,23 @@ export default function ItemForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div>
-        <label>Item ID</label>
-        <input
+        <label className="block text-sm font-medium text-gray-700">Item</label>
+        <select
           {...register("ItemID", { valueAsNumber: true })}
-          type="number"
-          className="border p-2 w-full"
-        />
+          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm"
+        >
+          <option value="">-- Select an Item --</option>
+          {inventoryItems.map((item) => (
+            <option key={item.itemCode} value={item.itemCode}>
+              {item.itemName} {item.uom ? `(${item.uom})` : ""}
+            </option>
+          ))}
+        </select>
         {errors.ItemID && <p className="text-red-500">{errors.ItemID.message}</p>}
       </div>
 
       <div>
-        <label>Description</label>
+        <label className="block text-sm font-medium text-gray-700">Description</label>
         <textarea
           {...register("Description")}
           className="border p-2 w-full"
@@ -102,7 +115,7 @@ export default function ItemForm({
       </div>
 
       <div>
-        <label>Quantity</label>
+        <label className="block text-sm font-medium text-gray-700">Quantity</label>
         <input
           {...register("Quantity", { valueAsNumber: true })}
           type="number"

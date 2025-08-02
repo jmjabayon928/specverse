@@ -1,3 +1,4 @@
+// src/components/inventory/MaintenanceLogTable.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -21,6 +22,10 @@ export default function MaintenanceLogTable({ inventoryId, canEdit }: Props) {
     async function fetchLogs() {
       try {
         const res = await fetch(`/api/backend/inventory/${inventoryId}/maintenance`);
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`Fetch failed: ${errorText}`);
+        }
         const data = await res.json();
         setLogs(data);
       } catch (error) {

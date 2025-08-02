@@ -1,3 +1,4 @@
+// src/types/inventory.ts
 import { z } from "zod";
 import {
   inventoryItemSchema,

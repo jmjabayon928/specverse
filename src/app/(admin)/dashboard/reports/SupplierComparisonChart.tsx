@@ -9,81 +9,95 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Cell,
+  Legend,
+  CartesianGrid,
 } from "recharts";
+import { Card, CardContent } from "@/components/ui/card";
 
-type SupplierComparison = {
-  supplierName: string;
-  totalQuoted: number;
-  itemCount: number;
-  acceptedCount: number;
+interface ItemDetail {
+  itemName: string;
+  quantity: number;
+}
+
+interface CategoryContribution {
+  categoryName: string;
+  items: ItemDetail[];
+}
+
+interface GroupedBarDataEntry {
+  itemName: string;
+  [categoryName: string]: string | number;
+}
+
+const generateColors = (count: number): string[] => {
+  const colors: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const hue = (i * 137.508) % 360;
+    colors.push(`hsl(${hue}, 70%, 60%)`);
+  }
+  return colors;
 };
 
-export default function SupplierComparisonChart() {
-  const [data, setData] = useState<SupplierComparison[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function InventoryContributionChart() {
+  const [data, setData] = useState<GroupedBarDataEntry[]>([]);
+  const [categoryNames, setCategoryNames] = useState<string[]>([]);
 
   useEffect(() => {
-    async function fetchData() {
+    const fetchData = async () => {
       try {
-        const res = await fetch("/api/backend/reports/supplier-comparison");
-        if (!res.ok) throw new Error("Failed to load supplier data");
-        const json = await res.json();
-        setData(json);
-      } catch (err) {
-        console.error("Error fetching supplier comparison:", err);
-      } finally {
-        setLoading(false);
+        const res = await fetch("/api/backend/reports/inventory-contribution");
+        const raw: CategoryContribution[] = await res.json();
+
+        const categories = raw.map((c) => c.categoryName);
+        const itemMap: Record<string, GroupedBarDataEntry> = {};
+
+        raw.forEach((category) => {
+          category.items.forEach((item) => {
+            if (!itemMap[item.itemName]) {
+              itemMap[item.itemName] = { itemName: item.itemName };
+            }
+            itemMap[item.itemName][category.categoryName] = item.quantity;
+          });
+        });
+
+        setData(Object.values(itemMap));
+        setCategoryNames(categories);
+      } catch (error) {
+        console.error("Error loading inventory contribution:", error);
       }
-    }
+    };
 
     fetchData();
   }, []);
 
-  const processedData = data.map((s) => ({
-    ...s,
-    acceptanceRate:
-      s.itemCount > 0 ? (s.acceptedCount / s.itemCount) * 100 : 0,
-  }));
-
-  const getBarColor = (rate: number) => {
-    if (rate >= 75) return "#34d399"; // green
-    if (rate >= 50) return "#facc15"; // yellow
-    return "#f87171"; // red
-  };
+  const colors = generateColors(categoryNames.length);
 
   return (
-    <div className="w-full h-80">
-      <h3 className="text-md font-semibold mb-2">Supplier Comparison</h3>
-      {loading ? (
-        <p className="text-muted-foreground text-sm">Loading supplier data...</p>
-      ) : (
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={processedData}
-            layout="vertical"
-            margin={{ top: 10, right: 30, left: 80, bottom: 10 }}
-          >
-            <XAxis type="number" />
-            <YAxis dataKey="supplierName" type="category" width={150} />
-            <Tooltip
-              formatter={(value: number, name: string) => {
-                if (name === "totalQuoted") return [`$${value.toFixed(2)}`, "Total Quoted"];
-                if (name === "itemCount") return [value, "Items Quoted"];
-                if (name === "acceptedCount") return [value, "Quotes Accepted"];
-                if (name === "acceptanceRate")
-                  return [`${value.toFixed(1)}%`, "Acceptance Rate"];
-                return [value, name];
-              }}
-            />
-            <Bar dataKey="totalQuoted" fill="#8884d8">
-              {processedData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={getBarColor(entry.acceptanceRate)} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      )}
-    </div>
+    <Card className="w-full">
+      <CardContent className="p-4">
+        <h2 className="text-lg font-semibold mb-4">Inventory Category Contribution</h2>
+        <div className="w-full overflow-x-auto">
+          <div className="min-w-[1200px] h-[600px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 100 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="itemName" angle={-45} textAnchor="end" interval={0} height={120} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                {categoryNames.map((category, index) => (
+                  <Bar
+                    key={category}
+                    dataKey={category}
+                    name={category}
+                    fill={colors[index % colors.length]}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

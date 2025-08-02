@@ -124,3 +124,16 @@ export async function isDuplicatePackageName(estimationId: number, packageName: 
     `);
   return result.recordset.length > 0;
 }
+
+export async function getAllPackages() {
+  const pool = await poolPromise;
+  const result = await pool.request().query(`
+    SELECT 
+      ep.PackageID,
+      ep.PackageName,
+      ep.EstimationID
+    FROM EstimationPackages ep
+    ORDER BY ep.PackageID DESC
+  `);
+  return result.recordset;
+}

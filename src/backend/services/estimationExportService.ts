@@ -1,8 +1,10 @@
 // src/backend/services/estimationExportService.ts
-import { generatePdf } from "html-pdf-node";
+import puppeteer from "puppeteer";
 import ExcelJS from "exceljs";
+import { Buffer } from "buffer";
+
+import { getFilteredEstimations } from "@/backend/database/estimationQueries";
 import { getEstimationById } from "../database/estimationQueries";
-import { getFilteredEstimationsWithPagination } from "../database/estimationQueries";
 import { getPackagesByEstimationId, getPackageById } from "../database/estimationPackageQueries";
 import { getItemsByPackageId } from "../database/estimationItemQueries";
 import { getQuotesByItemId } from "../database/estimationQuoteQueries";
@@ -14,11 +16,9 @@ export async function generateFilteredEstimationPDF(
   projects: number[],
   search: string
 ): Promise<Buffer> {
-  const { estimations } = await getFilteredEstimationsWithPagination(
-    statuses, clients, projects, search, 1, 1000 // fetch up to 1000 results
-  );
+  const estimations = await getFilteredEstimations(statuses, clients, projects, search);
 
-  let html = `
+  const html = `
     <html><head><style>
       body { font-family: Arial, sans-serif; font-size: 11px; padding: 20px; }
       h1 { color: #1a3c66; }
@@ -48,25 +48,35 @@ export async function generateFilteredEstimationPDF(
         </tr>
       </thead>
       <tbody>
+        ${estimations.map(est => `
+          <tr>
+            <td>${est.EstimationID}</td>
+            <td>${est.Title}</td>
+            <td>${est.Description || "-"}</td>
+            <td>${est.Status}</td>
+            <td>${est.ClientName || "-"}</td>
+            <td>${est.ProjectName || "-"}</td>
+            <td>${est.CreatedAt ? new Date(est.CreatedAt).toLocaleDateString() : "-"}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+    </body></html>
   `;
 
-  for (const est of estimations) {
-    html += `
-      <tr>
-        <td>${est.EstimationID}</td>
-        <td>${est.Title}</td>
-        <td>${est.Description || "-"}</td>
-        <td>${est.Status}</td>
-        <td>${est.ClientName || "-"}</td>
-        <td>${est.ProjectName || "-"}</td>
-        <td>${est.CreatedAt ? new Date(est.CreatedAt).toLocaleDateString() : "-"}</td>
-      </tr>
-    `;
-  }
+  const browser = await puppeteer.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: "networkidle0" });
 
-  html += `</tbody></table></body></html>`;
+  const pdfBuffer = await page.pdf({
+    format: "A4",
+    printBackground: true,
+    margin: { top: "10mm", bottom: "10mm", left: "7mm", right: "7mm" },
+  });
 
-  return await generatePdf({ content: html }, { format: "A4" }) as unknown as Buffer;
+  await browser.close();
+
+  return Buffer.from(pdfBuffer);
 }
 
 export async function generateEstimationPDF(estimationId: number): Promise<Buffer> {
@@ -148,7 +158,7 @@ export async function generateEstimationPDF(estimationId: number): Promise<Buffe
           <td>${item.ItemName || item.ItemID}</td>
           <td>${item.Quantity}</td>
           <td>${item.Description || "-"}</td>
-          <td>${item.CreatedByName}</td>
+          <td>${item.CreatedByName || "-"}</td>
           <td>${item.CreatedAt ? new Date(item.CreatedAt).toLocaleDateString() : '-'}</td>
         </tr>
       `;
@@ -157,7 +167,7 @@ export async function generateEstimationPDF(estimationId: number): Promise<Buffe
       if (quotes.length > 0) {
         htmlContent += `
         <tr><td colspan="5">
-          <table class="quote-table" style="font-size: 10px;">
+          <table class="quote-table">
             <thead>
               <tr>
                 <th>Supplier</th>
@@ -174,7 +184,7 @@ export async function generateEstimationPDF(estimationId: number): Promise<Buffe
           htmlContent += `
             <tr class="${quote.IsSelected ? "quote-selected" : ""}">
               <td>${quote.SupplierName}</td>
-              <td>$${quote.QuotedUnitCost?.toFixed(2)}</td>
+              <td>$${quote.QuotedUnitCost.toFixed(2)}</td>
               <td>${quote.CurrencyCode}</td>
               <td>${quote.ExpectedDeliveryDays ?? "-"}</td>
               <td>${quote.Notes || "-"}</td>
@@ -191,7 +201,18 @@ export async function generateEstimationPDF(estimationId: number): Promise<Buffe
 
   htmlContent += `</body></html>`;
 
-  return await generatePdf({ content: htmlContent }, { format: "A4" }) as unknown as Buffer;
+  const browser = await puppeteer.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.setContent(htmlContent, { waitUntil: "networkidle0" });
+
+  const pdfBuffer = await page.pdf({
+    format: "A4",
+    printBackground: true,
+    margin: { top: "10mm", bottom: "10mm", left: "7mm", right: "7mm" },
+  });
+
+  await browser.close();
+  return Buffer.from(pdfBuffer);
 }
 
 export async function generateEstimationSummaryPDF(estimationId: number): Promise<Buffer> {
@@ -301,7 +322,19 @@ export async function generateEstimationSummaryPDF(estimationId: number): Promis
   </body></html>
   `;
 
-  return await generatePdf({ content: htmlContent }, { format: "A4" }) as unknown as Buffer;
+  // Puppeteer: Generate PDF
+  const browser = await puppeteer.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.setContent(htmlContent, { waitUntil: "networkidle0" });
+
+  const pdfBuffer = await page.pdf({
+    format: "A4",
+    printBackground: true,
+    margin: { top: "20px", bottom: "20px", left: "20px", right: "20px" }
+  });
+
+  await browser.close();
+  return Buffer.from(pdfBuffer);
 }
 
 export async function generatePackageProcurementPDF(packageId: number): Promise<Buffer> {
@@ -386,7 +419,18 @@ export async function generatePackageProcurementPDF(packageId: number): Promise<
 
   htmlContent += `</tbody></table></body></html>`;
 
-  return await generatePdf({ content: htmlContent }, { format: "A4" }) as unknown as Buffer;
+  const browser = await puppeteer.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.setContent(htmlContent, { waitUntil: "networkidle0" });
+
+  const pdfBuffer = await page.pdf({
+    format: "A4",
+    printBackground: true,
+    margin: { top: "20px", bottom: "20px", left: "20px", right: "20px" }
+  });
+
+  await browser.close();
+  return Buffer.from(pdfBuffer);
 }
 
 export async function generateEstimationProcurementPDF(estimationId: number): Promise<Buffer> {
@@ -432,29 +476,29 @@ export async function generateEstimationProcurementPDF(estimationId: number): Pr
 
   for (const pkg of packages) {
     htmlContent += `
-    <h2>${pkg.PackageName || 'Unnamed Package'}</h2>
-    <table>
-      <tr><td>Package Name</td><td><strong>${pkg.PackageName}</strong></td><td>Total Material Cost</td><td><strong>$${pkg.TotalMaterialCost?.toFixed(2) || '0.00'}</strong></td></tr>
-      <tr><td>Description</td><td><strong>${pkg.Description || '-'}</strong></td><td>Total Labor Cost</td><td><strong>$${pkg.TotalLaborCost?.toFixed(2) || '0.00'}</strong></td></tr>
-      <tr><td>Sequence</td><td><strong>${pkg.Sequence ?? '-'}</strong></td><td>Total Duration (days)</td><td><strong>${pkg.TotalDurationDays ?? '-'}</strong></td></tr>
-      <tr><td>Created By</td><td><strong>${pkg.CreatedByName || '-'}</strong></td><td>Date Created</td><td><strong>${pkg.CreatedAt ? new Date(pkg.CreatedAt).toLocaleDateString() : '-'}</strong></td></tr>
-      <tr><td>Modified By</td><td><strong>${pkg.ModifiedByName || '-'}</strong></td><td>Date Modified</td><td><strong>${pkg.ModifiedAt ? new Date(pkg.ModifiedAt).toLocaleDateString() : '-'}</strong></td></tr>
-    </table>
+      <h2>${pkg.PackageName || 'Unnamed Package'}</h2>
+      <table>
+        <tr><td>Package Name</td><td><strong>${pkg.PackageName}</strong></td><td>Total Material Cost</td><td><strong>$${pkg.TotalMaterialCost?.toFixed(2) || '0.00'}</strong></td></tr>
+        <tr><td>Description</td><td><strong>${pkg.Description || '-'}</strong></td><td>Total Labor Cost</td><td><strong>$${pkg.TotalLaborCost?.toFixed(2) || '0.00'}</strong></td></tr>
+        <tr><td>Sequence</td><td><strong>${pkg.Sequence ?? '-'}</strong></td><td>Total Duration (days)</td><td><strong>${pkg.TotalDurationDays ?? '-'}</strong></td></tr>
+        <tr><td>Created By</td><td><strong>${pkg.CreatedByName || '-'}</strong></td><td>Date Created</td><td><strong>${pkg.CreatedAt ? new Date(pkg.CreatedAt).toLocaleDateString() : '-'}</strong></td></tr>
+        <tr><td>Modified By</td><td><strong>${pkg.ModifiedByName || '-'}</strong></td><td>Date Modified</td><td><strong>${pkg.ModifiedAt ? new Date(pkg.ModifiedAt).toLocaleDateString() : '-'}</strong></td></tr>
+      </table>
 
-    <h3>Items and Selected Quotes</h3>
-    <table class="items-table">
-      <thead>
-        <tr>
-          <th>Item Name</th>
-          <th>Quantity</th>
-          <th>Description</th>
-          <th>Selected Supplier</th>
-          <th>Unit Cost</th>
-          <th>Currency</th>
-          <th>Delivery Days</th>
-        </tr>
-      </thead>
-      <tbody>
+      <h3>Items and Selected Quotes</h3>
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th>Item Name</th>
+            <th>Quantity</th>
+            <th>Description</th>
+            <th>Selected Supplier</th>
+            <th>Unit Cost</th>
+            <th>Currency</th>
+            <th>Delivery Days</th>
+          </tr>
+        </thead>
+        <tbody>
     `;
 
     for (const item of allItems[pkg.PackageID] || []) {
@@ -476,95 +520,178 @@ export async function generateEstimationProcurementPDF(estimationId: number): Pr
   }
 
   htmlContent += `</body></html>`;
-  return await generatePdf({ content: htmlContent }, { format: "A4" }) as unknown as Buffer;
+
+  const browser = await puppeteer.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.setContent(htmlContent, { waitUntil: "networkidle0" });
+
+  const pdfBuffer = await page.pdf({
+    format: "A4",
+    printBackground: true,
+    margin: { top: "20px", bottom: "20px", left: "20px", right: "20px" }
+  });
+
+  await browser.close();
+  return Buffer.from(pdfBuffer);
 }
 
-export async function generateEstimationExcel(estimationId: number): Promise<Uint8Array> {
+export async function generateEstimationExcel(estimationId: number): Promise<Buffer> {
   const estimation = await getEstimationById(estimationId);
   if (!estimation) throw new Error("Estimation not found");
 
   const packages = await getPackagesByEstimationId(estimationId);
   const allItems: Record<number, EstimationItem[]> = {};
-  const allQuotes: Record<number, SupplierQuote[]> = {};
 
   for (const pkg of packages) {
     const items = await getItemsByPackageId(pkg.PackageID);
     allItems[pkg.PackageID] = items;
-    for (const item of items) {
-      const quotes = await getQuotesByItemId(item.EItemID);
-      allQuotes[item.EItemID] = quotes;
-    }
   }
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Estimation");
-  sheet.columns = [
-    { header: "Field", key: "field", width: 25 },
-    { header: "Value", key: "value", width: 50 },
-  ];
+  sheet.columns = Array(8).fill({ width: 18 });
 
-  // Estimation details
-  const estDetails = [
-    ["Estimation ID", estimation.EstimationID],
-    ["Title", estimation.Title],
-    ["Client Name", estimation.ClientName || "-"],
-    ["Description", estimation.Description || "-"],
-    ["Project Name", estimation.ProjectName || "-"],
-    ["Total Material Cost", `$${estimation.TotalMaterialCost?.toFixed(2) || "0.00"}`],
-    ["Currency", estimation.CurrencyCode || "-"],
-    ["Status", estimation.Status],
-    ["Created By", estimation.CreatedByName || "-"],
-    ["Date Created", estimation.CreatedAt ? new Date(estimation.CreatedAt).toLocaleDateString() : "-"],
-    ["Verified By", estimation.VerifiedByName || "-"],
-    ["Date Verified", estimation.VerifiedAt ? new Date(estimation.VerifiedAt).toLocaleDateString() : "-"],
-    ["Approved By", estimation.ApprovedByName || "-"],
-    ["Date Approved", estimation.ApprovedAt ? new Date(estimation.ApprovedAt).toLocaleDateString() : "-"],
-  ];
-  estDetails.forEach(([field, value]) => sheet.addRow({ field, value }));
-  sheet.addRow([]);
+  let rowIdx = 1;
 
-  // For each package
+  const addSpacer = () => {
+    sheet.mergeCells(`A${rowIdx}:H${rowIdx}`);
+    rowIdx++;
+  };
+
+  const addThinBorder = (row: ExcelJS.Row) => {
+    row.eachCell(cell => {
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+  };
+
+  const merge4Pair = (
+    label1: string,
+    value1: string | number,
+    label2: string,
+    value2: string | number
+  ) => {
+    sheet.mergeCells(`A${rowIdx}:B${rowIdx}`);
+    sheet.mergeCells(`C${rowIdx}:D${rowIdx}`);
+    sheet.mergeCells(`E${rowIdx}:F${rowIdx}`);
+    sheet.mergeCells(`G${rowIdx}:H${rowIdx}`);
+    const row = sheet.getRow(rowIdx++);
+    row.getCell(1).value = label1;
+    row.getCell(3).value = value1 ?? "-";
+    row.getCell(5).value = label2;
+    row.getCell(7).value = value2 ?? "-";
+    addThinBorder(row);
+  };
+
+  // Title and Subtitle
+  sheet.mergeCells(`A${rowIdx}:H${rowIdx}`);
+  sheet.getRow(rowIdx).getCell(1).value = "Estimation Report";
+  sheet.getRow(rowIdx).font = { size: 16, bold: true };
+  rowIdx++;
+
+  sheet.mergeCells(`A${rowIdx}:H${rowIdx}`);
+  sheet.getRow(rowIdx).getCell(1).value = estimation.Title;
+  sheet.getRow(rowIdx).font = { size: 14, bold: true };
+  rowIdx++;
+
+  addSpacer(); // spacer between title and estimation details
+
+  // Estimation Details
+  const estDetails: [string, string | number, string, string | number][] = [
+    ["Estimation ID", estimation.EstimationID, "Title", estimation.Title],
+    ["Client Name", estimation.ClientName || "-", "Description", estimation.Description || "-"],
+    ["Project Name", estimation.ProjectName || "-", "Total Material Cost", `$${estimation.TotalMaterialCost?.toFixed(2) || "0.00"}`],
+    ["Currency", estimation.CurrencyCode || "-", "Status", estimation.Status || "-"],
+    ["Created By", estimation.CreatedByName || "-", "Date Created", new Date(estimation.CreatedAt).toLocaleDateString()],
+    ["Verified By", estimation.VerifiedByName || "-", "Date Verified", new Date(estimation.VerifiedAt).toLocaleDateString()],
+    ["Approved By", estimation.ApprovedByName || "-", "Date Approved", new Date(estimation.ApprovedAt).toLocaleDateString()],
+  ];
+  estDetails.forEach(([a, b, c, d]) => merge4Pair(a, b, c, d));
+
+  addSpacer(); // spacer between estimation details and first package
+
   for (const pkg of packages) {
-    sheet.addRow([`Package: ${pkg.PackageName}`]);
-    const pkgDetails = [
-      ["Package Name", pkg.PackageName],
-      ["Description", pkg.Description || "-"],
-      ["Total Material Cost", `$${pkg.TotalMaterialCost?.toFixed(2) || "0.00"}`],
-      ["Total Labor Cost", `$${pkg.TotalLaborCost?.toFixed(2) || "0.00"}`],
-      ["Total Duration Days", pkg.TotalDurationDays ?? "-"],
-      ["Sequence", pkg.Sequence ?? "-"],
-      ["Created By", pkg.CreatedByName || "-"],
-      ["Created At", pkg.CreatedAt ? new Date(pkg.CreatedAt).toLocaleDateString() : "-"],
-      ["Modified By", pkg.ModifiedByName || "-"],
-      ["Modified At", pkg.ModifiedAt ? new Date(pkg.ModifiedAt).toLocaleDateString() : "-"],
-    ];
-    pkgDetails.forEach(([field, value]) => sheet.addRow({ field, value }));
+    // Package Title
+    sheet.mergeCells(`A${rowIdx}:H${rowIdx}`);
+    sheet.getRow(rowIdx).getCell(1).value = `Package: ${pkg.PackageName}`;
+    sheet.getRow(rowIdx).font = { bold: true, size: 13 };
+    rowIdx++;
 
-    sheet.addRow([]);
-    sheet.addRow({ field: "Item Name", value: "Quantity / Description / Selected Supplier / Cost / Currency / Delivery Days" });
+    const pkgDetails: [string, string | number, string, string | number][] = [
+      ["Package Name", pkg.PackageName || "-", "Total Material Cost", `$${pkg.TotalMaterialCost?.toFixed(2) || "0.00"}`],
+      ["Description", pkg.Description || "-", "Total Labor Cost", `$${pkg.TotalLaborCost?.toFixed(2) || "0.00"}`],
+      ["Sequence", pkg.Sequence ?? "-", "Total Duration Days", pkg.TotalDurationDays ?? "-"],
+      ["Created By", pkg.CreatedByName || "-", "Created At", pkg.CreatedAt ? new Date(pkg.CreatedAt).toLocaleDateString() : "-"],
+      ["Modified By", pkg.ModifiedByName || "-", "Modified At", pkg.ModifiedAt ? new Date(pkg.ModifiedAt).toLocaleDateString() : "-"],
+    ];
+    pkgDetails.forEach(([a, b, c, d]) => merge4Pair(a, b, c, d));
+
+    rowIdx++;
+
+    // Item Table Header
+    sheet.mergeCells(`A${rowIdx}:B${rowIdx}`);
+    sheet.mergeCells(`D${rowIdx}:F${rowIdx}`);
+    const itemHead = sheet.getRow(rowIdx++);
+    itemHead.getCell(1).value = "Item Name";
+    itemHead.getCell(3).value = "Qty";
+    itemHead.getCell(4).value = "Description";
+    itemHead.getCell(7).value = "Created By";
+    itemHead.getCell(8).value = "Created At";
+
+    itemHead.font = { bold: true };
+    itemHead.alignment = { vertical: "middle" };
+    itemHead.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+    itemHead.getCell(3).alignment = { horizontal: "center", vertical: "middle" };
+    itemHead.getCell(4).alignment = { horizontal: "center", vertical: "middle" };
+    itemHead.getCell(7).alignment = { horizontal: "center", vertical: "middle" };
+    itemHead.getCell(8).alignment = { horizontal: "center", vertical: "middle" };
+    addThinBorder(itemHead);
 
     for (const item of allItems[pkg.PackageID] || []) {
-      const selectedQuote = (allQuotes[item.EItemID] || []).find(q => q.IsSelected);
-      const info = `${item.Quantity} / ${item.Description || "-"} / ${selectedQuote?.SupplierName || "-"} / $${selectedQuote?.QuotedUnitCost?.toFixed(2) || "-"} / ${selectedQuote?.CurrencyCode || "-"} / ${selectedQuote?.ExpectedDeliveryDays ?? "-"}`;
-      sheet.addRow({ field: item.ItemName || item.ItemID, value: info });
+      sheet.mergeCells(`A${rowIdx}:B${rowIdx}`);
+      sheet.mergeCells(`D${rowIdx}:F${rowIdx}`);
+      const row = sheet.getRow(rowIdx++);
+      row.getCell(1).value = item.ItemName || item.ItemID;
+      row.getCell(3).value = item.Quantity;
+      row.getCell(4).value = item.Description || "-";
+      row.getCell(7).value = item.CreatedByName || "-";
+      row.getCell(8).value = item.CreatedAt ? new Date(item.CreatedAt).toLocaleDateString() : "-";
+
+      row.getCell(3).alignment = { horizontal: "center" };
+      row.getCell(7).alignment = { horizontal: "center" };
+      row.getCell(8).alignment = { horizontal: "center" };
+      addThinBorder(row);
     }
-    sheet.addRow([]);
+
+    addSpacer(); // spacer before next package
   }
 
-  return await workbook.xlsx.writeBuffer();
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
-export async function generateEstimationSummaryExcel(estimationId: number): Promise<Uint8Array> {
+export async function generateEstimationSummaryExcel(estimationId: number): Promise<Buffer> {
   const estimation = await getEstimationById(estimationId);
   if (!estimation) throw new Error("Estimation not found");
 
   const packages = await getPackagesByEstimationId(estimationId);
+
   const allItems: Record<number, number> = {};
   const allQuotes: Record<number, number> = {};
+  let totalItems = 0;
+  let totalQuotes = 0;
+  let totalMaterial = 0;
+  let totalLabor = 0;
+  let totalDuration = 0;
 
   for (const pkg of packages) {
     const items = await getItemsByPackageId(pkg.PackageID);
-    allItems[pkg.PackageID] = items.length;
+    const itemCount = items.length;
+    allItems[pkg.PackageID] = itemCount;
+    totalItems += itemCount;
 
     let quoteCount = 0;
     for (const item of items) {
@@ -572,45 +699,146 @@ export async function generateEstimationSummaryExcel(estimationId: number): Prom
       quoteCount += quotes.length;
     }
     allQuotes[pkg.PackageID] = quoteCount;
+    totalQuotes += quoteCount;
+
+    totalMaterial += pkg.TotalMaterialCost || 0;
+    totalLabor += pkg.TotalLaborCost || 0;
+    totalDuration += pkg.TotalDurationDays || 0;
   }
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Estimation Summary");
-  sheet.columns = [
-    { header: "Field", key: "field", width: 25 },
-    { header: "Value", key: "value", width: 50 },
+  sheet.columns = Array(8).fill({ width: 18 });
+
+  let rowIdx = 1;
+
+  const addThinBorder = (row: ExcelJS.Row) => {
+    row.eachCell(cell => {
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+  };
+
+  const merge4Pair = (
+    label1: string,
+    value1: string | number,
+    label2: string,
+    value2: string | number
+  ) => {
+    sheet.mergeCells(`A${rowIdx}:B${rowIdx}`);
+    sheet.mergeCells(`C${rowIdx}:D${rowIdx}`);
+    sheet.mergeCells(`E${rowIdx}:F${rowIdx}`);
+    sheet.mergeCells(`G${rowIdx}:H${rowIdx}`);
+    const row = sheet.getRow(rowIdx++);
+    row.getCell(1).value = label1;
+    row.getCell(3).value = value1;
+    row.getCell(5).value = label2;
+    row.getCell(7).value = value2;
+    addThinBorder(row);
+  };
+
+  // Title
+  sheet.mergeCells(`A${rowIdx}:H${rowIdx}`);
+  sheet.getRow(rowIdx).getCell(1).value = "Estimation Summary";
+  sheet.getRow(rowIdx).font = { size: 16, bold: true };
+  rowIdx++;
+
+  sheet.mergeCells(`A${rowIdx}:H${rowIdx}`);
+  sheet.getRow(rowIdx).getCell(1).value = estimation.Title;
+  sheet.getRow(rowIdx).font = { size: 14, bold: true };
+  rowIdx++;
+
+  rowIdx++; // Spacer
+
+  const estDetails: [string, string | number, string, string | number][] = [
+    ["Estimation ID", estimation.EstimationID, "Title", estimation.Title],
+    ["Client Name", estimation.ClientName || "-", "Description", estimation.Description || "-"],
+    ["Project Name", estimation.ProjectName || "-", "Total Material Cost", `$${estimation.TotalMaterialCost?.toFixed(2) || "0.00"}`],
+    ["Currency", estimation.CurrencyCode || "-", "Status", estimation.Status || "-"],
+    ["Created By", estimation.CreatedByName || "-", "Date Created", new Date(estimation.CreatedAt).toLocaleDateString()],
+    ["Verified By", estimation.VerifiedByName || "-", "Date Verified", new Date(estimation.VerifiedAt).toLocaleDateString()],
+    ["Approved By", estimation.ApprovedByName || "-", "Date Approved", new Date(estimation.ApprovedAt).toLocaleDateString()],
   ];
+  estDetails.forEach(([a, b, c, d]) => merge4Pair(a, b, c, d));
 
-  const estDetails = [
-    ["Estimation ID", estimation.EstimationID],
-    ["Title", estimation.Title],
-    ["Client Name", estimation.ClientName || "-"],
-    ["Description", estimation.Description || "-"],
-    ["Project Name", estimation.ProjectName || "-"],
-    ["Total Material Cost", `$${estimation.TotalMaterialCost?.toFixed(2) || "0.00"}`],
-    ["Currency", estimation.CurrencyCode || "-"],
-    ["Status", estimation.Status],
-    ["Created By", estimation.CreatedByName || "-"],
-    ["Date Created", estimation.CreatedAt ? new Date(estimation.CreatedAt).toLocaleDateString() : "-"],
-    ["Verified By", estimation.VerifiedByName || "-"],
-    ["Date Verified", estimation.VerifiedAt ? new Date(estimation.VerifiedAt).toLocaleDateString() : "-"],
-    ["Approved By", estimation.ApprovedByName || "-"],
-    ["Date Approved", estimation.ApprovedAt ? new Date(estimation.ApprovedAt).toLocaleDateString() : "-"],
-  ];
-  estDetails.forEach(([field, value]) => sheet.addRow({ field, value }));
+  rowIdx++; // Spacer
 
-  sheet.addRow([]);
-  sheet.addRow(["Package Name", "Item Count / Quote Count / Material Cost / Labor Cost / Duration Days / Created By / Date Created"]);
+  // Section title
+  sheet.mergeCells(`A${rowIdx}:H${rowIdx}`);
+  const legendRow = sheet.getRow(rowIdx++);
+  legendRow.getCell(1).value = "Packages Overview";
+  legendRow.font = { bold: true, size: 13 };
 
+  // Header
+  sheet.mergeCells(`A${rowIdx}:C${rowIdx}`);
+  const headerRow = sheet.getRow(rowIdx++);
+  headerRow.getCell(1).value = "Package Name";
+  headerRow.getCell(4).value = "Item Count";
+  headerRow.getCell(5).value = "Quote Count";
+  headerRow.getCell(6).value = "Material Cost";
+  headerRow.getCell(7).value = "Labor Cost";
+  headerRow.getCell(8).value = "Duration (days)";
+  headerRow.font = { bold: true };
+  headerRow.eachCell(cell => {
+    cell.alignment = { horizontal: "center" };
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD9D9D9" },
+    };
+  });
+
+  // Package rows
   for (const pkg of packages) {
-    const info = `${allItems[pkg.PackageID] || 0} / ${allQuotes[pkg.PackageID] || 0} / $${pkg.TotalMaterialCost?.toFixed(2) || "0.00"} / $${pkg.TotalLaborCost?.toFixed(2) || "0.00"} / ${pkg.TotalDurationDays ?? "-"} / ${pkg.CreatedByName || "-"} / ${pkg.CreatedAt ? new Date(pkg.CreatedAt).toLocaleDateString() : "-"}`;
-    sheet.addRow({ field: pkg.PackageName, value: info });
+    sheet.mergeCells(`A${rowIdx}:C${rowIdx}`);
+    const row = sheet.getRow(rowIdx++);
+    row.getCell(1).value = pkg.PackageName;
+    row.getCell(4).value = allItems[pkg.PackageID] || 0;
+    row.getCell(5).value = allQuotes[pkg.PackageID] || 0;
+    row.getCell(6).value = `$${pkg.TotalMaterialCost?.toFixed(2) || "0.00"}`;
+    row.getCell(7).value = `$${pkg.TotalLaborCost?.toFixed(2) || "0.00"}`;
+    row.getCell(8).value = pkg.TotalDurationDays ?? "-";
+    addThinBorder(row);
   }
 
-  return await workbook.xlsx.writeBuffer();
+  // Total row
+  sheet.mergeCells(`A${rowIdx}:C${rowIdx}`);
+  const totalRow = sheet.getRow(rowIdx++);
+  totalRow.getCell(1).value = "Total";
+  totalRow.getCell(4).value = totalItems;
+  totalRow.getCell(5).value = totalQuotes;
+  totalRow.getCell(6).value = `$${totalMaterial.toFixed(2)}`;
+  totalRow.getCell(7).value = `$${totalLabor.toFixed(2)}`;
+  totalRow.getCell(8).value = totalDuration;
+  totalRow.font = { bold: true };
+  totalRow.eachCell(cell => {
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFEFEFEF" },
+    };
+  });
+
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
-export async function generatePackageProcurementExcel(packageId: number): Promise<Uint8Array> {
+export async function generatePackageProcurementExcel(packageId: number): Promise<Buffer> {
   const pkg = await getPackageById(packageId);
   if (!pkg) throw new Error("Package not found");
 
@@ -632,6 +860,7 @@ export async function generatePackageProcurementExcel(packageId: number): Promis
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Package Procurement");
+
   sheet.columns = [
     { header: "Field", key: "field", width: 25 },
     { header: "Value", key: "value", width: 50 },
@@ -680,82 +909,150 @@ export async function generatePackageProcurementExcel(packageId: number): Promis
     sheet.addRow({ field: item.ItemName || item.ItemID, value: info });
   }
 
-  return await workbook.xlsx.writeBuffer();
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
-export async function generateEstimationProcurementExcel(estimationId: number): Promise<Uint8Array> {
+export async function generateEstimationProcurementExcel(estimationId: number): Promise<Buffer> {
   const estimation = await getEstimationById(estimationId);
   if (!estimation) throw new Error("Estimation not found");
 
   const packages = await getPackagesByEstimationId(estimationId);
   const allItems: Record<number, EstimationItem[]> = {};
   const allQuotes: Record<number, SupplierQuote[]> = {};
-  let totalMaterialCost = 0;
 
   for (const pkg of packages) {
     const items = await getItemsByPackageId(pkg.PackageID);
     allItems[pkg.PackageID] = items;
+
     for (const item of items) {
       const quotes = await getQuotesByItemId(item.EItemID);
       allQuotes[item.EItemID] = quotes;
-      const selectedQuote = quotes.find(q => q.IsSelected);
-      if (selectedQuote) {
-        totalMaterialCost += (selectedQuote.QuotedUnitCost || 0) * item.Quantity;
-      }
     }
   }
 
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("Full Procurement");
-  sheet.columns = [
-    { header: "Field", key: "field", width: 25 },
-    { header: "Value", key: "value", width: 50 },
-  ];
+  const sheet = workbook.addWorksheet("Procurement Sheet");
+  sheet.columns = Array(8).fill({ width: 18 });
 
-  const estDetails = [
-    ["Estimation ID", estimation.EstimationID],
-    ["Title", estimation.Title],
-    ["Client Name", estimation.ClientName || "-"],
-    ["Description", estimation.Description || "-"],
-    ["Project Name", estimation.ProjectName || "-"],
-    ["Total Material Cost (Calculated)", `$${totalMaterialCost.toFixed(2)}`],
-    ["Currency", estimation.CurrencyCode || "-"],
-    ["Status", estimation.Status],
-    ["Created By", estimation.CreatedByName || "-"],
-    ["Date Created", estimation.CreatedAt ? new Date(estimation.CreatedAt).toLocaleDateString() : "-"],
-    ["Verified By", estimation.VerifiedByName || "-"],
-    ["Date Verified", estimation.VerifiedAt ? new Date(estimation.VerifiedAt).toLocaleDateString() : "-"],
-    ["Approved By", estimation.ApprovedByName || "-"],
-    ["Date Approved", estimation.ApprovedAt ? new Date(estimation.ApprovedAt).toLocaleDateString() : "-"],
+  let rowIdx = 1;
+
+  const addThinBorder = (row: ExcelJS.Row) => {
+    row.eachCell(cell => {
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+  };
+
+  const merge4Pair = (
+    label1: string,
+    value1: string | number,
+    label2: string,
+    value2: string | number
+  ) => {
+    sheet.mergeCells(`A${rowIdx}:B${rowIdx}`);
+    sheet.mergeCells(`C${rowIdx}:D${rowIdx}`);
+    sheet.mergeCells(`E${rowIdx}:F${rowIdx}`);
+    sheet.mergeCells(`G${rowIdx}:H${rowIdx}`);
+    const row = sheet.getRow(rowIdx++);
+    row.getCell(1).value = label1;
+    row.getCell(3).value = value1;
+    row.getCell(5).value = label2;
+    row.getCell(7).value = value2;
+    addThinBorder(row);
+  };
+
+  // Title and subtitle
+  sheet.mergeCells(`A${rowIdx}:H${rowIdx}`);
+  sheet.getRow(rowIdx).getCell(1).value = "Estimation Procurement Sheet";
+  sheet.getRow(rowIdx).font = { size: 16, bold: true };
+  rowIdx++;
+
+  sheet.mergeCells(`A${rowIdx}:H${rowIdx}`);
+  sheet.getRow(rowIdx).getCell(1).value = estimation.Title;
+  sheet.getRow(rowIdx).font = { size: 14, bold: true };
+  rowIdx++;
+
+  rowIdx++; // Spacer
+
+  const estDetails: [string, string | number, string, string | number][] = [
+    ["Estimation ID", estimation.EstimationID, "Title", estimation.Title],
+    ["Client Name", estimation.ClientName || "-", "Description", estimation.Description || "-"],
+    ["Project Name", estimation.ProjectName || "-", "Total Material Cost", `$${estimation.TotalMaterialCost?.toFixed(2) || "0.00"}`],
+    ["Currency", estimation.CurrencyCode || "-", "Status", estimation.Status || "-"],
+    ["Created By", estimation.CreatedByName || "-", "Date Created", new Date(estimation.CreatedAt).toLocaleDateString()],
+    ["Verified By", estimation.VerifiedByName || "-", "Date Verified", new Date(estimation.VerifiedAt).toLocaleDateString()],
+    ["Approved By", estimation.ApprovedByName || "-", "Date Approved", new Date(estimation.ApprovedAt).toLocaleDateString()],
   ];
-  estDetails.forEach(([field, value]) => sheet.addRow({ field, value }));
-  sheet.addRow([]);
+  estDetails.forEach(([a, b, c, d]) => merge4Pair(a, b, c, d));
+
+  rowIdx++; // Spacer
 
   for (const pkg of packages) {
-    sheet.addRow([`Package: ${pkg.PackageName}`]);
-    const pkgDetails = [
-      ["Package Name", pkg.PackageName],
-      ["Description", pkg.Description || "-"],
-      ["Total Labor Cost", `$${pkg.TotalLaborCost?.toFixed(2) || "0.00"}`],
-      ["Total Duration Days", pkg.TotalDurationDays ?? "-"],
-      ["Sequence", pkg.Sequence ?? "-"],
-      ["Created By", pkg.CreatedByName || "-"],
-      ["Created At", pkg.CreatedAt ? new Date(pkg.CreatedAt).toLocaleDateString() : "-"],
-      ["Modified By", pkg.ModifiedByName || "-"],
-      ["Modified At", pkg.ModifiedAt ? new Date(pkg.ModifiedAt).toLocaleDateString() : "-"],
+    // Package title
+    sheet.mergeCells(`A${rowIdx}:H${rowIdx}`);
+    sheet.getRow(rowIdx).getCell(1).value = pkg.PackageName || "Unnamed Package";
+    sheet.getRow(rowIdx).font = { bold: true, size: 13 };
+    rowIdx++;
+
+    const pkgDetails: [string, string | number, string, string | number][] = [
+      ["Package Name", pkg.PackageName || "-", "Total Material Cost", `$${pkg.TotalMaterialCost?.toFixed(2) || "0.00"}`],
+      ["Description", pkg.Description || "-", "Total Labor Cost", `$${pkg.TotalLaborCost?.toFixed(2) || "0.00"}`],
+      ["Sequence", pkg.Sequence ?? "-", "Total Duration (days)", pkg.TotalDurationDays ?? "-"],
+      ["Created By", pkg.CreatedByName || "-", "Date Created", pkg.CreatedAt ? new Date(pkg.CreatedAt).toLocaleDateString() : "-"],
+      ["Modified By", pkg.ModifiedByName || "-", "Date Modified", pkg.ModifiedAt ? new Date(pkg.ModifiedAt).toLocaleDateString() : "-"],
     ];
-    pkgDetails.forEach(([field, value]) => sheet.addRow({ field, value }));
+    pkgDetails.forEach(([a, b, c, d]) => merge4Pair(a, b, c, d));
 
-    sheet.addRow([]);
-    sheet.addRow({ field: "Item Name", value: "Quantity / Description / Selected Supplier / Cost / Currency / Delivery Days" });
+    rowIdx++;
 
+    // Items and Selected Quotes Header
+    sheet.mergeCells(`C${rowIdx}:D${rowIdx}`);
+    const headerRow = sheet.getRow(rowIdx++);
+    headerRow.getCell(1).value = "Item Name";
+    headerRow.getCell(2).value = "Quantity";
+    headerRow.getCell(3).value = "Description";
+    headerRow.getCell(5).value = "Selected Supplier";
+    headerRow.getCell(6).value = "Unit Cost";
+    headerRow.getCell(7).value = "Currency";
+    headerRow.getCell(8).value = "Delivery Days";
+
+    headerRow.font = { bold: true };
+    headerRow.eachCell(cell => {
+      cell.alignment = { horizontal: "center" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFD9D9D9" },
+      };
+    });
+
+    // Item rows
     for (const item of allItems[pkg.PackageID] || []) {
       const selectedQuote = (allQuotes[item.EItemID] || []).find(q => q.IsSelected);
-      const info = `${item.Quantity} / ${item.Description || "-"} / ${selectedQuote?.SupplierName || "-"} / $${selectedQuote?.QuotedUnitCost?.toFixed(2) || "-"} / ${selectedQuote?.CurrencyCode || "-"} / ${selectedQuote?.ExpectedDeliveryDays ?? "-"}`;
-      sheet.addRow({ field: item.ItemName || item.ItemID, value: info });
+      sheet.mergeCells(`C${rowIdx}:D${rowIdx}`);
+      const row = sheet.getRow(rowIdx++);
+      row.getCell(1).value = item.ItemName || item.ItemID;
+      row.getCell(2).value = item.Quantity;
+      row.getCell(3).value = item.Description || "-";
+      row.getCell(5).value = selectedQuote?.SupplierName || "-";
+      row.getCell(6).value = selectedQuote ? `$${selectedQuote.QuotedUnitCost?.toFixed(2)}` : "-";
+      row.getCell(7).value = selectedQuote?.CurrencyCode || "-";
+      row.getCell(8).value = selectedQuote?.ExpectedDeliveryDays ?? "-";
+      addThinBorder(row);
     }
-    sheet.addRow([]);
+
+    rowIdx++; // Spacer before next package
   }
 
-  return await workbook.xlsx.writeBuffer();
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }

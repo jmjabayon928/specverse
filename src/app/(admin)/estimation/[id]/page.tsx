@@ -1,3 +1,6 @@
+// src/app/(admin)/estimation/[id]/page.tsx
+"use client";
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
@@ -7,6 +10,13 @@ import EstimationForm from '@/components/estimation/EstimationForm';
 import PackageForm from '@/components/estimation/PackageForm';
 import ItemForm from '@/components/estimation/ItemForm';
 import SupplierQuoteForm from '@/components/estimation/SupplierQuoteForm';
+
+export interface InventoryItem {
+  ItemID: number;
+  ItemName: string;
+  UOM: string;
+  UnitCost: number;
+}
 
 export default function EstimationDetailPage() {
   const params = useParams();
@@ -20,6 +30,7 @@ export default function EstimationDetailPage() {
   const [itemsByPackage, setItemsByPackage] = useState<Record<number, EstimationItem[]>>({});
   const [quotesByItem, setQuotesByItem] = useState<Record<number, SupplierQuote[]>>({});
   const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
+  const [showAllQuotes, setShowAllQuotes] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [showAddPackageForm, setShowAddPackageForm] = useState(false);
@@ -29,13 +40,43 @@ export default function EstimationDetailPage() {
   const [showItemFormFor, setShowItemFormFor] = useState<number | null>(null);
   const [editingItem, setEditingItem] = useState<EstimationItem | null>(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<EstimationItem | null>(null);
-  const [items, setItems] = useState<EstimationItem[]>([]);
 
   const [showQuoteFormFor, setShowQuoteFormFor] = useState<Record<number, boolean>>({});
   const [editingQuote, setEditingQuote] = useState<SupplierQuote | null>(null);
   const [confirmDeleteQuoteId, setConfirmDeleteQuoteId] = useState<number | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+
   const isPrintView = searchParams.get("print") === "true";
+
+  const toggleAllQuotes = async () => {
+    const newState: Record<number, boolean> = {};
+    const updatedQuotesByItem = { ...quotesByItem };
+
+    for (const packageId in itemsByPackage) {
+      const items = itemsByPackage[parseInt(packageId)];
+      for (const item of items) {
+        newState[item.EItemID] = !showAllQuotes;
+
+        // If not already fetched, fetch the quotes for this item
+        if (!quotesByItem[item.EItemID]) {
+          try {
+            const res = await fetch(`${baseUrl}/api/backend/estimation/quotes?itemId=${item.EItemID}`, {
+              credentials: "include",
+            });
+            const data = await res.json();
+            updatedQuotesByItem[item.EItemID] = data;
+          } catch (error) {
+            console.error(`Failed to fetch quotes for item ${item.EItemID}`, error);
+          }
+        }
+      }
+    }
+
+    setQuotesByItem(updatedQuotesByItem);
+    setExpandedItems(newState);
+    setShowAllQuotes((prev) => !prev);
+  };
 
   const formatDate = (dateStr?: string | Date) => {
     if (!dateStr) return '-';
@@ -47,10 +88,22 @@ export default function EstimationDetailPage() {
   };
 
   useEffect(() => {
+    const fetchInventory = async () => {
+      const res = await fetch("/api/backend/inventory/all", { credentials: "include" });
+      const data = await res.json();
+      setInventoryItems(data);
+    };
+    fetchInventory();
+  }, []);
+
+  useEffect(() => {
     if (!isNaN(estimationId)) {
-      fetch(`${baseUrl}/api/backend/estimation/${estimationId}`)
+      fetch(`${baseUrl}/api/backend/estimation/${estimationId}`, { credentials: "include" })
         .then(res => res.json())
-        .then(setEstimation)
+        .then(data => {
+          console.log("Fetched estimation data:", data); 
+          setEstimation(data);
+        })
         .catch(err => console.error('Failed to fetch estimation:', err))
         .finally(() => setLoading(false));
     }
@@ -60,13 +113,24 @@ export default function EstimationDetailPage() {
     if (!isNaN(estimationId)) {
       const fetchData = async () => {
         try {
-          const packagesRes = await fetch(`/api/backend/estimation/packages?estimationId=${estimationId}`);
+          const packagesRes = await fetch(`/api/backend/estimation/packages?estimationId=${estimationId}`, {
+            credentials: "include",
+          });
           const packages = await packagesRes.json();
+
+          // 🔒 Prevent crash if response is invalid
+          if (!Array.isArray(packages)) {
+            console.error("❌ Invalid packages response:", packages);
+            return;
+          }
+
           setPackages(packages);
 
           const itemMap: Record<number, EstimationItem[]> = {};
           for (const pkg of packages) {
-            const res = await fetch(`/api/backend/estimation/items?packageId=${pkg.PackageID}`);
+            const res = await fetch(`/api/backend/estimation/items?packageId=${pkg.PackageID}`, {
+              credentials: "include",
+            });
             const items = await res.json();
             itemMap[pkg.PackageID] = items;
           }
@@ -80,18 +144,10 @@ export default function EstimationDetailPage() {
     }
   }, [estimationId]);
 
-  useEffect(() => {
-    const fetchItems = async () => {
-      const res = await fetch(`/api/backend/estimation/items/by-estimation/${estimationId}`);
-      const data = await res.json();
-      setItems(data);
-    };
-
-    fetchItems();
-  }, [estimationId]);
-
   const refreshEstimation = async () => {
-    const res = await fetch(`/api/backend/estimation/${estimationId}`);
+    const res = await fetch(`/api/backend/estimation/${estimationId}`, {
+      credentials: "include",
+    });
     const updated = await res.json();
     setEstimation(updated);
   };
@@ -102,6 +158,7 @@ export default function EstimationDetailPage() {
     try {
       const res = await fetch(`${baseUrl}/api/backend/estimation/quotes/${confirmDeleteQuoteId}`, {
         method: "DELETE",
+        credentials: "include",
       });
 
       if (!res.ok) {
@@ -122,7 +179,9 @@ export default function EstimationDetailPage() {
 
   const fetchPackagesAndItems = async () => {
     try {
-      const res = await fetch(`${baseUrl}/api/backend/estimation/packages?estimationId=${estimationId}`);
+      const res = await fetch(`${baseUrl}/api/backend/estimation/packages?estimationId=${estimationId}`, {
+        credentials: 'include',
+      });
       const pkgData = await res.json();
       if (!Array.isArray(pkgData)) throw new Error('Invalid packages response');
       setPackages(pkgData);
@@ -144,7 +203,9 @@ export default function EstimationDetailPage() {
 
     if (!quotesByItem[itemId]) {
       try {
-        const res = await fetch(`${baseUrl}/api/backend/estimation/quotes?itemId=${itemId}`);
+        const res = await fetch(`${baseUrl}/api/backend/estimation/quotes?itemId=${itemId}`, {
+          credentials: 'include', // 👈 send cookies with the request
+        });
         const data = await res.json();
         const sorted = (Array.isArray(data) ? data : []).sort((a, b) => {
           if (a.IsSelected === b.IsSelected) {
@@ -160,7 +221,9 @@ export default function EstimationDetailPage() {
   };
 
   const refreshQuotes = async (itemId: number) => {
-    const res = await fetch(`${baseUrl}/api/backend/estimation/quotes?itemId=${itemId}`);
+    const res = await fetch(`${baseUrl}/api/backend/estimation/quotes?itemId=${itemId}`, {
+      credentials: 'include',
+    });
     const quoteData: SupplierQuote[] = await res.json();
     const sorted = Array.isArray(quoteData)
       ? quoteData.sort((a, b) =>
@@ -206,6 +269,7 @@ export default function EstimationDetailPage() {
     try {
       const res = await fetch(`${baseUrl}/api/backend/estimation/submit/${estimationId}`, {
         method: "POST",
+        credentials: "include",
       });
 
       if (!res.ok) {
@@ -243,7 +307,7 @@ export default function EstimationDetailPage() {
       <div className="space-y-3">
         {/* Row 1: Title + PDF Exports */}
         <div className="flex justify-between items-center flex-wrap gap-2">
-          <h1 className="text-2xl font-bold text-blue-800">Estimation Details</h1>
+          <h1 className="text-2xl font-bold text-blue-800">{estimation?.Title || "Estimation Details"}</h1>
 
           {!isPrintView && (
             <div className="flex flex-wrap gap-2 justify-end">
@@ -282,7 +346,7 @@ export default function EstimationDetailPage() {
               {!isEditing && (
                 <a
                   href={`/estimation/${estimationId}?edit=true`}
-                  className="inline-flex items-center gap-1 bg-orange-400 hover:bg-orange-500 text-white text-sm px-3 py-1 rounded shadow"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-orange-400 hover:bg-orange-500 text-white text-sm shadow h-[36px]"
                 >
                   ✏️ Edit
                 </a>
@@ -291,10 +355,16 @@ export default function EstimationDetailPage() {
                 href={`/estimation/${estimationId}?print=true`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 bg-gray-500 hover:bg-gray-600 text-white text-sm px-3 py-1 rounded shadow"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-gray-500 hover:bg-gray-600 text-white text-sm shadow h-[36px]"
               >
                 🖨️ Print-Friendly
               </a>
+              <button
+                onClick={toggleAllQuotes}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm shadow h-[36px]"
+              >
+                {showAllQuotes ? "Hide All Quotes" : "Show All Quotes"}
+              </button>
             </div>
 
             <div className="flex gap-2 justify-end">
@@ -502,6 +572,8 @@ export default function EstimationDetailPage() {
                   {(itemsByPackage[pkg.PackageID] || []).map((item) => {
                     if (!item) return null;
 
+                    {console.log("Item row:", item)}
+
                     return (
                       <React.Fragment key={item.EItemID}>
                         {/* Item Row */}
@@ -560,7 +632,12 @@ export default function EstimationDetailPage() {
                                   EItemID: editingItem.EItemID,
                                 }}
                                 mode="edit"
-                                items={items.filter((i: EstimationItem) => i.PackageID === pkg.PackageID)}
+                                items={itemsByPackage[pkg.PackageID] || []}
+                                inventoryItems={inventoryItems.map(item => ({
+                                  itemCode: item.ItemID,
+                                  itemName: item.ItemName,
+                                  uom: item.UOM,
+                                }))}
                                 onSuccess={() => {
                                   setEditingItem(null);
                                   fetchPackagesAndItems();
@@ -628,6 +705,7 @@ export default function EstimationDetailPage() {
                                                         try {
                                                           await fetch(`${baseUrl}/api/backend/estimation/quotes/select/${quote.QuoteID}`, {
                                                             method: "POST",
+                                                            credentials: 'include',
                                                           });
                                                           await refreshQuotes(item.EItemID);
                                                           await fetchPackagesAndItems();
@@ -732,8 +810,13 @@ export default function EstimationDetailPage() {
                   <ItemForm
                     estimationId={estimationId}
                     packageId={pkg.PackageID}
-                    mode="create" // ✅ required
-                    items={items.filter((i: EstimationItem) => i.PackageID === pkg.PackageID)} // ✅ required
+                    mode="create"
+                    items={itemsByPackage[pkg.PackageID] || []}
+                    inventoryItems={inventoryItems.map(item => ({
+                      itemCode: item.ItemID,
+                      itemName: item.ItemName,
+                      uom: item.UOM,
+                    }))}
                     onSuccess={() => {
                       setShowItemFormFor(null);
                       fetchPackagesAndItems();
@@ -817,7 +900,10 @@ export default function EstimationDetailPage() {
                 try {
                   const res = await fetch(
                     `${baseUrl}/api/backend/estimation/packages/${confirmDeletePackageId}`,
-                    { method: 'DELETE' }
+                    {
+                      method: 'DELETE',
+                      credentials: 'include',
+                    }
                   );
 
                   if (!res.ok) {

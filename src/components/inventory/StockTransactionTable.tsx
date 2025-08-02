@@ -1,3 +1,4 @@
+// src/components/inventory/StockTransactionTable.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -22,8 +23,13 @@ export default function StockTransactionTable({ inventoryId, canEdit }: Props) {
   useEffect(() => {
     async function fetchTransactions() {
       try {
-        const res = await fetch(`/api/backend/inventory/${inventoryId}/transactions`);
+        const res = await fetch(`/api/backend/inventory/${inventoryId}/transactions`, {
+          headers: {
+            'Cache-Control': 'no-cache',
+          }
+        });
         const data = await res.json();
+        console.log("Fetched transactions:", data); // 👈 Should appear
         setTransactions(data);
       } catch (error) {
         console.error("Failed to fetch stock transactions:", error);
@@ -31,6 +37,7 @@ export default function StockTransactionTable({ inventoryId, canEdit }: Props) {
     }
 
     if (inventoryId) {
+      console.log("Fetching transactions for:", inventoryId); // 👈 Debug
       fetchTransactions();
     }
   }, [inventoryId]);
@@ -41,10 +48,9 @@ export default function StockTransactionTable({ inventoryId, canEdit }: Props) {
       <table className="w-full border-t text-sm">
         <thead>
           <tr className="bg-gray-50">
-            <th className="px-4 py-2 border">Item</th>
-            <th className="px-4 py-2 border">Quantity</th>
-            <th className="px-4 py-2 border">Type</th>
             <th className="px-4 py-2 border">Date</th>
+            <th className="px-4 py-2 border">Type</th>
+            <th className="px-4 py-2 border">Quantity</th>
             <th className="px-4 py-2 border">Performed By</th>
             {canEdit && <th className="px-4 py-2 border">Actions</th>}
           </tr>
@@ -52,13 +58,12 @@ export default function StockTransactionTable({ inventoryId, canEdit }: Props) {
         <tbody>
           {transactions.map((tx) => (
             <tr key={tx.id}>
-              <td className="px-4 py-2 border">{tx.itemName}</td>
-              <td className="px-4 py-2 border">{tx.quantity}</td>
-              <td className="px-4 py-2 border">{tx.transactionType}</td>
-              <td className="px-4 py-2 border">{new Date(tx.date).toLocaleDateString()}</td>
-              <td className="px-4 py-2 border">{tx.performedBy}</td>
+              <td className="px-4 py-2 border text-center">{new Date(tx.date).toLocaleDateString()}</td>
+              <td className="px-4 py-2 border text-center">{tx.transactionType}</td>
+              <td className="px-4 py-2 border text-center">{tx.quantity}</td>
+              <td className="px-4 py-2 border text-center">{tx.performedBy}</td>
               {canEdit && (
-                <td className="px-4 py-2 border text-blue-500 hover:underline cursor-pointer">
+                <td className="px-4 py-2 border text-blue-500 hover:underline cursor-pointer text-center">
                   Edit
                 </td>
               )}

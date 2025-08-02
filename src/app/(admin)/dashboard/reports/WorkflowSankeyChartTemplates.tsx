@@ -7,7 +7,6 @@ import { Card, CardContent } from "@/components/ui/card";
 
 interface SankeyNodeData {
   name: string;
-  id: string; // Unique identifier required for key warnings
 }
 
 interface SankeyLinkData {
@@ -30,26 +29,15 @@ export default function WorkflowSankeyChartTemplates() {
 
         const json = await res.json();
 
-        console.log("Sankey nodes", json.nodes); // Debugging nodes
-
         if (!Array.isArray(json.nodes) || !Array.isArray(json.links)) {
           throw new Error("Invalid Sankey data format");
         }
 
-        // ✅ Add fallback and unique IDs to nodes
-        const dedupedNodes: SankeyNodeData[] = json.nodes.map((node: { name?: string }, index: number) => {
-          const name = node.name || `node-${index}`;
-          return {
-            name,
-            id: `${name}-${index}`, // ensure unique identifier
-          };
-        });
-
-        setNodes(dedupedNodes);
+        setNodes(json.nodes);
         setLinks(json.links);
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        console.error("Error fetching template workflow sankey data:", err);
+        console.error("Error fetching Sankey data:", err);
         setError(errorMessage);
       } finally {
         setLoading(false);
@@ -73,10 +61,7 @@ export default function WorkflowSankeyChartTemplates() {
               data={{ nodes, links }}
               nodePadding={30}
               margin={{ top: 10, bottom: 10, left: 50, right: 50 }}
-              nodeId="id"
-              node={{
-                style: { fill: "#00b894" }, // or "#8884d8" for templates
-              }}
+              node={{ style: { fill: "#00b894" } }}
               link={{ stroke: "#00b894" }}
             >
               <Tooltip />

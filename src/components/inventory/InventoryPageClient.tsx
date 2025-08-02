@@ -1,3 +1,4 @@
+// src/components/inventory/InventoryPageClient.tsx
 "use client";
 
 import { useState } from "react";
@@ -9,15 +10,26 @@ interface Props {
   inventory: InventoryListItem[];
   canEditStock: boolean;
   canEditMaintenance: boolean;
+  onSelectItem?: (id: number) => void; // ✅ Make this optional
 }
 
-export default function InventoryPageClient({ 
-    inventory, 
-    canEditStock,
-    canEditMaintenance
+export default function InventoryPageClient({
+  inventory,
+  canEditStock,
+  canEditMaintenance,
+  onSelectItem,
 }: Props) {
   const [selectedInventoryId, setSelectedInventoryId] = useState<number | null>(null);
-  const [activeTab] = useState("transactions"); // no tab switching yet
+  const [activeTab] = useState("transactions"); // you can add tab switching later
+
+  // ✅ Local handler: if no onSelectItem is provided, fallback to inline panel
+  const handleSelectItem = (id: number) => {
+    if (onSelectItem) {
+      onSelectItem(id); 
+    } else {
+      setSelectedInventoryId(id); 
+    }
+  };
 
   return (
     <div className="p-6">
@@ -25,7 +37,7 @@ export default function InventoryPageClient({
 
       <InventoryListTable
         inventory={inventory}
-        onSelectItem={(id) => setSelectedInventoryId(id)}
+        onSelectItem={handleSelectItem} 
       />
 
       {selectedInventoryId && (
@@ -41,3 +53,4 @@ export default function InventoryPageClient({
     </div>
   );
 }
+

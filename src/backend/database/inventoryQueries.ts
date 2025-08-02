@@ -1,3 +1,4 @@
+// src/backend/database/inventoryQueries.ts
 import { poolPromise, sql } from "../config/db";
 import type { InventoryItem, InventoryItemDB } from "@/types/inventory";
 
@@ -47,12 +48,22 @@ export async function getInventoryItemById(inventoryId: number): Promise<Invento
   const result = await pool.request()
     .input("InventoryID", sql.Int, inventoryId)
     .query(`
-      SELECT InventoryID AS inventoryId, ItemCode AS itemCode, ItemName AS itemName,
-             Description AS description, CategoryID AS categoryId, SupplierID AS supplierId,
-             ManufacturerID AS manufacturerId, Location AS location, ReorderLevel AS reorderLevel,
-             UOM AS uom
-      FROM InventoryItems
-      WHERE InventoryID = @InventoryID AND IsActive = 1
+      SELECT 
+        i.InventoryID AS inventoryId, 
+        ii.ItemCode AS itemCode, 
+        ii.ItemName AS itemName,
+        ii.Description AS description, 
+        ii.CategoryID AS categoryId, 
+        ii.SupplierID AS supplierId,
+        ii.ManufacturerID AS manufacturerId, 
+        w.WarehouseName AS location, 
+        ii.ReorderLevel AS reorderLevel,
+        ii.UOM AS uom,
+        i.Quantity AS quantityOnHand
+      FROM Inventory i
+        JOIN InventoryItems ii ON i.InventoryID = ii.InventoryID
+          JOIN Warehouses w ON i.WarehouseID = w.WarehouseID
+      WHERE i.InventoryID = @InventoryID AND ii.IsActive = 1
     `);
   return result.recordset[0] ?? null;
 }
@@ -207,14 +218,14 @@ export async function getInventoryList(): Promise<{
   const pool = await poolPromise;
   const result = await pool.request().query(`
     SELECT 
-      InventoryID,
-      ItemName AS SheetName,
-      QuantityOnHand AS Quantity,
-      Location AS WarehouseName,
-      UpdatedAt AS LastUpdated
-    FROM InventoryItems
-    WHERE IsActive = 1
-    ORDER BY ItemName
+      i.InventoryID,
+      ii.ItemName AS SheetName,
+      i.Quantity AS Quantity,
+      w.WarehouseName AS WarehouseName,
+      i.LastUpdated AS LastUpdated
+    FROM Inventory i
+	  JOIN InventoryItems ii ON i.InventoryID = ii.InventoryID
+    JOIN Warehouses w ON i.WarehouseID = w.WarehouseID
   `);
   return result.recordset;
 }

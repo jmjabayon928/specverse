@@ -1,3 +1,4 @@
+// src/components/inventory/InventoryListTable.tsx
 "use client";
 
 import React from "react";
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function InventoryListTable({ inventory, onSelectItem }: Props) {
+  console.log("Inventory list being rendered:", inventory);
   return (
     <div className="overflow-x-auto border rounded-md">
       <table className="min-w-full text-sm border-collapse">
@@ -20,9 +22,9 @@ export default function InventoryListTable({ inventory, onSelectItem }: Props) {
           </tr>
         </thead>
         <tbody>
-          {inventory.map((item) => (
+          {inventory.map((item, index) => (
             <tr
-              key={item.inventoryId}
+              key={item.inventoryId ?? `fallback-${index}`}
               className="cursor-pointer hover:bg-gray-50 transition"
               onClick={() => onSelectItem(item.inventoryId)}
             >

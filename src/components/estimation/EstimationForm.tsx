@@ -1,3 +1,4 @@
+// src/components/estimation/EstimationForm.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -46,7 +47,7 @@ export default function EstimationForm({
       try {
         const res = await fetch(`${baseUrl}/api/projects`);
         const data = await res.json();
-        setProjects(data);
+        setProjects(Array.isArray(data) ? data : data.recordset || []);
 
         // ✅ Set selected project only after options are available
         if (defaultValues?.ProjectID) {
