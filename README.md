@@ -186,6 +186,50 @@ Includes:
 
 ---
 
+## 📸 Screenshots
+
+### 🧾 Datasheet Editor
+![Datasheet English USC](public/screenshots/Datasheet_English_USC.JPG)
+![Datasheet French SI](public/screenshots/Datasheet_French_SI.JPG)
+![Inline Editing](public/screenshots/Inline_Editing_Datasheet.JPG)
+
+### 🧩 Template Designer
+![Template Designer Fields](public/screenshots/Template_Designer_Editable_Definitions.JPG)
+
+### 💰 Estimation Module
+![Estimation Packages & Quotes](public/screenshots/Estimation_Packages_Items_Quotations.JPG)
+![Estimation Details PDF](public/screenshots/Estimation_Details_Generated_PDF.JPG)
+![Estimation Details Excel](public/screenshots/Estimation_Details_Generated_Excel.JPG)
+
+### 📊 Dashboards & Reports
+![Dashboard](public/screenshots/Dashboard.JPG)
+![Analytics](public/screenshots/Analytics.JPG)
+![Completion Trends](public/screenshots/Analytics_Completion_Trends.JPG)
+![Reports](public/screenshots/Reports1.JPG)
+
+### 🌐 Multilingual Support
+![German Datasheet](public/screenshots/Datasheet_German_SI.JPG)
+![French PDF](public/screenshots/Datasheet_Details_French_SI_PDF.JPG)
+![English Excel](public/screenshots/Datasheet_Details_English_USC_Excel.JPG)
+
+## 📄 PDF & Excel Exports
+
+### 🔧 Datasheet Samples
+- [Rotary Pump (EN, USC, PDF)](public/exports/FilledSheet-Client_One-Rotary_Pump-RevNo-1-USC-eng.pdf)
+- [Rotary Pump (EN, USC, Excel)](public/exports/FilledSheet-Client_One-Rotary_Pump-RevNo-1-USC-eng.xlsx)
+- [Pompe Rotative (FR, SI, PDF)](public/exports/FilledSheet-Client_One-Pompe_rotative-RevNo-1-SI-fr.pdf)
+- [Pompe Rotative (FR, SI, Excel)](public/exports/FilledSheet-Client_One-Pompe_rotative-RevNo-1-SI-fr.xlsx)
+- [Rotationspumpe (DE, SI, PDF)](public/exports/FilledSheet-Client_One-Rotationspumpe-RevNo-1-SI-de.pdf)
+- [Rotationspumpe (DE, SI, Excel)](public/exports/FilledSheet-Client_One-Rotationspumpe-RevNo-1-SI-de.xlsx)
+
+### 🧮 Estimation Reports
+- [Pump Skid - Summary (PDF)](public/exports/Pump_Skid_Design_Fabrication_Summary.pdf)
+- [Pump Skid - General (PDF)](public/exports/Pump_Skid_Design_Fabrication_General.pdf)
+- [Pump Skid - Procurement (PDF)](public/exports/Pump_Skid_Design_Fabrication_Procurement.pdf)
+- [Pump Skid - Summary (Excel)](public/exports/Pump Skid Design and Fabrication Summary.xlsx)
+- [Pump Skid - General (Excel)](public/exports/Pump Skid Design and Fabrication General.xlsx)
+- [Pump Skid - Procurement (Excel)](public/exports/Pump Skid Design and Fabrication Procurement.xlsx)
+
 ## 🛠️ Setup Instructions
 
 1. Clone this repo:
