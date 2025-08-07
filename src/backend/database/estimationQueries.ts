@@ -53,17 +53,19 @@ export async function createEstimation(data: {
   Title: string;
   Description?: string;
   CreatedBy?: number;
+  ClientID: number;
 }) {
   const pool = await poolPromise;
   const result = await pool.request()
+    .input("ClientID", sql.Int, data.ClientID)
     .input("ProjectID", sql.Int, data.ProjectID)
     .input("Title", sql.NVarChar(255), data.Title)
     .input("Description", sql.NVarChar(sql.MAX), data.Description ?? null)
     .input("CreatedBy", sql.Int, data.CreatedBy ?? null)
     .query(`
-      INSERT INTO Estimations (ProjectID, Title, Description, Status, CreatedAt, CreatedBy)
+      INSERT INTO Estimations (ClientID, ProjectID, Title, Description, Status, CreatedAt, CreatedBy)
       OUTPUT INSERTED.*
-      VALUES (@ProjectID, @Title, @Description, 'Draft', GETDATE(), @CreatedBy)
+      VALUES (@ClientID, @ProjectID, @Title, @Description, 'Draft', GETDATE(), @CreatedBy)
     `);
   return result.recordset[0];
 }

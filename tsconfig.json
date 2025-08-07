@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -13,31 +9,34 @@
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",                        // ✅ Important for Jest + Node
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",                                // ✅ Ensure React JSX compatibility
     "incremental": true,
-    "baseUrl": "src",
+
+    "baseUrl": "src",                                  // ✅ Allow use of "@/..." imports
     "paths": {
-      "@/*": [
-        "*"
-      ]
+      "@/*": ["*"]
     },
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ]
+
+    "types": ["node", "jest"],                         // ✅ Only include known types
+    "typeRoots": ["./node_modules/@types", "./src/types"],
+
+    "plugins": [{ "name": "next" }]                    // ✅ Next.js plugin
   },
   "include": [
+    "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    "next-env.d.ts",
     "src/types",
-    ".next/types/**/*.ts"
+    "tests/**/*",
+    "jest.setup.ts"                                    // ✅ For test setup
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    ".next",
+    "dist",
+    "coverage"
   ]
 }
