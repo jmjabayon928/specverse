@@ -25,7 +25,9 @@ if (!dbConfig.user || !dbConfig.password || !dbConfig.server || !dbConfig.databa
 const poolPromise = new sql.ConnectionPool(dbConfig)
   .connect()
   .then((pool) => {
-    console.log("✅ Connected to SQL Server");
+    if (process.env.NODE_ENV !== "test") {
+      console.log("✅ Connected to SQL Server");
+    }
     return pool;
   })
   .catch((err) => {

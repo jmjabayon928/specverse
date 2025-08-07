@@ -12,5 +12,6 @@ declare module "express-serve-static-core" {
       profilePic?: string;
       permissions: string[];
     };
+    skipAuth?: boolean; // ← Add this line
   }
 }

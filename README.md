@@ -186,6 +186,43 @@ Includes:
 
 ---
 
+## ✅ Testing & Quality Assurance
+
+SpecVerse includes a growing suite of automated tests to ensure code quality and prevent regressions.
+
+### 🧪 UI & Component Tests
+- Built using **Jest** and **React Testing Library**
+- Tests core UI components including login form, dashboards, and charts
+- Mocks API requests and DOM features like `ResizeObserver`
+- Ensures proper rendering and interaction
+
+### ⚙️ Backend API Tests *(in progress)*
+- Designed with **Jest** and **Supertest**
+- Targets key API routes like estimation, datasheets, and inventory
+- Validates response structure, authorization, and CRUD logic
+
+### ✅ Test Setup
+- Configured via `jest.config.ts` and `jest.setup.ts`
+- Supports TypeScript and custom path aliases (`@/`)
+- Mocks assets (SVG, CSS) to prevent crashes during render
+- Includes a reusable `<SecurePage />` wrapper test
+
+### 📂 Test Locations
+- UI tests: `tests/ui/`
+- Backend tests: `tests/api/`
+- Shared mocks: `__mocks__/`
+- Setup: `jest.config.ts`, `jest.setup.ts`
+
+### ▶️ Running Tests
+```bash
+# Run all tests
+npx jest
+
+# Run a specific test file
+npx jest tests/ui/loginForm.test.tsx
+
+---
+
 ## 📸 Screenshots
 
 ### 🧾 Datasheet Editor

@@ -49,8 +49,13 @@ export const getAllEstimationsHandler: RequestHandler = async (req, res) => {
 };
 
 export const createEstimationHandler: RequestHandler = async (req, res) => {
-  const data = await createEstimation(req.body);
-  res.status(201).json(data);
+  try {
+    const data = await createEstimation(req.body);
+    res.status(201).json(data);
+  } catch (err) {
+    console.error("❌ createEstimation failed:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 export const getEstimationByIdHandler: RequestHandler = async (req, res): Promise<void> => {
