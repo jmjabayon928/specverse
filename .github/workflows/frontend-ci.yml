@@ -1,0 +1,36 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main, beta-1.0]
+  pull_request:
+    branches: [main, beta-1.0]
+
+jobs:
+  frontend-ci:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./src/app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npx eslint . --ext .ts,.tsx
+
+      - name: Run TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Run Jest tests
+        run: npm run test
