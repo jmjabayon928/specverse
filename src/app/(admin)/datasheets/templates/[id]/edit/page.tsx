@@ -8,7 +8,7 @@ import SecurePage from "@/components/security/SecurePage";
 import TemplateEditorForm from "./TemplateEditorForm";
 import { mapToUnifiedSheet } from "@/utils/templateViewMapper";
 import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
-import { getTemplateDetailsById } from "@/backend/database/templateViewQueries";
+import { getTemplateDetailsById } from "@/backend/services/templateService";
 
 interface PageProps {
   params: { id: string };
@@ -30,7 +30,7 @@ export default async function TemplateEditPage({ params }: PageProps) {
 
   const defaultValues = mapToUnifiedSheet({
     datasheet: templateData.datasheet,
-    subsheets: templateData.subsheets,
+    subsheets: templateData.datasheet.subsheets,
     isTemplate: true,
   });
 

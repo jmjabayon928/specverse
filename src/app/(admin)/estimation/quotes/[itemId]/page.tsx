@@ -1,3 +1,4 @@
+// src/app/(admin)/estimation/quotes/[itemId]/page.tsx
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -55,7 +56,13 @@ export default function QuotesPage() {
           <h2 className="text-lg font-semibold text-gray-700 mb-4">
             Add Supplier Quote
           </h2>
-          <SupplierQuoteForm itemId={parsedItemId} onSuccess={fetchQuotes} />
+          <SupplierQuoteForm
+            mode="create"
+            itemId={parsedItemId}
+            quotes={quotes}
+            onSuccess={fetchQuotes}
+            onCancel={() => setShowForm(false)}
+          />
         </div>
       )}
     </div>

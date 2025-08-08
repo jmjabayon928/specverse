@@ -189,10 +189,20 @@ export default function FilledSheetListPage() {
                           sheet={{
                             sheetId: t.sheetId ?? 0,
                             preparedBy: t.preparedById ?? 0,
-                            status: (t.status ?? "Draft") as "Draft" | "Rejected" | "Modified Draft" | "Verified" | "Approved",
-                            isTemplate: false, // because these are filled sheets
+                            status: (t.status ?? "Draft") as
+                              | "Draft"
+                              | "Rejected"
+                              | "Modified Draft"
+                              | "Verified"
+                              | "Approved",
+                            isTemplate: false,
                           }}
                           user={user}
+                          unitSystem="SI" 
+                          language="eng" 
+                          clientName="Internal" 
+                          sheetName={t.sheetName}
+                          revisionNum={1} 
                         />
                       )}
                     </td>

@@ -2,28 +2,40 @@
 import sql from "mssql";
 import dotenv from "dotenv";
 
-// Load environment variables
 dotenv.config();
 
-// Validate environment variables
+// 🔍 Determine trustServerCertificate dynamically
+function getTrustServerCertificate(): boolean {
+  const env = process.env.HOST_ENVIRONMENT;
+
+  switch (env) {
+    case "local":
+      return true; // ✅ Allow self-signed certs
+    case "render":
+    case "vercel":
+      return false; // 🔒 Expect proper SSL cert
+    default:
+      console.warn("⚠️ Unknown HOST_ENVIRONMENT, defaulting to trustServerCertificate: true");
+      return true;
+  }
+}
+
 const dbConfig = {
   user: process.env.DB_USER || "",
   password: process.env.DB_PASSWORD || "",
   server: process.env.DB_SERVER || "",
   database: process.env.DB_DATABASE || "",
   options: {
-    encrypt: true, 
+    encrypt: true,
     enableArithAbort: true,
-    trustServerCertificate: process.env.NODE_ENV !== "production",
+    trustServerCertificate: getTrustServerCertificate(), // 🔁 Dynamic
   },
 };
 
-// Ensure all required env variables exist
 if (!dbConfig.user || !dbConfig.password || !dbConfig.server || !dbConfig.database) {
   throw new Error("⛔ Missing required database environment variables. Check your .env file.");
 }
 
-// Create connection pool
 const poolPromise = new sql.ConnectionPool(dbConfig)
   .connect()
   .then((pool) => {

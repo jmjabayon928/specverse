@@ -1,3 +1,4 @@
+// src/components/datasheets/templates/SubsheetTabs.tsx
 'use client';
 
 import React from 'react';
@@ -7,10 +8,10 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
 } from '@heroicons/react/24/outline';
-import type { Subsheet } from "@/types/datasheetTemplate";
+import type { UnifiedSubsheet } from "@/types/sheet";
 
 type Props = {
-  subsheets: Subsheet[];
+  subsheets: UnifiedSubsheet[];
   activeIndex: number;
   setActiveIndex: (index: number) => void;
   onRename: (index: number, newName: string) => void;

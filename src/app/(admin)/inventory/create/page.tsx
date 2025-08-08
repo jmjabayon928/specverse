@@ -1,11 +1,11 @@
 // src/app/(admin)/inventory/create/page.tsx
 
-import { getTemplateReferenceOptions } from "@/backend/database/templateReferenceQueries";
+import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
 import InventoryFormClient from "@/components/inventory/InventoryFormClient";
 import type { InventoryFormValues } from "@/validation/inventorySchema";
 
 export default async function CreateInventoryItemPage() {
-  const referenceData = await getTemplateReferenceOptions();
+  const referenceData = await fetchReferenceOptions();
 
   const initialValues: InventoryFormValues = {
     itemCode: "",

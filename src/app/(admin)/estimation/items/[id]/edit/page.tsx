@@ -1,3 +1,4 @@
+// src/app/(admin)/estimation/items/[id]/edit/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -26,8 +27,18 @@ export default function EditItemPage() {
       <h1 className="text-xl font-bold mb-4">Edit Estimation Item</h1>
       <ItemForm
         mode="edit"
-        defaultValues={item}
-        onSubmitSuccess={() => router.push(`/estimation/packages/${item.PackageID}`)}
+        defaultValues={{
+          EItemID: item.EItemID,
+          ItemID: item.ItemID,
+          Description: item.Description ?? "", // ✅ fallback to empty string
+          Quantity: item.Quantity,
+        }}
+        estimationId={item.EstimationID}
+        packageId={item.PackageID ?? 0}
+        items={[]} 
+        inventoryItems={[]} 
+        onSuccess={() => router.push(`/estimation/packages/${item.PackageID}`)}
+        onCancel={() => router.back()}
       />
     </div>
   );

@@ -1,3 +1,4 @@
+// src/app/(admin)/datasheets/templates/[id]/TemplateViewer.tsx
 "use client";
 
 import React from "react";

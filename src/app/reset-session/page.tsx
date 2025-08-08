@@ -26,7 +26,7 @@ export default function ResetSessionPage() {
     setTimeout(() => {
       router.replace("/login");
     }, 1000);
-  }, []);
+  }, [router]);
 
   return (
     <div className="flex h-screen items-center justify-center">

@@ -1,3 +1,4 @@
+// src/app/(admin)/estimation/packages/[id]/edit/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -27,7 +28,9 @@ export default function EditPackagePage() {
       <PackageForm
         mode="edit"
         defaultValues={pkg}
-        onSubmitSuccess={() => router.push(`/estimation/${pkg.EstimationID}`)}
+        estimationId={pkg.EstimationID ?? 0} 
+        packages={[]} 
+        onSuccess={() => router.push(`/estimation/${pkg.EstimationID}`)}
       />
     </div>
   );

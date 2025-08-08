@@ -9,7 +9,7 @@ import { translations } from "@/constants/translations";
 export async function generateDatasheetExcel(
   sheet: UnifiedSheet,
   lang: string,
-  uom: "SI" | "USC"
+  uom: "SI" | "USC" // eslint-disable-line @typescript-eslint/no-unused-vars
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   const sheet1 = workbook.addWorksheet("Datasheet", {

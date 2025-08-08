@@ -1,3 +1,4 @@
+// src/app/(admin)/estimation/quotes/[itemId]/edit/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -26,8 +27,18 @@ export default function EditQuotePage() {
       <h1 className="text-xl font-bold mb-4">Edit Supplier Quote</h1>
       <SupplierQuoteForm
         mode="edit"
-        defaultValues={quote}
-        onSubmitSuccess={() => router.push(`/estimation/items/${quote.ItemID}`)}
+        defaultValues={{
+          QuoteID: quote.QuoteID,
+          SupplierID: quote.SupplierID,
+          UnitCost: quote.QuotedUnitCost ?? 0, 
+          Currency: quote.SupplierCurrency ?? "USD", 
+          ExpectedDeliveryDays: quote.SupplierDeliveryDays ?? 0,
+          Notes: quote.Notes ?? "",
+        }}
+        itemId={quote.ItemID}
+        quotes={[]} 
+        onSuccess={() => router.push(`/estimation/items/${quote.ItemID}`)}
+        onCancel={() => router.back()}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getInventoryItemById } from '@/backend/database/inventoryQueries';
-import { getAllReferenceOptions } from '@/backend/database/ReferenceQueries';
+import { fetchReferenceOptions } from '@/backend/database/ReferenceQueries';
 import InventoryFormClient from '@/components/inventory/InventoryFormClient';
 
 interface InventoryEditPageProps {
@@ -16,7 +16,7 @@ export default async function InventoryEditPage({ params }: InventoryEditPagePro
   const item = await getInventoryItemById(itemId);
   if (!item) return notFound();
 
-  const { categories, suppliers, manufacturers } = await getAllReferenceOptions();
+  const { categories, suppliers, manufacturers } = await fetchReferenceOptions();
 
   return (
     <div className="p-6">

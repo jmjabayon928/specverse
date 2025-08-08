@@ -1,3 +1,4 @@
+// src/app/(admin)/datasheets/templates/page.tsx
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -189,13 +190,18 @@ export default function TemplateListPage() {
                     <td className="px-4 py-2 space-x-2">
                       {user ? (
                         <TemplateActions
-                          template={{
+                          sheet={{
                             sheetId: t.sheetId ?? 0,
                             preparedBy: t.preparedById ?? 0, 
                             status: (t.status ?? "Draft") as "Draft" | "Rejected" | "Modified Draft" | "Verified" | "Approved",
                             isTemplate: true,
                           }}
                           user={user}
+                          unitSystem="SI"
+                          language="eng"
+                          clientName="Internal"
+                          sheetName={t.sheetName}
+                          revisionNum={1} 
                         />
                       ) : null}
                     </td>

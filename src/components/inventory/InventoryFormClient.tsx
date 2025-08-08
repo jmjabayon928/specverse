@@ -1,3 +1,4 @@
+// src/components/inventory/InventoryFormClient.tsx
 'use client';
 
 import { useState } from 'react';

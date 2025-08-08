@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+// src/hooks/useSessionMonitor.ts
+
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 export function useSessionMonitor({
@@ -14,13 +16,13 @@ export function useSessionMonitor({
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     router.push("/login");
-  };
+  }, [router]);
 
-  const resetTimer = () => {
+  const resetTimer = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
     setShowWarning(false);
@@ -40,7 +42,7 @@ export function useSessionMonitor({
         }
       }, 1000);
     }, timeoutMinutes * 60 * 1000);
-  };
+  }, [timeoutMinutes, warningDuration, logout]);
 
   useEffect(() => {
     resetTimer();
@@ -55,7 +57,7 @@ export function useSessionMonitor({
       if (countdownRef.current) clearInterval(countdownRef.current);
       events.forEach((event) => window.removeEventListener(event, handleActivity));
     };
-  }, []);
+  }, [resetTimer]);
 
   return {
     showWarning,

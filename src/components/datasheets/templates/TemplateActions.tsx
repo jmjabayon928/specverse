@@ -1,3 +1,4 @@
+// src/components/datasheets/templates/TemplateActions.tsx
 "use client";
 
 import React from "react";

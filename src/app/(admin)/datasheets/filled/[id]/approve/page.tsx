@@ -32,7 +32,12 @@ export default async function FilledApprovePage({ params }: PageProps) {
       <h1 className="text-2xl font-semibold mb-6">Approve Filled Sheet</h1>
 
       {/* ✅ Reuse viewer for read-only mode */}
-      <FilledSheetViewer data={rawData.datasheet} />
+      <FilledSheetViewer
+        sheet={rawData.datasheet}
+        translations={rawData.translations ?? null}
+        language="eng"
+        unitSystem="SI"
+      />
 
       {/* ✅ Button to approve */}
       <ApproveButton sheetId={sheetId} />

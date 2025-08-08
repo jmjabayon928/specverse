@@ -1,6 +1,6 @@
-// src/utils/generateDatasheetPDF.ts
-
 import puppeteer from "puppeteer";
+import ExcelJS from "exceljs";
+import { Buffer } from "buffer";
 import fs from "fs";
 import path from "path";
 import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
@@ -9,22 +9,27 @@ import { getLabel } from "@/utils/translationUtils";
 import { translations } from "@/constants/translations";
 import type { UnifiedSheet, UnifiedSubsheet } from "@/types/sheet";
 
+interface DatasheetPDFExport {
+  buffer: Buffer;
+  fileName: string;
+}
+
 export async function generateDatasheetPDF(
   sheetId: number,
   uom: "SI" | "USC",
   lang: string = "eng"
-): Promise<Buffer> {
+): Promise<DatasheetPDFExport> {
   const result = await getFilledSheetDetailsById(sheetId, lang, uom);
   if (!result) throw new Error(`Sheet with ID ${sheetId} not found.`);
   const sheet: UnifiedSheet = result.datasheet;
 
-  // Build UI label map (PascalCase keys)
+  // Build UI label map
   const uiMap: Record<string, string> = Object.fromEntries(
     Object.entries(translations).map(([key, value]) => [key, value[lang] ?? key])
   );
   const getUI = (key: string) => getLabel(key, uiMap);
 
-  // Read logo from public folder
+  // Read logo
   const logoPath = path.resolve("public/logo.png");
   const logoBase64 = fs.existsSync(logoPath)
     ? fs.readFileSync(logoPath).toString("base64")
@@ -125,8 +130,42 @@ export async function generateDatasheetPDF(
   });
 
   await browser.close();
+
+  const fileName = `${sheet.sheetName.replace(/\s+/g, "_")}_${sheet.sheetId}.pdf`;
+
   return {
-    buffer: Buffer.from(pdfBuffer),
+    buffer: Buffer.from(pdfBuffer.buffer), // ✅ fix type error
     fileName,
   };
+}
+
+export async function generateDatasheetExcel(
+  sheetId: number,
+  uom: "SI" | "USC",
+  lang: string = "eng"
+): Promise<Buffer> {
+  const result = await getFilledSheetDetailsById(sheetId, lang, uom);
+  if (!result) throw new Error(`Sheet with ID ${sheetId} not found.`);
+  const sheet = result.datasheet;
+
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Datasheet");
+
+  worksheet.addRow(["Field Label", "UOM", "Options", "Value"]);
+
+  for (const subsheet of sheet.subsheets) {
+    worksheet.addRow([subsheet.name]); // Subsheet title
+    for (const field of subsheet.fields) {
+      worksheet.addRow([
+        field.label,
+        field.uom || "",
+        field.options?.join(", ") || "",
+        field.value ?? "",
+      ]);
+    }
+    worksheet.addRow([]);
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }

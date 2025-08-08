@@ -34,7 +34,12 @@ export default async function FilledVerifyPage({ params }: PageProps) {
       <h1 className="text-2xl font-semibold mb-6">Verify Filled Datasheet</h1>
 
       {/* ✅ Read-only view of the filled sheet */}
-      <FilledSheetViewer data={rawData.datasheet} />
+      <FilledSheetViewer
+        sheet={rawData.datasheet}
+        translations={rawData.translations ?? null}
+        language="eng"
+        unitSystem="SI"
+      />
 
       {/* ✅ Verification form */}
       <VerifyForm sheetId={sheetId} />

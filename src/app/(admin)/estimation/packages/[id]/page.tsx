@@ -86,6 +86,7 @@ export default function PackageDetailPage() {
             estimationId={pkg.EstimationID}
             packageId={packageId}
             items={items}
+            inventoryItems={[]} 
             onSuccess={() => window.location.reload()}
             onCancel={() => setShowForm(false)}
           />

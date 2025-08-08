@@ -1,7 +1,7 @@
 // src/app/(admin)/datasheets/templates/[id]/verify/page.tsx
 
 import { notFound, redirect } from "next/navigation";
-import { getTemplateDetailsById } from "@/backend/database/templateViewQueries";
+import { getTemplateDetailsById } from "@/backend/services/templateService";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import { Metadata } from "next";
 import TemplateViewer from "../TemplateViewer";
@@ -34,7 +34,11 @@ export default async function TemplateVerifyPage({ params }: PageProps) {
       <h1 className="text-2xl font-semibold mb-6">Verify Template</h1>
 
       {/* ✅ Read-only view of the template */}
-      <TemplateViewer data={rawData.datasheet} />
+      <TemplateViewer
+        data={rawData.datasheet}
+        unitSystem="SI"
+        language="eng"
+      />
 
       {/* ✅ Verification form */}
       <VerifyForm sheetId={templateId} />

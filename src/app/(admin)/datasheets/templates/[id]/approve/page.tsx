@@ -1,7 +1,7 @@
 // src/app/(admin)/datasheets/templates/[id]/approve/page.tsx
 
 import { notFound, redirect } from "next/navigation";
-import { getTemplateDetailsById } from "@/backend/database/templateViewQueries";
+import { getTemplateDetailsById } from "@/backend/services/templateService";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import { Metadata } from "next";
 import TemplateViewer from "../TemplateViewer";
@@ -31,7 +31,11 @@ export default async function TemplateApprovePage({ params }: PageProps) {
     <div className="container max-w-6xl py-6">
       <h1 className="text-2xl font-semibold mb-6">Approve Template</h1>
 
-      <TemplateViewer data={rawData.datasheet} />
+      <TemplateViewer
+        data={rawData.datasheet}
+        unitSystem="SI"
+        language="eng"
+      />
 
       <ApproveButton sheetId={templateId} />
     </div>
