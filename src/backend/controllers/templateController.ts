@@ -3,10 +3,56 @@
 import { Request, Response, RequestHandler } from "express";
 import { poolPromise } from "../config/db";
 import { unifiedSheetSchema } from "@/validation/sheetSchema";
-import { createTemplate, updateTemplate, verifyTemplate, approveTemplate } from "../services/templateService";
-import { getTemplateDetailsById } from "../services/templateService";
+import { 
+  createTemplate, 
+  updateTemplate, 
+  verifyTemplate, 
+  approveTemplate,
+  getTemplateDetailsById, 
+  getTemplateAuditEntries
+} from "../services/templateService";
 import { generateDatasheetPDF } from "@/utils/generateDatasheetPDF";
 import { generateDatasheetExcel } from "@/utils/generateDatasheetExcel";
+import { getSheetNotes } from "@/backend/services/sheetNotesService";
+import { getAttachmentsBySheet } from "@/backend/services/attachmentsService";
+import type { AttachmentDTO } from "@/types/attachments";
+import { duplicateSheet, createRevision, type LinkPolicy } from "@/backend/services/sheetVersioningService";
+import { HttpError } from "@/utils/errors";
+import { getUserId } from "@/types/auth";
+
+type DBAttachmentRow = {
+  AttachmentID: number;
+  OriginalName: string;
+  StoredName: string;
+  ContentType: string;
+  FileSizeBytes: number | string;
+  UploadedAt: Date | string;
+  UploadedBy: number | null;
+};
+
+function isAttachmentDTO(x: unknown): x is AttachmentDTO {
+  return typeof x === "object" && x !== null && "FileName" in x && "MimeType" in x;
+}
+
+function isDBAttachmentRow(x: unknown): x is DBAttachmentRow {
+  return typeof x === "object" && x !== null && "OriginalName" in x && "ContentType" in x;
+}
+
+function mapDbRowToDTO(row: DBAttachmentRow, sheetId: number): AttachmentDTO {
+  const createdAt =
+    row.UploadedAt instanceof Date ? row.UploadedAt.toISOString() : String(row.UploadedAt);
+  return {
+    AttachmentID: row.AttachmentID,
+    SheetID: sheetId,
+    FileName: row.OriginalName,
+    StoredName: row.StoredName,
+    MimeType: row.ContentType,
+    SizeBytes: Number(row.FileSizeBytes),
+    Url: `/api/backend/attachments/view/${row.AttachmentID}`,
+    CreatedAt: createdAt,
+    CreatedBy: row.UploadedBy ?? null,
+  };
+}
 
 export const createTemplateHandler = async (req: Request, res: Response) => {
   try {
@@ -38,6 +84,24 @@ export const editTemplate: RequestHandler = async (req, res): Promise<void> => {
   } catch (err) {
     console.error("❌ editTemplate error:", err);
     res.status(400).json({ error: (err as Error).message });
+  }
+};
+
+export const getTemplateAudit: RequestHandler = async (req, res) => {
+  try {
+    const sheetId = parseInt(req.params.id, 10);
+    if (Number.isNaN(sheetId)) {
+      res.status(400).json({ error: "Invalid Sheet ID" });
+      return;
+    }
+    const limit = Math.min(parseInt(String(req.query.limit ?? "50"), 10) || 50, 200);
+    const offset = Math.max(parseInt(String(req.query.offset ?? "0"), 10) || 0, 0);
+
+    const entries = await getTemplateAuditEntries(sheetId, limit, offset);
+    res.json({ entries, limit, offset });
+  } catch (err) {
+    console.error("[getTemplateAudit] error:", err);
+    res.status(500).json({ error: "Failed to fetch template audit." });
   }
 };
 
@@ -137,9 +201,14 @@ export const deleteTemplate = async (req: Request, res: Response) => {
 
 export const exportTemplatePDF: RequestHandler = async (req, res) => {
   try {
-    const sheetId = parseInt(req.params.id);
-    const lang = (req.query.lang as string) || "eng";
-    const uom = (req.query.uom as string as "SI" | "USC") || "SI";
+    const sheetId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(sheetId) || sheetId <= 0) {
+      res.status(400).send("Invalid sheet id.");
+      return;
+    }
+
+    const lang = String(req.query.lang || "eng");
+    const uom = (String(req.query.uom || "SI").toUpperCase() as "SI" | "USC");
 
     const result = await getTemplateDetailsById(sheetId, lang, uom);
     if (!result) {
@@ -148,48 +217,126 @@ export const exportTemplatePDF: RequestHandler = async (req, res) => {
     }
 
     const { datasheet } = result;
-    const { buffer, fileName } = await generateDatasheetPDF(datasheet, lang, uom);
+
+    // Load notes + attachments
+    const [notes, attachmentsRaw] = await Promise.all([
+      getSheetNotes(sheetId),
+      getAttachmentsBySheet(sheetId), // may return DBAttachmentRow[] or AttachmentDTO[]
+    ]);
+
+    // Normalize to AttachmentDTO[]
+    const attachments: AttachmentDTO[] = (attachmentsRaw as unknown[]).map((r) => {
+      if (isAttachmentDTO(r)) return r;
+      if (isDBAttachmentRow(r)) return mapDbRowToDTO(r, sheetId);
+      throw new Error("Unexpected attachment row shape");
+    });
+
+    // Generate PDF with notes + attachments included
+    const { buffer, fileName } = await generateDatasheetPDF(datasheet, lang, uom, {
+      notes,
+      attachments,
+      allowNetworkFetch: true,           // if your PDF html fetches thumbnails from your backend
+      authCookie: req.headers.cookie ?? "",
+    });
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Cache-Control", "no-store");
-    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    );
     res.send(buffer);
-  } catch (error) {
-    console.error("❌ Error exporting template PDF:", error);
+  } catch (err) {
+    console.error("❌ Error exporting template PDF:", err);
     res.status(500).send("Failed to generate PDF.");
   }
 };
 
 export const exportTemplateExcel: RequestHandler = async (req, res) => {
   try {
-    const sheetId = parseInt(req.params.id);
-    const lang = (req.query.lang as string) || "eng";
-    const uom = (req.query.uom as string as "SI" | "USC") || "SI";
+    const sheetId = Number.parseInt(req.params.id, 10);
+    const lang = String(req.query.lang || "eng");
+    const uom = (String(req.query.uom || "SI").toUpperCase() as "SI" | "USC");
 
     const result = await getTemplateDetailsById(sheetId, lang, uom);
     if (!result) {
       res.status(404).send("Template not found.");
       return;
     }
-
     const { datasheet } = result;
-    const buffer = await generateDatasheetExcel(datasheet, lang, uom);
 
-    // Utility to sanitize filename segments
+    const [notes, attachmentsRaw] = await Promise.all([
+      getSheetNotes(sheetId),
+      getAttachmentsBySheet(sheetId),
+    ]);
+    const attachments: AttachmentDTO[] = (attachmentsRaw as unknown[]).map((r) => {
+      if (isAttachmentDTO(r)) return r;
+      if (isDBAttachmentRow(r)) return mapDbRowToDTO(r, sheetId);
+      throw new Error("Unexpected attachment row shape");
+    });
+
+    const buffer = await generateDatasheetExcel(datasheet, lang, uom, { notes, attachments });
+
     const clean = (s: string | number | null | undefined) =>
-      String(s ?? "")
-        .replace(/[\/\\?%*:|"<>]/g, "")
-        .trim()
-        .replace(/\s+/g, "_");
+      String(s ?? "").replace(/[\/\\?%*:|"<>]/g, "").trim().replace(/\s+/g, "_");
+    const fileName = `Template-${clean(datasheet.clientName)}-${clean(
+      datasheet.sheetName
+    )}-RevNo-${clean(datasheet.revisionNum)}-${uom}-${lang}.xlsx`;
 
-    const fileName = `Template-${clean(datasheet.clientName)}-${clean(datasheet.sheetName)}-RevNo-${clean(datasheet.revisionNum)}-${uom}-${lang}.xlsx`;
-
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    );
     res.send(buffer);
   } catch (error) {
     console.error("❌ Error exporting template Excel:", error);
     res.status(500).send("Failed to generate Excel.");
+  }
+};
+
+export const duplicateTemplate: RequestHandler = async (req, res) => {
+  try {
+    const sourceId = parseInt(req.params.id, 10);
+    const userId = getUserId(req);
+    const linkPolicy = (req.query.linkPolicy as LinkPolicy) ?? "link";
+
+    const newSheetId = await duplicateSheet({
+      sourceId,
+      userId,
+      isTemplate: true,
+      linkPolicy,
+    });
+
+    res.status(201).json({ newSheetId });
+  } catch (err) {
+    const msg = err instanceof HttpError ? err.message : "Failed to duplicate template";
+    const code = err instanceof HttpError ? err.status : 500;
+    res.status(code).json({ error: msg });
+  }
+};
+
+export const createTemplateRevision: RequestHandler = async (req, res) => {
+  try {
+    const sourceId = parseInt(req.params.id, 10);
+    const userId = getUserId(req);
+    const linkPolicy = (req.query.linkPolicy as LinkPolicy) ?? "link";
+
+    const newSheetId = await createRevision({
+      sourceId,
+      userId,
+      isTemplate: true,
+      linkPolicy,
+    });
+
+    res.status(201).json({ newSheetId });
+  } catch (err) {
+    const msg = err instanceof HttpError ? err.message : "Failed to create template revision";
+    const code = err instanceof HttpError ? err.status : 500;
+    res.status(code).json({ error: msg });
   }
 };
 

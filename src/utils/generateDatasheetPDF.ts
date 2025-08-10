@@ -6,7 +6,19 @@ import { convertToUSC } from "@/utils/unitConversionTable";
 import { getLabel } from "@/utils/translationUtils";
 import { translations } from "@/constants/translations";
 import type { UnifiedSheet, UnifiedSubsheet } from "@/types/sheet";
+import type { SheetNoteDTO } from "@/types/sheetNotes";
+import type { AttachmentDTO } from "@/types/attachments";
 import { Buffer } from "buffer";
+
+/** Optional extras you can pass when generating the PDF */
+type GeneratePDFOptions = {
+  notes?: SheetNoteDTO[];                 // pre-fetched notes (recommended)
+  attachments?: AttachmentDTO[];          // pre-fetched attachments (recommended)
+  /** If true, will try to fetch attachment images by URL and embed as <img> */
+  allowNetworkFetch?: boolean;
+  /** Optional cookie header to access protected /view endpoints, e.g. "session=abc; Path=/; ..." */
+  authCookie?: string;
+};
 
 export interface DatasheetPDFResult {
   buffer: Buffer;
@@ -18,7 +30,8 @@ type LangCode = keyof typeof translations["sheetName"];
 export async function generateDatasheetPDF(
   sheet: UnifiedSheet,
   lang: string,
-  uom: "SI" | "USC"
+  uom: "SI" | "USC",
+  options?: GeneratePDFOptions
 ): Promise<DatasheetPDFResult> {
   const clean = (s: string | number | null | undefined) =>
     String(s ?? "")
@@ -50,7 +63,10 @@ export async function generateDatasheetPDF(
     logoBase64 = fs.readFileSync(logoPath).toString("base64");
   }
 
-  const translatedStatus = translations[sheet.status as keyof typeof translations]?.[langCode] ?? sheet.status ?? "Draft";
+  const translatedStatus =
+    translations[sheet.status as keyof typeof translations]?.[langCode] ??
+    sheet.status ??
+    "Draft";
 
   const buildSubsheetTable = (subsheet: UnifiedSubsheet) => {
     const rows = subsheet.fields
@@ -68,7 +84,6 @@ export async function generateDatasheetPDF(
             value = converted?.value ?? field.value;
             uomLabel = converted?.unit ?? field.uom;
           } else {
-            // Show converted UOM only, no value
             const converted = convertToUSC("0", field.uom); // dummy value to extract USC unit
             uomLabel = converted?.unit ?? field.uom;
             value = "";
@@ -102,6 +117,142 @@ export async function generateDatasheetPDF(
     `;
   };
 
+  // -------- NEW: Notes Section helpers --------
+  const notes = options?.notes ?? [];
+  const notesByType = groupNotes(notes);
+  const notesHtml =
+    notes.length === 0
+      ? ""
+      : `
+      <h2 class="section-title">Notes</h2>
+      ${notesByType
+        .map(
+          (g) => `
+        <div style="margin-bottom:10px;">
+          <div style="font-weight:bold; font-size:11px; margin:6px 0;">${escapeHtml(
+            g.typeLabel
+          )}</div>
+          <ol style="margin:0; padding-left:18px; font-size:10px;">
+            ${g.items
+              .map(
+                (n) =>
+                  `<li style="margin:2px 0; line-height:1.35;">${escapeHtml(n.NoteText)}</li>`
+              )
+              .join("")}
+          </ol>
+        </div>
+      `
+        )
+        .join("")}
+    `;
+
+  // -------- NEW: Attachments Section helpers --------
+  const atts = options?.attachments ?? [];
+  const groupedAtts = groupAttachments(atts);
+
+  // If allowed, try to fetch image bytes and embed as data-url (gracefully falls back if it fails)
+  async function embedImageIfAllowed(a: AttachmentDTO): Promise<string | null> {
+    if (!options?.allowNetworkFetch) return null;
+    if (!a.Url || !a.MimeType?.startsWith("image/")) return null;
+    try {
+      const res = await fetch(a.Url, {
+        headers: options?.authCookie ? { Cookie: options.authCookie } : undefined,
+      });
+      if (!res.ok) return null;
+      const ab = await res.arrayBuffer();
+      const b64 = Buffer.from(ab).toString("base64");
+      return `data:${a.MimeType};base64,${b64}`;
+    } catch {
+      return null;
+    }
+  }
+
+  async function buildAttachmentsHtml(): Promise<string> {
+    if (atts.length === 0) return "";
+
+    // IMAGES
+    let imagesBlock = "";
+    if (groupedAtts.images.length > 0) {
+      const itemsHtml = await Promise.all(
+        groupedAtts.images.map(async (a) => {
+          const dataUrl = await embedImageIfAllowed(a);
+          const imgTag = dataUrl
+            ? `<img src="${dataUrl}" alt="${escapeHtml(
+                a.FileName
+              )}" style="max-width:160px; max-height:120px; object-fit:contain; border:1px solid #e5e7eb; padding:4px; background:#fff;" />`
+            : `<div style="font-size:10px; color:#6b7280; border:1px dashed #d1d5db; padding:8px; text-align:center;">(image preview disabled)</div>`;
+          const link = a.Url
+            ? `<div><a href="${a.Url}" style="font-size:9px; color:#2563eb; text-decoration:none;">${escapeHtml(
+                a.FileName
+              )}</a></div>`
+            : `<div style="font-size:9px;">${escapeHtml(a.FileName)}</div>`;
+          return `
+            <div style="display:inline-block; margin:6px; text-align:center;">
+              ${imgTag}
+              ${link}
+            </div>
+          `;
+        })
+      );
+
+      imagesBlock = `
+        <div style="margin-top:8px;">
+          <div style="font-weight:bold; font-size:11px; margin:6px 0;">Images (${groupedAtts.images.length})</div>
+          <div>${itemsHtml.join("")}</div>
+        </div>
+      `;
+    }
+
+    // PDFs
+    const pdfsBlock =
+      groupedAtts.pdfs.length > 0
+        ? `
+      <div style="margin-top:8px;">
+        <div style="font-weight:bold; font-size:11px; margin:6px 0;">PDFs (${groupedAtts.pdfs.length})</div>
+        <ul style="margin:0; padding-left:16px; font-size:10px;">
+          ${groupedAtts.pdfs
+            .map((a) => {
+              const label = escapeHtml(a.FileName);
+              return a.Url
+                ? `<li style="margin:2px 0;"><a href="${a.Url}" style="color:#2563eb; text-decoration:none;">${label}</a></li>`
+                : `<li style="margin:2px 0;">${label}</li>`;
+            })
+            .join("")}
+        </ul>
+      </div>
+    `
+        : "";
+
+    // OTHERS
+    const othersBlock =
+      groupedAtts.others.length > 0
+        ? `
+      <div style="margin-top:8px;">
+        <div style="font-weight:bold; font-size:11px; margin:6px 0;">Other Files (${groupedAtts.others.length})</div>
+        <ul style="margin:0; padding-left:16px; font-size:10px;">
+          ${groupedAtts.others
+            .map((a) => {
+              const label = escapeHtml(a.FileName);
+              return a.Url
+                ? `<li style="margin:2px 0;"><a href="${a.Url}" style="color:#2563eb; text-decoration:none;">${label}</a></li>`
+                : `<li style="margin:2px 0;">${label}</li>`;
+            })
+            .join("")}
+        </ul>
+      </div>
+    `
+        : "";
+
+    return `
+      <h2 class="section-title">Attachments</h2>
+      ${imagesBlock}
+      ${pdfsBlock}
+      ${othersBlock}
+    `;
+  }
+
+  const attachmentsHtml = await buildAttachmentsHtml();
+
   const htmlContent = `
     <!DOCTYPE html>
     <html>
@@ -119,7 +270,7 @@ export async function generateDatasheetPDF(
         .sheet-meta h3 { font-size: 10px; font-weight: normal; color: #4b5563; margin-top: 4px; }
         .section-title { font-size: 12px; font-weight: bold; margin-top: 20px; }
         .data-table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; }
-        .data-row td.label { font-size: 10px; font-weight: normal; width: 40%; width: 25%; }
+        .data-row td.label { font-size: 10px; font-weight: normal; width: 25%; }
         .data-row td.value { font-size: 10px; font-weight: bold; width: 25%; }
         .table-header th { font-size: 11px; font-weight: bold; }
         .table-body td { font-size: 10px; font-weight: normal; }
@@ -134,8 +285,8 @@ export async function generateDatasheetPDF(
         }
         <div class="sheet-meta">
           <h1>${translatedStatus} – ${sheet.sheetName}</h1>
-          <h2>${sheet.sheetDesc}</h2>
-          <h3>${sheet.sheetDesc2}</h3>
+          <h2>${sheet.sheetDesc ?? ""}</h2>
+          <h3>${sheet.sheetDesc2 ?? ""}</h3>
         </div>
       </div>
 
@@ -143,10 +294,10 @@ export async function generateDatasheetPDF(
       <table class="data-table" style="width:100%; border-collapse: collapse;" border="1">
         <tr class="data-row">
           <td class="label">${getUI("sheetName")}</td><td class="value">${sheet.sheetName}</td>
-          <td class="label">${getUI("sheetDesc")}</td><td class="value">${sheet.sheetDesc}</td>
+          <td class="label">${getUI("sheetDesc")}</td><td class="value">${sheet.sheetDesc ?? "-"}</td>
         </tr>
         <tr class="data-row">
-          <td class="label">${getUI("sheetDesc2")}</td><td class="value">${sheet.sheetDesc2}</td>
+          <td class="label">${getUI("sheetDesc2")}</td><td class="value">${sheet.sheetDesc2 ?? "-"}</td>
           <td class="label">${getUI("clientDocNum")}</td><td class="value">${sheet.clientDocNum ?? "-"}</td>
         </tr>
         <tr class="data-row">
@@ -155,18 +306,18 @@ export async function generateDatasheetPDF(
         </tr>
         <tr class="data-row">
           <td class="label">${getUI("companyProjectNum ")}</td><td class="value">${sheet.companyProjectNum ?? "-"}</td>
-          <td class="label">${getUI("areaName")}</td><td class="value">${sheet.areaName}</td>
+          <td class="label">${getUI("areaName")}</td><td class="value">${sheet.areaName ?? "-"}</td>
         </tr>
         <tr class="data-row">
-          <td class="label">${getUI("packageName")}</td><td class="value">${sheet.packageName}</td>
-          <td class="label">${getUI("revisionNum")}</td><td class="value">${sheet.revisionNum}</td>
+          <td class="label">${getUI("packageName")}</td><td class="value">${sheet.packageName ?? "-"}</td>
+          <td class="label">${getUI("revisionNum")}</td><td class="value">${sheet.revisionNum ?? "-"}</td>
         </tr>
         <tr class="data-row">
-          <td class="label">${getUI("revisionDate")}</td><td class="value">${sheet.revisionDate}</td>
-          <td class="label">${getUI("preparedByName")}</td><td class="value">${sheet.preparedByName}</td>
+          <td class="label">${getUI("revisionDate")}</td><td class="value">${sheet.revisionDate ?? "-"}</td>
+          <td class="label">${getUI("preparedByName")}</td><td class="value">${sheet.preparedByName ?? "-"}</td>
         </tr>
         <tr class="data-row">
-          <td class="label">${getUI("preparedByDate")}</td><td class="value">${sheet.preparedByDate}</td>
+          <td class="label">${getUI("preparedByDate")}</td><td class="value">${sheet.preparedByDate ?? "-"}</td>
           <td class="label">${getUI("modifiedByName")}</td><td class="value">${sheet.modifiedByName || "-"}</td>
         </tr>
         <tr class="data-row">
@@ -178,12 +329,12 @@ export async function generateDatasheetPDF(
           <td class="label">${getUI("rejectComment")}</td><td class="value">${sheet.rejectComment || "-"}</td>
         </tr>
         <tr class="data-row">
-          <td class="label">${getUI("verifiedByName")}</td><td class="value">${sheet.verifiedByName}</td>
-          <td class="label">${getUI("verifiedByDate")}</td><td class="value">${sheet.verifiedDate}</td>
+          <td class="label">${getUI("verifiedByName")}</td><td class="value">${sheet.verifiedByName ?? "-"}</td>
+          <td class="label">${getUI("verifiedByDate")}</td><td class="value">${sheet.verifiedDate ?? "-"}</td>
         </tr>
         <tr class="data-row">
-          <td class="label">${getUI("approvedByName")}</td><td class="value">${sheet.approvedByName}</td>
-          <td class="label">${getUI("approvedByDate")}</td><td class="value">${sheet.approvedDate}</td>
+          <td class="label">${getUI("approvedByName")}</td><td class="value">${sheet.approvedByName ?? "-"}</td>
+          <td class="label">${getUI("approvedByDate")}</td><td class="value">${sheet.approvedDate ?? "-"}</td>
         </tr>
       </table>
 
@@ -203,11 +354,11 @@ export async function generateDatasheetPDF(
         </tr>
         <tr class="data-row">
           <td class="label">${getUI("suppName")}</td><td class="value">${sheet.suppName}</td>
-          <td class="label">${getUI("installPackNum")}</td><td class="value">${sheet.installPackNum}</td>
+          <td class="label">${getUI("installPackNum")}</td><td class="value">${sheet.installPackNum ?? "-"}</td>
         </tr>
         <tr class="data-row">
           <td class="label">${getUI("equipSize")}</td><td class="value">${sheet.equipSize}</td>
-          <td class="label">${getUI("modelNum")}</td><td class="value">${sheet.modelNum}</td>
+          <td class="label">${getUI("modelNum")}</td><td class="value">${sheet.modelNum ?? "-"}</td>
         </tr>
         <tr class="data-row">
           <td class="label">${getUI("driver")}</td><td class="value">${sheet.driver ?? "-"}</td>
@@ -228,7 +379,11 @@ export async function generateDatasheetPDF(
       </table>
 
       ${sheet.subsheets.map(buildSubsheetTable).join("")}
-      
+
+      ${notesHtml}
+
+      ${attachmentsHtml}
+
       <div style="font-size:9px; text-align:center; color:#6b7280; margin-top:40px; border-top:1px solid #ccc; padding-top:10px;">
         Generated by <strong>SpecVerse</strong> | © Jeff Martin Abayon, 2025 |
         <a href="https://github.com/jmjabayon928/specverse" target="_blank" style="color:#2563eb;">www.github.com/jmjabayon928/specverse</a>
@@ -254,4 +409,41 @@ export async function generateDatasheetPDF(
     buffer: Buffer.from(pdfBuffer),
     fileName,
   };
+}
+
+/* ---------------- helpers ---------------- */
+
+function groupNotes(notes: SheetNoteDTO[]): Array<{ typeLabel: string; items: SheetNoteDTO[] }> {
+  if (!notes?.length) return [];
+  const by: Record<string, SheetNoteDTO[]> = {};
+  for (const n of notes) {
+    const key = n.NoteType ?? String(n.NoteTypeID);
+    (by[key] ||= []).push(n);
+  }
+  return Object.entries(by)
+    .map(([typeLabel, items]) => {
+      items.sort((a, b) => a.OrderIndex - b.OrderIndex || a.NoteID - b.NoteID);
+      return { typeLabel, items };
+    })
+    .sort((a, b) => a.typeLabel.localeCompare(b.typeLabel));
+}
+
+function groupAttachments(atts: AttachmentDTO[]) {
+  const images: AttachmentDTO[] = [];
+  const pdfs: AttachmentDTO[] = [];
+  const others: AttachmentDTO[] = [];
+  for (const a of atts ?? []) {
+    const mt = (a.MimeType || "").toLowerCase();
+    if (mt.startsWith("image/")) images.push(a);
+    else if (mt.includes("/pdf")) pdfs.push(a);
+    else others.push(a);
+  }
+  return { images, pdfs, others };
+}
+
+function escapeHtml(s: string) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }

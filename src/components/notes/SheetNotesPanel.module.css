@@ -1,0 +1,5 @@
+.colActions { width: 5%; }
+.colNote    { width: 95%; }
+
+/* optional helpers */
+.noPad { padding: 0; border: 0; }

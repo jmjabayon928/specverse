@@ -8,6 +8,24 @@ import { convertToUSC } from "@/utils/unitConversionTable";
 import { getSheetTranslations } from "@/backend/services/translationService";
 import { applySheetTranslations } from "@/utils/applySheetTranslations";
 
+export interface FilledValueUpdate {
+  InfoTemplateID: number;
+  Value: string | number | null;
+  UOM?: string | null;
+}
+
+export interface ChangeLogEntry {
+  ChangeLogID: number;
+  SheetID: number;
+  InfoTemplateID: number;
+  OldValue: string | null;
+  NewValue: string | null;
+  UOM: string | null;
+  ChangedBy: number | null;
+  ChangeDate: string; // ISO
+  ChangedByName?: string | null;
+}
+
 export const fetchAllFilled = async () => {
   const pool = await poolPromise;
 
@@ -43,7 +61,8 @@ export async function createFilledSheet(
     await tx.begin();
 
     // 🔹 Fetch template InfoTemplates to get Required and UOM
-    const templateFieldsResult = await tx.request()
+    const templateFieldsResult = await tx
+      .request()
       .input("TemplateID", sql.Int, data.templateId)
       .query(`
         SELECT t.InfoTemplateID, t.Required, t.UOM, t.OrderIndex, s.SubName
@@ -52,7 +71,10 @@ export async function createFilledSheet(
         WHERE s.SheetID = @TemplateID
       `);
 
-    const templateFieldMap: Record<string, Record<number, { required: boolean, uom: string | null }>> = {};
+    const templateFieldMap: Record<
+      string,
+      Record<number, { required: boolean; uom: string | null }>
+    > = {};
     for (const row of templateFieldsResult.recordset) {
       const subName = row.SubName;
       const orderIndex = row.OrderIndex;
@@ -64,7 +86,8 @@ export async function createFilledSheet(
     }
 
     // 🔹 Insert into Sheets table
-    const sheetResult = await tx.request()
+    const sheetResult = await tx
+      .request()
       .input("SheetName", sql.VarChar(255), data.sheetName)
       .input("SheetDesc", sql.VarChar(255), data.sheetDesc)
       .input("SheetDesc2", sql.VarChar(255), data.sheetDesc2)
@@ -121,11 +144,59 @@ export async function createFilledSheet(
 
     const sheetId = sheetResult.recordset[0].SheetID;
 
+    // 🔹 Copy template notes -> filled sheet (replicate rows)
+    // Adjust column names if your SheetNotes schema differs.
+    await tx
+      .request()
+      .input("TemplateID", sql.Int, data.templateId)
+      .input("NewSheetID", sql.Int, sheetId)
+      .input("UserID", sql.Int, context.userId)
+      .query(`
+        INSERT INTO SheetNotes (SheetID, NoteText, CreatedBy, CreatedAt)
+        SELECT @NewSheetID,
+               SN.NoteText,
+               @UserID,                -- creator set to the user cloning the sheet
+               GETDATE()
+        FROM SheetNotes SN
+        WHERE SN.SheetID = @TemplateID;
+      `);
+
+    // 🔹 Reference template attachments -> filled sheet (no file copy)
+    // If your Attachments schema uses different names, adjust the SELECT list accordingly.
+    // Assumes columns: AttachmentID, SheetID, FileName, FileUrl (or FilePath), MimeType, Size, StorageKey (or BlobKey),
+    // UploadedBy, UploadedAt, IsReference (bit), SourceAttachmentID (int, nullable)
+    await tx
+      .request()
+      .input("TemplateID", sql.Int, data.templateId)
+      .input("NewSheetID", sql.Int, sheetId)
+      .input("UserID", sql.Int, context.userId)
+      .query(`
+        INSERT INTO Attachments (
+          SheetID, FileName, FileUrl, MimeType, Size, StorageKey,
+          UploadedBy, UploadedAt, IsReference, SourceAttachmentID
+        )
+        SELECT
+          @NewSheetID,
+          A.FileName,
+          A.FileUrl,            -- or A.FilePath
+          A.MimeType,
+          A.Size,
+          A.StorageKey,         -- or A.BlobKey
+          @UserID,
+          GETDATE(),
+          1,                    -- IsReference = true
+          A.AttachmentID        -- keep pointer to original template attachment
+        FROM Attachments A
+        WHERE A.SheetID = @TemplateID;
+      `);
+
+    // 🔹 Build subsheets/fields and copy values
     for (let i = 0; i < data.subsheets.length; i++) {
       const subsheet = data.subsheets[i];
 
       const templateSubId = subsheet.id ?? null;
-      const subRes = await tx.request()
+      const subRes = await tx
+        .request()
         .input("SubName", sql.VarChar(150), subsheet.name)
         .input("SheetID", sql.Int, sheetId)
         .input("OrderIndex", sql.Int, i)
@@ -147,7 +218,8 @@ export async function createFilledSheet(
         const requiredFromTemplate = fieldTemplate?.required ?? false;
         const uomFromTemplate = fieldTemplate?.uom ?? field.uom ?? "";
 
-        const infoRes = await tx.request()
+        const infoRes = await tx
+          .request()
           .input("SubID", sql.Int, newSubId)
           .input("Label", sql.VarChar(150), field.label)
           .input("InfoType", sql.VarChar(30), field.infoType)
@@ -156,16 +228,19 @@ export async function createFilledSheet(
           .input("Required", sql.Bit, requiredFromTemplate ? 1 : 0)
           .input("TemplateInfoTemplateID", sql.Int, templateFieldId)
           .query(`
-            INSERT INTO InformationTemplates (SubID, Label, InfoType, OrderIndex, UOM, Required, TemplateInfoTemplateID)
+            INSERT INTO InformationTemplates
+              (SubID, Label, InfoType, OrderIndex, UOM, Required, TemplateInfoTemplateID)
             OUTPUT INSERTED.InfoTemplateID
-            VALUES (@SubID, @Label, @InfoType, @OrderIndex, @UOM, @Required, @TemplateInfoTemplateID)
+            VALUES
+              (@SubID, @Label, @InfoType, @OrderIndex, @UOM, @Required, @TemplateInfoTemplateID)
           `);
 
         const newInfoId = infoRes.recordset[0].InfoTemplateID;
 
         if (field.options?.length) {
           for (let k = 0; k < field.options.length; k++) {
-            await tx.request()
+            await tx
+              .request()
               .input("InfoTemplateID", sql.Int, newInfoId)
               .input("OptionValue", sql.VarChar(100), field.options[k])
               .input("SortOrder", sql.Int, k)
@@ -179,13 +254,9 @@ export async function createFilledSheet(
         const originalId = field.id;
         const value = originalId ? data.fieldValues[originalId] : null;
 
-        if (
-          originalId &&
-          value !== undefined &&
-          value !== null &&
-          String(value).trim() !== ""
-        ) {
-          await tx.request()
+        if (originalId && value !== undefined && value !== null && String(value).trim() !== "") {
+          await tx
+            .request()
             .input("InfoTemplateID", sql.Int, newInfoId)
             .input("SheetID", sql.Int, sheetId)
             .input("InfoValue", sql.VarChar(sql.MAX), value)
@@ -197,6 +268,7 @@ export async function createFilledSheet(
       }
     }
 
+    // 🔹 Audit + notify
     if (context?.userId) {
       await insertAuditLog({
         PerformedBy: context.userId,
@@ -227,7 +299,6 @@ export async function createFilledSheet(
     throw err;
   }
 }
-
 
 export async function getFilledSheetTemplateId(sheetId: number) {
   const pool = await poolPromise;
@@ -501,6 +572,117 @@ function buildUnifiedSheetFromRow(row: RawSheetRow): UnifiedSheet {
   };
 }
 
+export interface FilledAuditRow {
+  ChangeLogID: number;
+  SheetID: number;
+  InfoTemplateID: number;
+  OldValue: string | null;
+  NewValue: string | null;
+  UOM: string | null;
+  ChangedBy: number | null;
+  ChangeDate: Date;
+  ChangedByName?: string | null;
+  InfoLabel?: string | null;
+}
+
+function pickName(row: Record<string, unknown>): string | null {
+  const grab = (k: string) =>
+    k in row && typeof row[k] === "string" && (row[k] as string).trim() !== ""
+      ? (row[k] as string).trim()
+      : null;
+
+  const first = grab("FirstName");
+  const last = grab("LastName");
+  const fullFL = [first, last].filter(Boolean).join(" ").trim();
+
+  return (
+    grab("FullName") ??
+    grab("DisplayName") ??
+    (fullFL || null) ??
+    grab("UserName") ??
+    grab("Name") ??
+    grab("Email")
+  );
+}
+
+export async function getFilledAuditEntries(
+  sheetId: number,
+  limit = 50,
+  offset = 0
+): Promise<FilledAuditRow[]> {
+  const pool = await poolPromise;
+
+  // 1) Fetch audit rows (no user join), still join templates for label
+  const r = pool.request();
+  r.input("SheetID", sql.Int, sheetId);
+  r.input("Limit", sql.Int, limit);
+  r.input("Offset", sql.Int, offset);
+  const q = `
+    SELECT
+      cl.ChangeLogID,
+      cl.SheetID,
+      cl.InfoTemplateID,
+      CAST(cl.OldValue AS NVARCHAR(MAX)) AS OldValue,
+      CAST(cl.NewValue AS NVARCHAR(MAX)) AS NewValue,
+      CAST(cl.UOM AS NVARCHAR(100)) AS UOM,
+      cl.ChangedBy,
+      cl.ChangeDate,
+      it.Label AS InfoLabel
+    FROM dbo.ChangeLogs cl
+    LEFT JOIN dbo.InformationTemplates it ON it.InfoTemplateID = cl.InfoTemplateID
+    WHERE cl.SheetID = @SheetID
+    ORDER BY cl.ChangeDate DESC, cl.ChangeLogID DESC
+    OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;
+  `;
+  const res = await r.query<FilledAuditRow>(q);
+  const entries = res.recordset;
+
+  // 2) Collect distinct user ids
+  const ids = Array.from(
+    new Set(
+      entries
+        .map((e) => e.ChangedBy)
+        .filter((v): v is number => typeof v === "number")
+    )
+  );
+  if (ids.length === 0) return entries;
+
+  // 3) Fetch users as SELECT * and build a display-name map
+  const r2 = pool.request();
+  r2.input("IdsJson", sql.NVarChar(sql.MAX), JSON.stringify(ids));
+  const usersRes = await r2.query<_Record>(`
+    WITH Ids AS (
+      SELECT TRY_CAST([value] AS int) AS UserID
+      FROM OPENJSON(@IdsJson)
+    )
+    SELECT u.*
+    FROM dbo.Users u
+    JOIN Ids i ON i.UserID = u.UserID
+  `);
+
+  type _Record = Record<string, unknown>;
+  const nameById = new Map<number, string | null>();
+  for (const row of usersRes.recordset as _Record[]) {
+    const idVal = row["UserID"];
+    const id =
+      typeof idVal === "number"
+        ? idVal
+        : typeof idVal === "string"
+        ? Number.parseInt(idVal, 10)
+        : NaN;
+    if (!Number.isNaN(id)) {
+      nameById.set(id, pickName(row));
+    }
+  }
+
+  // 4) Attach ChangedByName
+  for (const e of entries) {
+    e.ChangedByName = e.ChangedBy != null ? nameById.get(e.ChangedBy) ?? null : null;
+  }
+
+  return entries;
+}
+
 export const updateFilledSheet = async (
   sheetId: number,
   input: UnifiedSheet,
@@ -509,143 +691,246 @@ export const updateFilledSheet = async (
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
 
+  // Normalize to a comparable string (treat null/undefined as "")
+  const norm = (v: unknown) =>
+    v === null || v === undefined ? "" : String(v);
+
   try {
     await transaction.begin();
 
-    const request = transaction.request();
-
-    request.input("SheetID", sheetId);
-    request.input("SheetName", input.sheetName);
-    request.input("SheetDesc", input.sheetDesc);
-    request.input("SheetDesc2", input.sheetDesc2);
-    request.input("ClientDocNum", input.clientDocNum);
-    request.input("ClientProjNum", input.clientProjectNum);
-    request.input("CompanyDocNum", input.companyDocNum);
-    request.input("CompanyProjNum", input.companyProjectNum);
-    request.input("AreaID", input.areaId);
-    request.input("PackageName", input.packageName);
-    request.input("RevisionNum", input.revisionNum);
-    request.input("RevisionDate", input.revisionDate);
-    request.input("ItemLocation", input.itemLocation);
-    request.input("RequiredQty", input.requiredQty);
-    request.input("EquipmentName", input.equipmentName);
-    request.input("EquipmentTagNum", input.equipmentTagNum);
-    request.input("ServiceName", input.serviceName);
-    request.input("ManuID", input.manuId);
-    request.input("SuppID", input.suppId);
-    request.input("InstallPackNum", input.installPackNum);
-    request.input("EquipSize", input.equipSize);
-    request.input("ModelNum", input.modelNum);
-    request.input("Driver", input.driver);
-    request.input("LocationDWG", input.locationDwg);
-    request.input("PID", input.pid);
-    request.input("InstallDWG", input.installDwg);
-    request.input("CodeStd", input.codeStd);
-    request.input("CategoryID", input.categoryId);
-    request.input("ClientID", input.clientId);
-    request.input("ProjectID", input.projectId);
-    request.input("ModifiedByID", updatedBy);
-
-    await request.query(`
-      UPDATE Sheets SET
-        SheetName = @SheetName,
-        SheetDesc = @SheetDesc,
-        SheetDesc2 = @SheetDesc2,
-        ClientDocNum = @ClientDocNum,
-        ClientProjNum = @ClientProjNum,
-        CompanyDocNum = @CompanyDocNum,
-        CompanyProjNum = @CompanyProjNum,
-        AreaID = @AreaID,
-        PackageName = @PackageName,
-        RevisionNum = @RevisionNum,
-        RevisionDate = @RevisionDate,
-        ItemLocation = @ItemLocation,
-        RequiredQty = @RequiredQty,
-        EquipmentName = @EquipmentName,
-        EquipmentTagNum = @EquipmentTagNum,
-        ServiceName = @ServiceName,
-        ManuID = @ManuID,
-        SuppID = @SuppID,
-        InstallPackNum = @InstallPackNum,
-        EquipSize = @EquipSize,
-        ModelNum = @ModelNum,
-        Driver = @Driver,
-        LocationDWG = @LocationDWG,
-        PID = @PID,
-        InstallDWG = @InstallDWG,
-        CodeStd = @CodeStd,
-        CategoryID = @CategoryID,
-        ClientID = @ClientID,
-        ProjectID = @ProjectID,
-        ModifiedByID = @ModifiedByID,
-        ModifiedByDate = GETDATE(),
-        Status = 'Modified Draft'
-      WHERE SheetID = @SheetID
-    `);
-
-    const oldValuesResult = await transaction.request()
+    // --- 1) Guard: don't allow edits to locked sheets ---
+    const statusRow = await transaction
+      .request()
       .input("SheetID", sql.Int, sheetId)
-      .query(`
-        SELECT IV.InfoTemplateID, IV.InfoValue, IT.Label, IT.UOM
-        FROM InformationValues IV
-        JOIN InformationTemplates IT ON IV.InfoTemplateID = IT.InfoTemplateID
+      .query<{ Status: string }>(`
+        SELECT Status
+        FROM Sheets
         WHERE SheetID = @SheetID
       `);
 
-    const oldValuesMap = new Map<number, { value: string; label: string; uom: string | null }>();
+    const currentStatus = statusRow.recordset[0]?.Status ?? "Draft";
+    if (currentStatus === "Verified" || currentStatus === "Approved") {
+      throw new Error("Sheet is locked (Verified/Approved); it cannot be modified.");
+    }
+
+    // Decide next status
+    const nextStatus =
+      currentStatus === "Rejected"
+        ? "Modified Draft"
+        : (currentStatus === "Draft" || currentStatus === "Modified Draft")
+        ? currentStatus
+        : "Modified Draft";
+
+    // --- 2) Update header / master fields (unchanged semantics) ---
+    const request = transaction.request();
+    request.input("SheetID", sql.Int, sheetId);
+    request.input("SheetName", sql.VarChar(255), input.sheetName);
+    request.input("SheetDesc", sql.VarChar(255), input.sheetDesc);
+    request.input("SheetDesc2", sql.VarChar(255), input.sheetDesc2 ?? null);
+    request.input("ClientDocNum", sql.Int, input.clientDocNum);
+    request.input("ClientProjNum", sql.Int, input.clientProjectNum);
+    request.input("CompanyDocNum", sql.Int, input.companyDocNum);
+    request.input("CompanyProjNum", sql.Int, input.companyProjectNum);
+    request.input("AreaID", sql.Int, input.areaId);
+    request.input("PackageName", sql.VarChar(100), input.packageName);
+    request.input("RevisionNum", sql.Int, input.revisionNum);
+    request.input(
+      "RevisionDate",
+      sql.Date,
+      input.revisionDate ? new Date(input.revisionDate) : null
+    );
+    request.input("ItemLocation", sql.VarChar(255), input.itemLocation);
+    request.input("RequiredQty", sql.Int, input.requiredQty);
+    request.input("EquipmentName", sql.VarChar(150), input.equipmentName);
+    request.input("EquipmentTagNum", sql.VarChar(150), input.equipmentTagNum);
+    request.input("ServiceName", sql.VarChar(150), input.serviceName);
+    request.input("ManuID", sql.Int, input.manuId);
+    request.input("SuppID", sql.Int, input.suppId);
+    request.input("InstallPackNum", sql.VarChar(100), input.installPackNum);
+    request.input("EquipSize", sql.Int, input.equipSize);
+    request.input("ModelNum", sql.VarChar(50), input.modelNum);
+    request.input("Driver", sql.VarChar(150), input.driver ?? null);
+    request.input("LocationDWG", sql.VarChar(255), input.locationDwg ?? null);
+    request.input("PID", sql.Int, input.pid);
+    request.input("InstallDWG", sql.VarChar(255), input.installDwg ?? null);
+    request.input("CodeStd", sql.VarChar(255), input.codeStd ?? null);
+    request.input("CategoryID", sql.Int, input.categoryId ?? null);
+    request.input("ClientID", sql.Int, input.clientId ?? null);
+    request.input("ProjectID", sql.Int, input.projectId ?? null);
+    request.input("ModifiedByID", sql.Int, updatedBy);
+    request.input("NextStatus", sql.VarChar(50), nextStatus);
+
+    await request.query(`
+      UPDATE Sheets SET
+        SheetName       = @SheetName,
+        SheetDesc       = @SheetDesc,
+        SheetDesc2      = @SheetDesc2,
+        ClientDocNum    = @ClientDocNum,
+        ClientProjNum   = @ClientProjNum,
+        CompanyDocNum   = @CompanyDocNum,
+        CompanyProjNum  = @CompanyProjNum,
+        AreaID          = @AreaID,
+        PackageName     = @PackageName,
+        RevisionNum     = @RevisionNum,
+        RevisionDate    = @RevisionDate,
+        ItemLocation    = @ItemLocation,
+        RequiredQty     = @RequiredQty,
+        EquipmentName   = @EquipmentName,
+        EquipmentTagNum = @EquipmentTagNum,
+        ServiceName     = @ServiceName,
+        ManuID          = @ManuID,
+        SuppID          = @SuppID,
+        InstallPackNum  = @InstallPackNum,
+        EquipSize       = @EquipSize,
+        ModelNum        = @ModelNum,
+        Driver          = @Driver,
+        LocationDWG     = @LocationDWG,
+        PID             = @PID,
+        InstallDWG      = @InstallDWG,
+        CodeStd         = @CodeStd,
+        CategoryID      = @CategoryID,
+        ClientID        = @ClientID,
+        ProjectID       = @ProjectID,
+        ModifiedByID    = @ModifiedByID,
+        ModifiedByDate  = GETDATE(),
+        Status          = @NextStatus
+      WHERE SheetID = @SheetID
+    `);
+
+    // --- 3) Snapshot old values (by InfoTemplateID) for change detection ---
+    const oldValuesResult = await transaction
+      .request()
+      .input("SheetID", sql.Int, sheetId)
+      .query<{
+        InfoTemplateID: number;
+        InfoValue: string | null;
+        Label: string;
+        UOM: string | null;
+      }>(`
+        SELECT IV.InfoTemplateID, IV.InfoValue, IT.Label, IT.UOM
+        FROM InformationValues IV
+        JOIN InformationTemplates IT ON IV.InfoTemplateID = IT.InfoTemplateID
+        WHERE IV.SheetID = @SheetID
+      `);
+
+    const oldValuesMap = new Map<
+      number,
+      { value: string; label: string; uom: string | null }
+    >();
     for (const row of oldValuesResult.recordset) {
       oldValuesMap.set(row.InfoTemplateID, {
-        value: row.InfoValue,
+        value: norm(row.InfoValue),
         label: row.Label,
-        uom: row.UOM,
+        uom: row.UOM ?? null,
       });
     }
 
-    await transaction.request().query(`
-      DELETE FROM InformationValues WHERE SheetID = ${sheetId}
-    `);
+    // --- 4) Replace values (your original behavior) ---
+    await transaction
+      .request()
+      .input("SheetID", sql.Int, sheetId)
+      .query(`
+        DELETE FROM InformationValues
+        WHERE SheetID = @SheetID
+      `);
 
-    const insertedTemplateIds = new Set<number>();
+    const seenTemplateIds = new Set<number>();
 
-    for (const subsheet of input.subsheets) {
-      for (const field of subsheet.fields) {
-        const templateId = field.id;
-        if (!templateId || insertedTemplateIds.has(templateId)) continue;
+    for (const subsheet of input.subsheets ?? []) {
+      for (const field of subsheet.fields ?? []) {
+        const templateId = field.id; // InfoTemplateID
+        if (!templateId) continue;
+        if (seenTemplateIds.has(templateId)) continue; // guard against duplicates
+        seenTemplateIds.add(templateId);
 
-        insertedTemplateIds.add(templateId);
-        const newValue = field.value ?? "";
+        const newValue = norm(field.value);
 
-        await transaction.request()
+        // Insert current value
+        await transaction
+          .request()
           .input("InfoTemplateID", sql.Int, templateId)
           .input("SheetID", sql.Int, sheetId)
-          .input("InfoValue", sql.VarChar(sql.MAX), newValue)
+          .input("InfoValue", sql.NVarChar(sql.MAX), newValue) // NVARCHAR for unicode safety
           .query(`
             INSERT INTO InformationValues (InfoTemplateID, SheetID, InfoValue)
             VALUES (@InfoTemplateID, @SheetID, @InfoValue)
           `);
 
+        // Change detection & logging
         const previous = oldValuesMap.get(templateId);
-        if (previous && previous.value !== newValue) {
-          await transaction.request()
-            .input("SheetID", sql.Int, sheetId)
-            .input("ChangedBy", sql.Int, updatedBy)
-            .input("InfoTemplateID", sql.Int, templateId)
-            .input("OldValue", sql.VarChar(sql.MAX), previous.value)
-            .input("NewValue", sql.VarChar(sql.MAX), newValue)
-            .input("UOM", sql.VarChar(100), previous.uom)
-            .query(`
-              INSERT INTO ChangeLogs (
-                SheetID, ChangedBy, InfoTemplateID,
-                OldValue, NewValue, UOM, ChangeDate
-              ) VALUES (
-                @SheetID, @ChangedBy, @InfoTemplateID,
-                @OldValue, @NewValue, @UOM, GETDATE()
-              )
-            `);
+        if (previous) {
+          const oldValue = previous.value;
+          if (oldValue !== newValue) {
+            await transaction
+              .request()
+              .input("SheetID", sql.Int, sheetId)
+              .input("ChangedBy", sql.Int, updatedBy)
+              .input("InfoTemplateID", sql.Int, templateId)
+              .input("OldValue", sql.NVarChar(sql.MAX), oldValue)
+              .input("NewValue", sql.NVarChar(sql.MAX), newValue)
+              .input("UOM", sql.NVarChar(100), previous.uom)
+              .query(`
+                INSERT INTO ChangeLogs (
+                  SheetID, ChangedBy, InfoTemplateID,
+                  OldValue, NewValue, UOM, ChangeDate
+                )
+                VALUES (
+                  @SheetID, @ChangedBy, @InfoTemplateID,
+                  @OldValue, @NewValue, @UOM, GETDATE()
+                )
+              `);
+          }
+        } else {
+          // newly added (no previous entry existed)
+          if (newValue !== "") {
+            await transaction
+              .request()
+              .input("SheetID", sql.Int, sheetId)
+              .input("ChangedBy", sql.Int, updatedBy)
+              .input("InfoTemplateID", sql.Int, templateId)
+              .input("OldValue", sql.NVarChar(sql.MAX), "")
+              .input("NewValue", sql.NVarChar(sql.MAX), newValue)
+              .input("UOM", sql.NVarChar(100), field.uom ?? null)
+              .query(`
+                INSERT INTO ChangeLogs (
+                  SheetID, ChangedBy, InfoTemplateID,
+                  OldValue, NewValue, UOM, ChangeDate
+                )
+                VALUES (
+                  @SheetID, @ChangedBy, @InfoTemplateID,
+                  @OldValue, @NewValue, @UOM, GETDATE()
+                )
+              `);
+          }
         }
       }
     }
 
+    // --- 5) Log removed/cleared values (present before, missing now) ---
+    for (const [templateId, prev] of oldValuesMap.entries()) {
+      if (!seenTemplateIds.has(templateId) && prev.value !== "") {
+        await transaction
+          .request()
+          .input("SheetID", sql.Int, sheetId)
+          .input("ChangedBy", sql.Int, updatedBy)
+          .input("InfoTemplateID", sql.Int, templateId)
+          .input("OldValue", sql.NVarChar(sql.MAX), prev.value)
+          .input("NewValue", sql.NVarChar(sql.MAX), "")
+          .input("UOM", sql.NVarChar(100), prev.uom)
+          .query(`
+            INSERT INTO ChangeLogs (
+              SheetID, ChangedBy, InfoTemplateID,
+              OldValue, NewValue, UOM, ChangeDate
+            )
+            VALUES (
+              @SheetID, @ChangedBy, @InfoTemplateID,
+              @OldValue, @NewValue, @UOM, GETDATE()
+            )
+          `);
+      }
+    }
+
+    // --- 6) Generic audit + notifications (unchanged) ---
     await insertAuditLog({
       PerformedBy: updatedBy,
       TableName: "Sheets",

@@ -23,6 +23,14 @@ router.put(
   controller.editTemplate
 );
 
+// audit fetch
+router.get(
+  "/:id/audit",
+  verifyToken,
+  // requirePermission("TEMPLATE_REVISE") as RequestHandler,
+  controller.getTemplateAudit
+);
+
 // 🔹 Verify Template
 router.post(
   "/:id/verify",
@@ -87,6 +95,20 @@ router.get(
   verifyToken,
   requirePermission("TEMPLATE_VIEW") as RequestHandler,
   controller.getTemplateDetails
+);
+
+router.post(
+  "/:id/duplicate",
+  verifyToken,
+  requirePermission("TEMPLATE_CREATE"),
+  controller.duplicateTemplate
+);
+
+router.post(
+  "/:id/revisions",
+  verifyToken,
+  requirePermission("TEMPLATE_REVISE"),
+  controller.createTemplateRevision
 );
 
 // 🔹 Get All Templates

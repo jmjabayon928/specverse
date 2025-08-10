@@ -24,6 +24,8 @@ import notificationRoutes from "./routes/notificationRoutes";
 import referenceRoutes from "@/backend/routes/referenceRoutes";
 import statsRoutes from "./routes/statsRoutes";
 import reportsRoutes from "./routes/reportsRoutes";
+import sheetNotesRoutes from "./routes/sheetNotesRoutes";
+import noteTypesRoutes from "./routes/noteTypesRoutes";
 
 const app: Application = express();
 
@@ -57,6 +59,9 @@ app.use("/api/backend/notifications", notificationRoutes);
 app.use("/api/backend", referenceRoutes);
 app.use("/api/backend/stats", statsRoutes);
 app.use("/api/backend/reports", reportsRoutes);
+app.use("/api/backend", sheetNotesRoutes);
+app.use("/api/backend", noteTypesRoutes);
+
 
 // Health check
 app.get("/api/health", (req: Request, res: Response) => {

@@ -10,6 +10,8 @@ import { translations as labelTranslations } from "@/constants/translations";
 import type { UserSession } from "@/types/session";
 import type { UnifiedSheet, SheetStatus } from "@/types/sheet";
 import type { SheetTranslations } from "@/types/translation";
+import type { SheetNoteDTO } from "@/types/sheetNotes";
+import type { AttachmentDTO } from "@/types/attachments";
 
 interface Props {
   sheetId: number;
@@ -18,6 +20,8 @@ interface Props {
   defaultLanguage: string;
   defaultUnitSystem: "SI" | "USC";
   initialTranslations: SheetTranslations | null;
+  initialNotes?: SheetNoteDTO[];
+  initialAttachments?: AttachmentDTO[];
 }
 
 function getUILabel(key: string, language: string) {
@@ -31,22 +35,20 @@ const TemplatePageClient: React.FC<Props> = ({
   defaultLanguage,
   defaultUnitSystem,
   initialTranslations,
+  initialNotes,
+  initialAttachments,
 }) => {
   const [lang, setLang] = useState<string>(defaultLanguage);
   const [unitSystem, setUnitSystem] = useState<"SI" | "USC">(defaultUnitSystem);
 
   useEffect(() => {
     const cookie = document.cookie.split("; ").find((c) => c.startsWith("lang="));
-    if (cookie) {
-      setLang(decodeURIComponent(cookie.split("=")[1]));
-    }
+    if (cookie) setLang(decodeURIComponent(cookie.split("=")[1]));
   }, []);
 
   useEffect(() => {
     const cookie = document.cookie.split("; ").find((c) => c.startsWith("unitSystem="));
-    if (cookie?.includes("USC")) {
-      setUnitSystem("USC");
-    }
+    if (cookie?.includes("USC")) setUnitSystem("USC");
   }, []);
 
   const [translatedTemplate, setTranslatedTemplate] = useState<UnifiedSheet>(template);
@@ -55,9 +57,7 @@ const TemplatePageClient: React.FC<Props> = ({
   useEffect(() => {
     const fetchTemplateWithTranslations = async () => {
       try {
-        const res = await fetch(
-          `/api/backend/templates/${sheetId}?lang=${lang}&uom=${unitSystem}`
-        );
+        const res = await fetch(`/api/backend/templates/${sheetId}?lang=${lang}&uom=${unitSystem}`);
         if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
         const data = await res.json();
         setTranslatedTemplate(data.datasheet);
@@ -92,6 +92,17 @@ const TemplatePageClient: React.FC<Props> = ({
     sheetFieldMap: translations?.sheet,
     optionMap: translations?.options,
   };
+
+  // permissions + lock
+  const status = (template.status ?? "Draft").toUpperCase();
+  const isLocked = status === "VERIFIED" || status === "APPROVED";
+
+  const canCreateNote  = !isLocked && (user?.permissions?.includes("NOTE_CREATE")  ?? false);
+  const canEditNote    = !isLocked && (user?.permissions?.includes("NOTE_EDIT")    ?? false);
+  const canDeleteNote  = !isLocked && (user?.permissions?.includes("NOTE_DELETE")  ?? false);
+
+  const canAddAttachment    = !isLocked && (user?.permissions?.includes("ATTACHMENT_CREATE") ?? false);
+  const canDeleteAttachment = !isLocked && (user?.permissions?.includes("ATTACHMENT_DELETE") ?? false);
 
   return (
     <div className="space-y-6">
@@ -151,10 +162,20 @@ const TemplatePageClient: React.FC<Props> = ({
 
       {/* Viewer */}
       <TemplateViewer
+        sheetId={sheetId} 
         data={translatedTemplate}
-        translations={viewerTranslations}
-        language={lang}
         unitSystem={unitSystem}
+        language={lang}
+        translations={viewerTranslations}
+        isSheetLocked={isLocked}
+        initialNotes={initialNotes}
+        notePermissions={{
+          canCreate: canCreateNote,
+          canEdit: canEditNote,
+          canDelete: canDeleteNote,
+        }}
+        initialAttachments={initialAttachments}
+        attachmentPermissions={{ canCreate: canAddAttachment, canDelete: canDeleteAttachment }}
       />
     </div>
   );

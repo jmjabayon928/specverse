@@ -4,7 +4,6 @@ import { verifyToken } from "../middleware/authMiddleware";
 import { requirePermission } from "../middleware/authMiddleware";
 import * as controller from "../controllers/filledSheetController";
 import { auditAction } from "../middleware/auditMiddleware";
-import { exportFilledSheetPDF, exportFilledSheetExcel } from "../controllers/filledSheetController";
 
 const router = express.Router();
 
@@ -12,10 +11,13 @@ router.get("/", verifyToken, requirePermission("DATASHEET_VIEW"), controller.get
 router.get("/reference-options", verifyToken, requirePermission("DATASHEET_VIEW"), controller.getReferenceOptions);
 router.post("/", verifyToken, requirePermission("DATASHEET_CREATE"), auditAction("Create Filled Sheet"), controller.createFilledSheetHandler);
 router.get("/:id", verifyToken, requirePermission("DATASHEET_VIEW"), controller.getFilledSheetById);
+router.get("/:id/audit", verifyToken, controller.getFilledAudit);
 router.put("/:id", verifyToken, requirePermission("DATASHEET_EDIT"), controller.updateFilledSheetHandler);
 router.post("/:id/verify", verifyToken, requirePermission("DATASHEET_VERIFY"), controller.verifyFilledSheetHandler);
 router.post("/:id/approve", verifyToken, requirePermission("DATASHEET_APPROVE"), controller.approveFilledSheetHandler);
-router.get("/export/:id/pdf", verifyToken, requirePermission("DATASHEET_VIEW"), exportFilledSheetPDF);
-router.get("/export/:id/excel", verifyToken, requirePermission("DATASHEET_VIEW"), exportFilledSheetExcel);
+router.get("/export/:id/pdf", verifyToken, requirePermission("DATASHEET_VIEW"), controller.exportFilledSheetPDF);
+router.get("/export/:id/excel", verifyToken, requirePermission("DATASHEET_VIEW"), controller.exportFilledSheetExcel);
+router.post("/:id/duplicate", verifyToken, requirePermission("DATASHEET_CREATE"), controller.duplicateFilledSheet);
+router.post("/:id/revisions", verifyToken, requirePermission("DATASHEET_REVISE"), controller.createFilledSheetRevision);
 
 export default router;

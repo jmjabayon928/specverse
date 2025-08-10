@@ -1,3 +1,4 @@
+// src/components/ui/badge/Badge.tsx
 import React from "react";
 
 type BadgeVariant = "light" | "solid";

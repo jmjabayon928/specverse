@@ -11,6 +11,8 @@ import { applySheetTranslations } from "@/utils/applySheetTranslations";
 import type { UserSession } from "@/types/session";
 import type { SheetStatus, UnifiedSheet } from "@/types/sheet";
 import type { SheetTranslations } from "@/types/translation";
+import type { SheetNoteDTO } from "@/types/sheetNotes";
+import type { AttachmentDTO } from "@/types/attachments";
 
 interface Props {
   sheetId: number;
@@ -18,6 +20,8 @@ interface Props {
   filledSheet: UnifiedSheet;
   defaultLanguage: string;
   defaultUnitSystem: "SI" | "USC";
+  initialNotes?: SheetNoteDTO[];
+  initialAttachments?: AttachmentDTO[];
 }
 
 function getUILabel(key: string, language: string) {
@@ -30,31 +34,30 @@ const FilledSheetPageClient: React.FC<Props> = ({
   filledSheet,
   defaultLanguage,
   defaultUnitSystem,
+  initialNotes,
+  initialAttachments,
 }) => {
   const [lang, setLang] = useState<string>(defaultLanguage);
   const [unitSystem, setUnitSystem] = useState<"SI" | "USC">(defaultUnitSystem);
   const [translatedSheet, setTranslatedSheet] = useState<UnifiedSheet>(filledSheet);
   const [translations, setTranslations] = useState<SheetTranslations | null>(null);
+  const status = (filledSheet.status ?? "Draft") as SheetStatus;
+  const isLocked = status === "Verified" || status === "Approved";
+
+  const canCreateNote = !isLocked && (user?.permissions?.includes("NOTE_CREATE") ?? false);
+  const canEditNote   = !isLocked && (user?.permissions?.includes("NOTE_EDIT")   ?? false);
+  const canDeleteNote = !isLocked && (user?.permissions?.includes("NOTE_DELETE") ?? false);
+  const canAddAttachment    = !isLocked && (user?.permissions?.includes("ATTACHMENT_CREATE") ?? false);
+  const canDeleteAttachment = !isLocked && (user?.permissions?.includes("ATTACHMENT_DELETE") ?? false);
 
   // 🔹 Safely read cookies on client only
   useEffect(() => {
     if (typeof document !== "undefined") {
-      const cookieLang = document.cookie
-        .split("; ")
-        .find((c) => c.startsWith("lang="));
-      if (cookieLang) {
-        const newLang = decodeURIComponent(cookieLang.split("=")[1]);
-        setLang(newLang);
-      }
+      const cookieLang = document.cookie.split("; ").find((c) => c.startsWith("lang="));
+      if (cookieLang) setLang(decodeURIComponent(cookieLang.split("=")[1]));
 
-      const cookieUOM = document.cookie
-        .split("; ")
-        .find((c) => c.startsWith("unitSystem="));
-      if (cookieUOM?.includes("USC")) {
-        setUnitSystem("USC");
-      } else {
-        setUnitSystem("SI");
-      }
+      const cookieUOM = document.cookie.split("; ").find((c) => c.startsWith("unitSystem="));
+      setUnitSystem(cookieUOM?.includes("USC") ? "USC" : "SI");
     }
   }, []);
 
@@ -149,10 +152,16 @@ const FilledSheetPageClient: React.FC<Props> = ({
 
       {/* Viewer */}
       <FilledSheetViewer
+        sheetId={sheetId}
         sheet={translatedSheet}
         translations={translations}
         language={lang}
         unitSystem={unitSystem}
+        isSheetLocked={isLocked}
+        initialNotes={initialNotes}
+        notePermissions={{ canCreate: canCreateNote, canEdit: canEditNote, canDelete: canDeleteNote }}
+        initialAttachments={initialAttachments}
+        attachmentPermissions={{ canCreate: canAddAttachment, canDelete: canDeleteAttachment }}
       />
     </div>
   );

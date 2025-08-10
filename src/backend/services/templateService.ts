@@ -7,7 +7,26 @@ import { notifyUsers } from "../utils/notifyUsers";
 import { getSheetTranslations } from "@/backend/services/translationService";
 import { applySheetTranslations } from "@/utils/applySheetTranslations";
 import { convertToUSC } from "@/utils/unitConversionTable";
+import {
+  fetchCurrentTemplateStructure,
+  normalizeIncoming,
+  diffTemplateStructure,
+} from "@/backend/services/auditDiffs";
 
+function safeDate(d: unknown): Date | null {
+  if (d == null) return null;
+
+  if (d instanceof Date) {
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  if (typeof d === "string" || typeof d === "number") {
+    const parsed = new Date(d);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
+}
 
 export async function createTemplate(data: UnifiedSheet, userId: number): Promise<number> {
   const pool = await poolPromise;
@@ -357,26 +376,139 @@ export async function getTemplateDetailsById(
   return { datasheet: translatedSheet, translations };
 }
 
-export async function updateTemplate(sheetId: number, data: UnifiedSheet, userId: number): Promise<number> {
+export interface TemplateAuditRow {
+  TemplateChangeLogID: number;
+  SheetID: number;
+  Message: string;
+  ChangedBy: number | null;
+  ChangeDate: Date;
+  ChangedByName?: string | null;
+}
+
+function pickName(row: Record<string, unknown>): string | null {
+  const grab = (k: string) =>
+    k in row && typeof row[k] === "string" && (row[k] as string).trim() !== ""
+      ? (row[k] as string).trim()
+      : null;
+
+  const first = grab("FirstName");
+  const last = grab("LastName");
+  const fullFL = [first, last].filter(Boolean).join(" ").trim();
+
+  return (
+    grab("FullName") ??
+    grab("DisplayName") ??
+    (fullFL || null) ??
+    grab("UserName") ??
+    grab("Name") ??
+    grab("Email")
+  );
+}
+
+export async function getTemplateAuditEntries(
+  sheetId: number,
+  limit = 50,
+  offset = 0
+): Promise<TemplateAuditRow[]> {
+  const pool = await poolPromise;
+  const r = pool.request();
+  r.input("SheetID", sql.Int, sheetId);
+  r.input("Limit", sql.Int, limit);
+  r.input("Offset", sql.Int, offset);
+
+  // 1) Fetch audit rows (no join to Users)
+  const q = `
+    SELECT
+      tcl.TemplateChangeLogID,
+      tcl.SheetID,
+      CAST(tcl.Message AS NVARCHAR(500)) AS Message,
+      tcl.ChangedBy,
+      tcl.ChangeDate
+    FROM dbo.TemplateChangeLogs tcl
+    WHERE tcl.SheetID = @SheetID
+    ORDER BY tcl.ChangeDate DESC, tcl.TemplateChangeLogID DESC
+    OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;
+  `;
+  const res = await r.query<TemplateAuditRow>(q);
+  const entries = res.recordset;
+
+  // 2) Collect distinct user ids
+  const ids = Array.from(
+    new Set(
+      entries
+        .map((e) => e.ChangedBy)
+        .filter((v): v is number => typeof v === "number")
+    )
+  );
+  if (ids.length === 0) return entries;
+
+  // 3) Fetch user rows safely (SELECT * avoids unknown-column errors)
+  const r2 = pool.request();
+  r2.input("IdsJson", sql.NVarChar(sql.MAX), JSON.stringify(ids));
+  const usersRes = await r2.query<_Record>(`
+    WITH Ids AS (
+      SELECT TRY_CAST([value] AS int) AS UserID
+      FROM OPENJSON(@IdsJson)
+    )
+    SELECT u.*
+    FROM dbo.Users u
+    JOIN Ids i ON i.UserID = u.UserID
+  `);
+
+  type _Record = Record<string, unknown>;
+  const nameById = new Map<number, string | null>();
+  for (const row of usersRes.recordset as _Record[]) {
+    const idVal = row["UserID"];
+    const id =
+      typeof idVal === "number"
+        ? idVal
+        : typeof idVal === "string"
+        ? Number.parseInt(idVal, 10)
+        : NaN;
+    if (!Number.isNaN(id)) {
+      nameById.set(id, pickName(row));
+    }
+  }
+
+  // 4) Attach ChangedByName
+  for (const e of entries) {
+    e.ChangedByName = e.ChangedBy != null ? nameById.get(e.ChangedBy) ?? null : null;
+  }
+
+  return entries;
+}
+
+export async function updateTemplate(
+  sheetId: number,
+  data: UnifiedSheet,
+  userId: number
+): Promise<number> {
   const pool = await poolPromise;
   const tx = await pool.transaction();
 
   try {
     await tx.begin();
 
-    // 🔹 Determine new status
+    // --- capture "before", compute diff messages ---------------------------
+    const before = await fetchCurrentTemplateStructure(tx, sheetId);
+    const after  = normalizeIncoming(data);
+    const diffMessages = diffTemplateStructure(before, after);
+    // ----------------------------------------------------------------------
+
+    // Decide new status (your policy retained)
     const currentStatusResult = await tx.request()
       .input("SheetID", sql.Int, sheetId)
-      .query(`SELECT Status FROM Sheets WHERE SheetID = @SheetID`);
+      .query(`SELECT Status FROM dbo.Sheets WHERE SheetID = @SheetID`);
 
-    const currentStatus = currentStatusResult.recordset[0]?.Status;
+    const currentStatus: string | undefined = currentStatusResult.recordset?.[0]?.Status;
     const newStatus = currentStatus === "Rejected" ? "Modified Draft" : currentStatus;
 
+    // Update Sheets header
     await tx.request()
       .input("SheetID", sql.Int, sheetId)
-      .input("Status", sql.VarChar(50), newStatus)
+      .input("Status", sql.VarChar(50), newStatus ?? "Draft")
       .input("ModifiedByID", sql.Int, userId)
-      .input("ModifiedByDate", sql.DateTime, new Date())
+      .input("ModifiedByDate", sql.DateTime2, new Date())
       .input("SheetName", sql.VarChar(255), data.sheetName)
       .input("SheetDesc", sql.VarChar(255), data.sheetDesc)
       .input("SheetDesc2", sql.VarChar(255), data.sheetDesc2 ?? null)
@@ -387,9 +519,9 @@ export async function updateTemplate(sheetId: number, data: UnifiedSheet, userId
       .input("AreaID", sql.Int, data.areaId)
       .input("PackageName", sql.VarChar(100), data.packageName)
       .input("RevisionNum", sql.Int, data.revisionNum)
-      .input("RevisionDate", sql.Date, new Date(data.revisionDate))
+      .input("RevisionDate", sql.DateTime2, safeDate(data.revisionDate))
       .input("PreparedByID", sql.Int, data.preparedById)
-      .input("PreparedByDate", sql.DateTime, new Date(data.preparedByDate))
+      .input("PreparedByDate", sql.DateTime2, safeDate(data.preparedByDate))
       .input("EquipmentName", sql.VarChar(150), data.equipmentName)
       .input("EquipmentTagNum", sql.VarChar(150), data.equipmentTagNum)
       .input("ServiceName", sql.VarChar(150), data.serviceName)
@@ -410,7 +542,7 @@ export async function updateTemplate(sheetId: number, data: UnifiedSheet, userId
       .input("ProjectID", sql.Int, data.projectId ?? null)
       .input("AutoCADImport", sql.Bit, data.autoCADImport ? 1 : 0)
       .query(`
-        UPDATE Sheets SET
+        UPDATE dbo.Sheets SET
           Status = @Status,
           ModifiedByID = @ModifiedByID,
           ModifiedByDate = @ModifiedByDate,
@@ -446,93 +578,96 @@ export async function updateTemplate(sheetId: number, data: UnifiedSheet, userId
           ClientID = @ClientID,
           ProjectID = @ProjectID,
           AutoCADImport = @AutoCADImport
-        WHERE SheetID = @SheetID
+        WHERE SheetID = @SheetID;
       `);
 
-    // 🔹 Delete existing subsheet data
+    // Clear existing template structure
     await tx.request()
       .input("SheetID", sql.Int, sheetId)
       .query(`
-        DELETE ITO FROM InformationTemplateOptions ITO
-        INNER JOIN InformationTemplates IT ON ITO.InfoTemplateID = IT.InfoTemplateID
-        INNER JOIN SubSheets SS ON IT.SubID = SS.SubID
-        WHERE SS.SheetID = @SheetID
+        DELETE ITO
+          FROM dbo.InformationTemplateOptions ITO
+          INNER JOIN dbo.InformationTemplates IT ON ITO.InfoTemplateID = IT.InfoTemplateID
+          INNER JOIN dbo.SubSheets SS ON IT.SubID = SS.SubID
+        WHERE SS.SheetID = @SheetID;
+
+        DELETE IT
+          FROM dbo.InformationTemplates IT
+          INNER JOIN dbo.SubSheets SS ON IT.SubID = SS.SubID
+        WHERE SS.SheetID = @SheetID;
+
+        DELETE FROM dbo.SubSheets WHERE SheetID = @SheetID;
       `);
 
-    await tx.request()
-      .input("SheetID", sql.Int, sheetId)
-      .query(`
-        DELETE IT FROM InformationTemplates IT
-        INNER JOIN SubSheets SS ON IT.SubID = SS.SubID
-        WHERE SS.SheetID = @SheetID
-      `);
+    // Re-insert structure
+    for (const [i, subsheet] of (data.subsheets ?? []).entries()) {
+      if (!Array.isArray(subsheet.fields)) continue;
 
-    await tx.request()
-      .input("SheetID", sql.Int, sheetId)
-      .query(`DELETE FROM SubSheets WHERE SheetID = @SheetID`);
-
-    // 🔹 Insert new subsheets and fields
-    for (const [i, subsheet] of data.subsheets.entries()) {
-      if (!Array.isArray(subsheet.fields)) {
-        console.warn("⚠️ Subsheet fields is not an array:", subsheet);
-        continue;
-      }
-
-      const subResult = await tx.request()
+      const subIns = await tx.request()
         .input("SubName", sql.VarChar(150), subsheet.name)
         .input("SheetID", sql.Int, sheetId)
         .input("OrderIndex", sql.Int, i)
-        .query(`
-          INSERT INTO SubSheets (SubName, SheetID, OrderIndex)
+        .query<{ SubID: number }>(`
+          INSERT INTO dbo.SubSheets (SubName, SheetID, OrderIndex)
           OUTPUT INSERTED.SubID
-          VALUES (@SubName, @SheetID, @OrderIndex)
+          VALUES (@SubName, @SheetID, @OrderIndex);
         `);
 
-      const subId = subResult.recordset[0].SubID;
+      const subId = subIns.recordset[0].SubID;
 
       for (const [j, field] of subsheet.fields.entries()) {
-        if (!field.label || !field.infoType) {
-          console.warn("⚠️ Skipping field due to missing label or infoType:", field);
-          continue;
-        }
+        if (!field.label || !field.infoType) continue;
 
-        console.log("🔹 Inserting Field", field.label, "under Subsheet", subsheet.name);
-
-        const infoResult = await tx.request()
+        const infoIns = await tx.request()
           .input("SubID", sql.Int, subId)
           .input("Label", sql.VarChar(150), field.label)
           .input("InfoType", sql.VarChar(30), field.infoType)
           .input("OrderIndex", sql.Int, j)
           .input("UOM", sql.VarChar(50), field.uom ?? null)
           .input("Required", sql.Bit, field.required ? 1 : 0)
-          .query(`
-            INSERT INTO InformationTemplates (SubID, Label, InfoType, OrderIndex, UOM, Required)
+          .query<{ InfoTemplateID: number }>(`
+            INSERT INTO dbo.InformationTemplates
+              (SubID, Label, InfoType, OrderIndex, UOM, Required)
             OUTPUT INSERTED.InfoTemplateID
-            VALUES (@SubID, @Label, @InfoType, @OrderIndex, @UOM, @Required)
+            VALUES
+              (@SubID, @Label, @InfoType, @OrderIndex, @UOM, @Required);
           `);
 
-        const infoTemplateId = infoResult.recordset[0].InfoTemplateID;
+        const infoTemplateId = infoIns.recordset[0].InfoTemplateID;
 
-        if (field.options?.length) {
-          if (!Array.isArray(field.options)) {
-            console.warn("⚠️ Field options is not an array:", field);
-            continue;
-          }
-
+        if (Array.isArray(field.options) && field.options.length) {
           for (const [k, optionValue] of field.options.entries()) {
             await tx.request()
-              .input("InfoTemplateID", sql.Int, infoTemplateId)
+              .input("InfoTemplateID", sql.Int, infoTemplateId)  // ✅ use the correct ID
               .input("OptionValue", sql.VarChar(100), optionValue)
               .input("SortOrder", sql.Int, k)
               .query(`
-                INSERT INTO InformationTemplateOptions (InfoTemplateID, OptionValue, SortOrder)
-                VALUES (@InfoTemplateID, @OptionValue, @SortOrder)
+                INSERT INTO dbo.InformationTemplateOptions
+                  (InfoTemplateID, OptionValue, SortOrder)
+                VALUES
+                  (@InfoTemplateID, @OptionValue, @SortOrder);
               `);
           }
         }
       }
     }
 
+    // --- write diff messages to TemplateChangeLogs --------------------------
+    if (diffMessages.length) {
+      for (const msg of diffMessages) {
+        await tx.request()
+          .input("SheetID", sql.Int, sheetId)
+          .input("Message", sql.NVarChar(500), msg)
+          .input("ChangedBy", sql.Int, userId)
+          .query(`
+            INSERT INTO dbo.TemplateChangeLogs (SheetID, Message, ChangedBy)
+            VALUES (@SheetID, @Message, @ChangedBy);
+          `);
+      }
+    }
+    // -----------------------------------------------------------------------
+
+    // (Optional) keep your aggregate audit entry too
     await insertAuditLog({
       PerformedBy: userId,
       TableName: "Sheets",
@@ -541,7 +676,7 @@ export async function updateTemplate(sheetId: number, data: UnifiedSheet, userId
     });
 
     await notifyUsers({
-      sheetId: sheetId,
+      sheetId,
       createdBy: userId,
       recipientRoleIds: [1, 2],
       category: data.isTemplate ? "Template" : "Datasheet",

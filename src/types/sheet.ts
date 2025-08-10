@@ -30,6 +30,7 @@ export interface UnifiedSheet {
   sheetDesc2?: string;
   isLatest?: boolean;
   isTemplate?: boolean;
+  isSuperseded?: boolean;
   autoCADImport?: boolean;
   status?: "Draft" | "Rejected" | "Modified Draft" | "Verified" | "Approved";
   rejectComment?: string;
