@@ -27,9 +27,11 @@ This enables **true no-code datasheet configuration** — a huge time and cost s
 * ✅ Inline editing with unit validation (SI/USC support)
 * ✅ Clone datasheets and track revisions
 * ✅ Multi-language support via database + i18next
-* ✅ Export to PDF and Excel (translated + UOM converted)
+* ✅ Export to PDF and Excel (translated + UOM converted; includes Audit Trail section)
 * ✅ Approval workflow: Draft → Rejected (if needed) → Modified → Verified → Approved
-* ✅ Full audit trail and change logs
+* ✅ Notes & collaboration: per-sheet threaded notes; template notes auto-copied to new filled sheets *(new)*
+* ✅ Attachments: attach files to templates/datasheets; filled sheets **reference** template attachments to save storage *(new)*
+* ✅ Full audit trail & change logs: template structure changes + field value changes; shown in viewers (newest first, “Show more”) and included in exports (up to 50 entries) *(new)*
 * ✅ Dashboard + AI-ready metadata (new)
 
 ### 📊 Estimations
@@ -61,23 +63,23 @@ This enables **true no-code datasheet configuration** — a huge time and cost s
 
 * ✅ Role-specific dashboards for Engineer, Supervisor, Admin
 * ✅ Multi-series Recharts visualizations
+  
 * ✅ Dashboard:
-
   * Datasheets by Status
   * Templates Created Over Time
   * Pending Verifications
   * Active Users by Role
   * Inventory Stock Levels
   * Estimation Totals by Project
-* ✅ Analytics:
 
+* ✅ Analytics:
   * Datasheet Lifecycle Duration
   * Verification Bottlenecks
   * Monthly Template Usage
   * Team Performance Overview
   * Field Completion Trends
-* ✅ Reports:
 
+* ✅ Reports:
   * Estimation Cost Breakdown by Project
   * Inventory Usage Forecast
   * Inventory Category Contribution
@@ -85,6 +87,7 @@ This enables **true no-code datasheet configuration** — a huge time and cost s
   * Rejected Datasheets Over Time
   * Workflow Stream for Templates and Datasheets
   * Supplier Comparison by Item
+
 * ✅ View data behind charts via modal tables
 
 ---
