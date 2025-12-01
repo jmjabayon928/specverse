@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { SupplierQuote } from "@/types/estimation";
+import { SupplierQuote } from "@/domain/estimations/estimationTypes";
 import SupplierQuotesTable from "@/components/estimation/SupplierQuotesTable";
 import SupplierQuoteForm from "@/components/estimation/SupplierQuoteForm";
 

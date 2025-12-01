@@ -9,7 +9,7 @@ interface Props {
   sheetId: number;
 }
 
-export default function ApproveButton({ sheetId }: Props) {
+export default function ApproveButton({ sheetId }: Readonly<Props>) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 

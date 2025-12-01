@@ -2,7 +2,7 @@
 "use client";
 
 import React from "react";
-import type { UnifiedSubsheet, InfoField } from "@/types/sheet";
+import type { UnifiedSubsheet, InfoField } from "@/domain/datasheets/sheetTypes";
 
 interface Props {
   subsheet: UnifiedSubsheet;
@@ -12,13 +12,15 @@ interface Props {
   formErrors?: Record<string, string[]>;
 }
 
-export default function FilledSheetSubsheetForm({
-  subsheet,
-  subsheetIndex,
-  fieldValues,
-  onFieldValueChange,
-  formErrors = {},
-}: Props) {
+export default function FilledSheetSubsheetForm(props: Readonly<Props>) {
+  const {
+    subsheet,
+    subsheetIndex,
+    fieldValues,
+    onFieldValueChange,
+    formErrors = {},
+  } = props;
+
   const handleInputChange = (infoTemplateId: number, value: string) => {
     onFieldValueChange(subsheetIndex, infoTemplateId, value);
   };
@@ -56,8 +58,8 @@ export default function FilledSheetSubsheetForm({
             required={isRequired}
           >
             <option value="">-- Select --</option>
-            {field.options.map((opt, i) => (
-              <option key={i} value={opt}>
+            {field.options.map((opt) => (
+              <option key={`opt:${infoTemplateId}:${opt}`} value={opt}>
                 {opt}
               </option>
             ))}
@@ -104,4 +106,3 @@ export default function FilledSheetSubsheetForm({
     </fieldset>
   );
 }
-

@@ -12,10 +12,10 @@ export const metadata: Metadata = {
 };
 
 interface PageProps {
-  params: { id: string };
+  readonly params: Readonly<{ id: string }>;
 }
 
-export default async function FilledVerifyPage({ params }: PageProps) {
+export default async function FilledVerifyPage({ params }: Readonly<PageProps>) {
   const sheetId = parseInt(params.id ?? "0", 10);
   if (!sheetId || isNaN(sheetId)) return notFound();
 
@@ -27,7 +27,7 @@ export default async function FilledVerifyPage({ params }: PageProps) {
   }
 
   const rawData = await getFilledSheetDetailsById(sheetId);
-  if (!rawData || !rawData.datasheet) return notFound();
+  if (!rawData?.datasheet) return notFound();
 
   return (
     <div className="container max-w-6xl py-6">

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Estimation } from "@/types/estimation";
+import { Estimation } from "@/domain/estimations/estimationTypes";
 import EstimationTable from '@/components/estimation/EstimationTable';
 
 interface EstimationPageContentProps {

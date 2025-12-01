@@ -5,18 +5,38 @@ import FilledSheetPageClient from "./FilledSheetPageClient";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import SecurePage from "@/components/security/SecurePage";
 
-export default async function FilledSheetDetailPage(context: {
-  params: { id: string };
-}) {
+type FilledParams = Readonly<{ id: string }>;
+type SearchParamsRecord = Readonly<Record<string, string | string[] | undefined>>;
+
+export default async function FilledSheetDetailPage({
+  params,
+  searchParams,
+}: Readonly<{
+  params: Promise<FilledParams>;
+  searchParams: Promise<SearchParamsRecord>;
+}>) {
   const session = await requireAuth();
 
-  const sheetIdParam = context?.params?.id;
-  if (!sheetIdParam) notFound();
+  // Next.js 15: params & searchParams are Promises
+  const { id } = await params;
+  const sp = await searchParams;
 
-  const sheetId = parseInt(sheetIdParam);
-  if (isNaN(sheetId)) notFound();
+  if (!id) notFound();
 
-  const result = await getFilledSheetDetailsById(sheetId, "eng");
+  const sheetId = Number.parseInt(id, 10);
+  if (!Number.isFinite(sheetId)) notFound();
+
+  // Optional URL overrides (keep your existing defaults)
+  const langParam = Array.isArray(sp.lang) ? sp.lang[0] : sp.lang;
+  const uomParam = Array.isArray(sp.uom) ? sp.uom[0] : sp.uom;
+
+  // No assertion needed—these infer to string
+  const defaultLanguage = langParam ?? "eng";
+
+  // Enforce the union expected by the client prop
+  const defaultUnitSystem: "SI" | "USC" = uomParam === "USC" ? "USC" : "SI";
+
+  const result = await getFilledSheetDetailsById(sheetId, defaultLanguage);
   if (!result) notFound();
 
   const { datasheet: filledSheet } = result;
@@ -27,8 +47,8 @@ export default async function FilledSheetDetailPage(context: {
         sheetId={sheetId}
         user={session}
         filledSheet={filledSheet}
-        defaultLanguage="eng"
-        defaultUnitSystem="SI"
+        defaultLanguage={defaultLanguage}
+        defaultUnitSystem={defaultUnitSystem}
       />
     </SecurePage>
   );

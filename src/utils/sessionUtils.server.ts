@@ -1,7 +1,7 @@
 // src/utils/sessionUtils.server.ts
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import type { UserSession } from "@/types/session";
+import type { UserSession } from "@/domain/auth/sessionTypes";
 
 /**
  * ✅ Use this in protected pages (force redirect to login if no session)

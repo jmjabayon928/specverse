@@ -1,5 +1,6 @@
+// src/app/(admin)/datasheets/revisions/page.tsx
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useId } from "react";
 import { useRouter } from "next/navigation";
 import SecurePage from '@/components/security/SecurePage';
 
@@ -66,14 +67,18 @@ export default function RevisionBrowserPage() {
     })
   : [];
 
+  // Associate label with control
+  const statusSelectId = useId();
+
   return (
     <SecurePage requiredPermission="REVISIONS_VIEW">
       <div className="p-6 max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold mb-4">Datasheet Revision Browser</h1>
 
         <div className="mb-4">
-          <label className="mr-2 font-medium">Filter by Status:</label>
+          <label htmlFor={statusSelectId} className="mr-2 font-medium">Filter by Status:</label>
           <select
+            id={statusSelectId}
             title="Filter by Status"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as StatusType)}

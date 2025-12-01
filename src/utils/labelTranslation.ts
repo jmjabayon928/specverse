@@ -1,3 +1,4 @@
+// src/utils/labelTranslation.ts
 import { poolPromise, sql } from "../backend/config/db";
 
 export async function getUILabelTranslations(lang: string): Promise<Record<string, string>> {
@@ -8,9 +9,11 @@ export async function getUILabelTranslations(lang: string): Promise<Record<strin
     .query(`SELECT LabelKey, TranslatedText FROM UILabelTranslations WHERE LanguageCode = @LanguageCode`);
 
   const map: Record<string, string> = {};
-  result.recordset.forEach(row => {
+  type Row = { LabelKey: string; TranslatedText: string };
+
+  for (const row of (result.recordset ?? []) as Row[]) {
     map[row.LabelKey] = row.TranslatedText;
-  });
+  }
 
   return map;
 }

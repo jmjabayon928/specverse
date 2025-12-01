@@ -4,7 +4,7 @@
 import { useForm } from 'react-hook-form';
 import { useEffect } from 'react';
 import { toast } from "react-hot-toast";
-import { PackageFormProps, PackageFormValues, EstimationPackage } from '@/types/estimation';
+import { PackageFormProps, PackageFormValues, EstimationPackage } from '@/domain/estimations/estimationTypes';
 
 export default function PackageForm({
   defaultValues,

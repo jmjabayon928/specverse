@@ -12,10 +12,9 @@ interface InventoryPageProps {
   searchParams: { tab?: string };
 }
 
-export default async function InventoryDetailPage({
-  params,
-  searchParams,
-}: InventoryPageProps) {
+export default async function InventoryDetailPage(
+  { params, searchParams }: Readonly<InventoryPageProps>
+) {
   const itemId = Number(params.id ?? "0");
   if (isNaN(itemId)) return notFound();
 

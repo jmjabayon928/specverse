@@ -3,13 +3,13 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { EstimationPackage, EstimationItem } from "@/types/estimation";
+import { EstimationPackage, EstimationItem } from "@/domain/estimations/estimationTypes";
 import ItemForm from "@/components/estimation/ItemForm";
 
 export default function PackageDetailPage() {
   const { id } = useParams();
   const packageId = parseInt(id as string);
-  const [pkg, setPackage] = useState<EstimationPackage | null>(null);
+  const [pkg, setPkg] = useState<EstimationPackage | null>(null);
   const [items, setItems] = useState<EstimationItem[]>([]);
   const [showForm, setShowForm] = useState(false);
 
@@ -17,7 +17,7 @@ export default function PackageDetailPage() {
     if (!isNaN(packageId)) {
       const fetchData = async () => {
         const res1 = await fetch(`/api/backend/estimation/packages/${packageId}`);
-        setPackage(await res1.json());
+        setPkg(await res1.json());
 
         const res2 = await fetch(`/api/backend/estimation/items?packageId=${packageId}`);
         setItems(await res2.json());

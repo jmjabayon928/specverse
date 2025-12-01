@@ -56,9 +56,9 @@ export default function FilledSheetListPage() {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/backend/filledsheets/reference-options", {
+        const res = await fetch("/api/backend/filledsheets/reference-options", {
           credentials: "include",
-        });
+        })
         const data = await res.json();
 
         // ✅ Properly typed and placed here:
@@ -93,9 +93,9 @@ export default function FilledSheetListPage() {
     const fetchSheets = async () => {
       setLoading(true);
       try {
-        const res = await fetch("http://localhost:5000/api/backend/filledsheets", {
+        const res = await fetch("/api/backend/filledsheets", {
           credentials: "include",
-        });
+        })
         const data = await res.json();
         setSheets(Array.isArray(data) ? data : []);
         setFiltered(Array.isArray(data) ? data : []);

@@ -15,7 +15,9 @@ interface PageProps {
   params: { id: string };
 }
 
-export default async function TemplateApprovePage({ params }: PageProps) {
+export default async function TemplateApprovePage(props: Readonly<PageProps>) {
+  const { params } = props;
+
   const templateId = parseInt(params.id ?? "0", 10);
   if (!templateId || isNaN(templateId)) return notFound();
 

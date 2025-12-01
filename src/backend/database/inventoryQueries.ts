@@ -1,6 +1,6 @@
 // src/backend/database/inventoryQueries.ts
 import { poolPromise, sql } from "../config/db";
-import type { InventoryItem, InventoryItemDB } from "@/types/inventory";
+import type { InventoryItem, InventoryItemDB } from "@/domain/inventory/inventoryTypes";
 
 // ✅ Add safe comparison helper
 function isDifferent(a: unknown, b: unknown): boolean {

@@ -1,5 +1,4 @@
 // src/app/(admin)/datasheets/filled/[id]/approve/page.tsx
-
 import { notFound, redirect } from "next/navigation";
 import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
 import { requireAuth } from "@/utils/sessionUtils.server";
@@ -12,10 +11,10 @@ export const metadata: Metadata = {
 };
 
 interface PageProps {
-  params: { id: string };
+  readonly params: Readonly<{ id: string }>;
 }
 
-export default async function FilledApprovePage({ params }: PageProps) {
+export default async function FilledApprovePage({ params }: Readonly<PageProps>) {
   const sheetId = parseInt(params.id ?? "0", 10);
   if (!sheetId || isNaN(sheetId)) return notFound();
 
@@ -25,7 +24,7 @@ export default async function FilledApprovePage({ params }: PageProps) {
   }
 
   const rawData = await getFilledSheetDetailsById(sheetId);
-  if (!rawData || !rawData.datasheet) return notFound();
+  if (!rawData?.datasheet) return notFound();
 
   return (
     <div className="container max-w-6xl py-6">

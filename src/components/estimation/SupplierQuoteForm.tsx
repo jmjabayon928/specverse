@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "react-hot-toast";
 import { SupplierQuoteFormValues, supplierQuoteSchema } from "@/validation/estimationSchema";
-import { SupplierQuote } from "@/types/estimation";
+import { SupplierQuote } from "@/domain/estimations/estimationTypes";
 
 interface SupplierQuoteFormProps {
   mode: "create" | "edit";

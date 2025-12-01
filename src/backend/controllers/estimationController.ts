@@ -1,33 +1,29 @@
 // src/backend/controllers/estimationController.ts
-import { RequestHandler } from "express";
-import { poolPromise, sql } from "../config/db";
+
+import type { RequestHandler } from 'express'
+import { z } from 'zod'
+import { poolPromise, sql } from '../config/db'
+import { AppError } from '../errors/AppError'
 import {
   getAllEstimations,
   getEstimationById,
   createEstimation,
   updateEstimation,
   getFilteredEstimationsWithPagination
-} from "../database/estimationQueries";
+} from '../database/estimationQueries'
 import {
-  //getPackagesByEstimationId,
   getAllPackages,
   getPackageById,
   createPackage,
   updatePackage,
-  deletePackage,
-  //isDuplicatePackageName
-} from "../database/estimationPackageQueries";
-import {
-  //getItemsByPackageId,
-  createItem,
-  //isDuplicateItem
-} from "../database/estimationItemQueries";
+  deletePackage
+} from '../database/estimationPackageQueries'
+import { createItem } from '../database/estimationItemQueries'
 import {
   getQuotesByItemId,
   createSupplierQuote,
-  selectSupplierQuote,
-  //isDuplicateQuote
-} from "../database/estimationQuoteQueries";
+  selectSupplierQuote
+} from '../database/estimationQuoteQueries'
 import {
   generateEstimationPDF,
   generateEstimationSummaryPDF,
@@ -38,220 +34,534 @@ import {
   generatePackageProcurementExcel,
   generateEstimationProcurementExcel,
   generateFilteredEstimationPDF
-} from "../services/estimationExportService";
+} from '../services/estimation/export/estimationExportService'
 
 // ========================
-// CRUD
+// Zod helpers
 // ========================
-export const getAllEstimationsHandler: RequestHandler = async (req, res) => {
-  const data = await getAllEstimations();
-  res.json(data);
-};
 
-export const createEstimationHandler: RequestHandler = async (req, res) => {
+const numericIdSchema = z.coerce.number().int().positive()
+
+const parseRouteId = (raw: unknown, name: string): number => {
   try {
-    const data = await createEstimation(req.body);
-    res.status(201).json(data);
-  } catch (err) {
-    console.error("❌ createEstimation failed:", err);
-    res.status(500).json({ error: "Internal Server Error" });
+    return numericIdSchema.parse(raw)
+  } catch {
+    throw new AppError(`Invalid ${name}`, 400)
   }
-};
+}
 
-export const getEstimationByIdHandler: RequestHandler = async (req, res): Promise<void> => {
-  try {
-    const id = parseInt(req.params.id);
-    if (!id) {
-      res.status(400).json({ error: "Invalid EstimationID" });
-      return;
+const parseIdFromQuery = (value: unknown, fieldName: string): number => {
+  if (typeof value === 'string' || typeof value === 'number') {
+    return parseRouteId(value, fieldName)
+  }
+
+  if (Array.isArray(value)) {
+    const first = value[0]
+
+    if (typeof first === 'string' || typeof first === 'number') {
+      return parseRouteId(first, fieldName)
     }
+  }
 
-    const data = await getEstimationById(id);
+  throw new AppError(`Invalid ${fieldName}`, 400)
+}
+
+// Estimation bodies
+
+const createEstimationBodySchema = z
+  .object({
+    ProjectID: z.coerce.number().int().positive(),
+    ClientID: z.coerce.number().int().positive(),
+    Title: z.string().min(1, 'Title is required'),
+    Description: z.string().optional(),
+    CreatedBy: z.coerce.number().int().positive().optional()
+  })
+  .passthrough()
+
+const updateEstimationBodySchema = z
+  .object({
+    Title: z.string().min(1, 'Title is required'),
+    Description: z.string().optional(),
+    ProjectID: z.coerce.number().int().positive().optional()
+  })
+  .passthrough()
+
+const filterEstimationsBodySchema = z.object({
+  statuses: z.array(z.string()).optional(),
+  clients: z.array(z.union([z.string(), z.number()])).optional(),
+  projects: z.array(z.union([z.string(), z.number()])).optional(),
+  search: z.string().optional(),
+  page: z.union([z.number(), z.string()]).optional(),
+  pageSize: z.union([z.number(), z.string()]).optional()
+})
+
+// Package bodies
+
+const createPackageBodySchema = z
+  .object({
+    EstimationID: z.coerce.number().int().positive(),
+    PackageName: z.string().min(1, 'PackageName is required'),
+    Description: z.string().optional()
+  })
+  .passthrough()
+
+const updatePackageBodySchema = z
+  .object({
+    PackageName: z.string().min(1, 'PackageName is required'),
+    Description: z.string().optional(),
+    Sequence: z.coerce.number().int(),
+    ModifiedBy: z.coerce.number().int().optional()
+  })
+  .passthrough()
+
+// Items
+
+const updateItemBodySchema = z
+  .object({
+    Quantity: z.coerce.number().positive(),
+    Description: z.string().optional()
+  })
+  .passthrough()
+
+// Quotes
+
+const createSupplierQuoteBodySchema = z
+  .object({
+    ItemID: z.coerce.number().int().positive(),
+    SupplierID: z.coerce.number().int().positive(),
+    QuotedUnitCost: z.coerce.number().nonnegative(),
+    ExpectedDeliveryDays: z.coerce.number().int().nonnegative(),
+    CurrencyCode: z.string().min(1),
+    Notes: z.string().optional()
+  })
+  .passthrough()
+
+const updateSupplierQuoteBodySchema = z
+  .object({
+    QuotedUnitCost: z.coerce.number().nonnegative(),
+    ExpectedDeliveryDays: z.coerce.number().int().nonnegative(),
+    CurrencyCode: z.string().min(1),
+    IsSelected: z.boolean(),
+    Notes: z.string().optional()
+  })
+  .passthrough()
+
+// ========================
+// CRUD – Estimations
+// ========================
+
+export const getAllEstimationsHandler: RequestHandler = async (_req, res, next) => {
+  try {
+    const data = await getAllEstimations()
+    res.json(data)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const createEstimationHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const body = createEstimationBodySchema.parse(req.body)
+    const data = await createEstimation(body)
+    res.status(201).json(data)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const getEstimationByIdHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const id = parseRouteId(req.params.id, 'EstimationID')
+    const data = await getEstimationById(id)
 
     if (!data) {
-      res.status(404).json({ error: "Estimation not found" });
-      return;
+      throw new AppError('Estimation not found', 404)
     }
 
-    res.status(200).json(data);
+    res.status(200).json(data)
   } catch (error) {
-    console.error("Error in getEstimationByIdHandler:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error)
   }
-};
+}
 
-export const updateEstimationHandler: RequestHandler = async (req, res) => {
+export const updateEstimationHandler: RequestHandler = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
-    if (!id) {
-      res.status(400).json({ error: "Invalid EstimationID" });
-      return;
-    }
+    const id = parseRouteId(req.params.id, 'EstimationID')
+    const body = updateEstimationBodySchema.parse(req.body)
 
-    const data = await updateEstimation(id, req.body);
-    res.json(data);
+    const data = await updateEstimation(id, body)
+    res.json(data)
   } catch (error) {
-    console.error("Error in updateEstimationHandler:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error)
   }
-};
+}
 
-export const deleteEstimationHandler: RequestHandler = async (req, res) => {
+export const deleteEstimationHandler: RequestHandler = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
-    if (!id) {
-      res.status(400).json({ error: "Invalid EstimationID" });
-      return;
-    }
+    const estimationId = parseRouteId(req.params.id, 'EstimationID')
 
-    const pool = await poolPromise;
+    const pool = await poolPromise
+
     await pool
       .request()
-      .input("EstimationID", sql.Int, id)
-      .query("DELETE FROM Estimations WHERE EstimationID = @EstimationID");
+      .input('EstimationID', sql.Int, estimationId)
+      .query(`
+        DELETE FROM EstimationItems
+        WHERE EstimationID = @EstimationID;
 
-    res.status(204).send();
+        DELETE FROM EstimationPackages
+        WHERE EstimationID = @EstimationID;
+
+        DELETE FROM EstimationSuppliers
+        WHERE EstimationID = @EstimationID;
+
+        DELETE FROM EstimationItemSupplierQuotes
+        WHERE EstimationID = @EstimationID;
+
+        DELETE FROM Estimations
+        WHERE EstimationID = @EstimationID;
+      `)
+
+    res.status(204).send()
   } catch (error) {
-    console.error("Error in deleteEstimationHandler:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error)
   }
-};
+}
 
 // ========================
-// Export
+// Filtering + history
 // ========================
-export const exportEstimationPDFHandler: RequestHandler = async (req, res) => {
-  const id = parseInt(req.params.id);
-  const buffer = await generateEstimationPDF(id);
-  res.setHeader("Content-Type", "application/pdf");
-  res.send(buffer);
-};
 
-export const exportEstimationSummaryPDFHandler: RequestHandler = async (req, res) => {
-  const id = parseInt(req.params.id);
-  const buffer = await generateEstimationSummaryPDF(id);
-  res.setHeader("Content-Type", "application/pdf");
-  res.send(buffer);
-};
-
-export const exportEstimationProcurementPDFHandler: RequestHandler = async (req, res) => {
-  const id = parseInt(req.params.id);
-  const buffer = await generateEstimationProcurementPDF(id);
-  res.setHeader("Content-Type", "application/pdf");
-  res.send(buffer);
-};
-
-export const exportPackageProcurementPDFHandler: RequestHandler = async (req, res) => {
-  const id = parseInt(req.params.packageId);
-  const buffer = await generatePackageProcurementPDF(id);
-  res.setHeader("Content-Type", "application/pdf");
-  res.send(buffer);
-};
-
-export const exportEstimationExcelHandler: RequestHandler = async (req, res) => {
-  const id = parseInt(req.params.id);
-  const buffer = await generateEstimationExcel(id);
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.send(buffer);
-};
-
-export const exportEstimationSummaryExcelHandler: RequestHandler = async (req, res) => {
-  const id = parseInt(req.params.id);
-  const buffer = await generateEstimationSummaryExcel(id);
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.send(buffer);
-};
-
-export const exportEstimationProcurementExcelHandler: RequestHandler = async (req, res) => {
-  const id = parseInt(req.params.id);
-  const buffer = await generateEstimationProcurementExcel(id);
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.send(buffer);
-};
-
-export const exportPackageProcurementExcelHandler: RequestHandler = async (req, res) => {
-  const id = parseInt(req.params.packageId);
-  const buffer = await generatePackageProcurementExcel(id);
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.send(buffer);
-};
-
-export const exportFilteredEstimationsPDFHandler: RequestHandler = async (req, res) => {
+export const getFilteredEstimationsHandler: RequestHandler = async (req, res, next) => {
   try {
-    const { statuses, clients, projects, search } = req.body;
+    const parsed = filterEstimationsBodySchema.parse(req.body ?? {})
 
-    const buffer = await generateFilteredEstimationPDF(statuses, clients, projects, search);
-    res.setHeader("Content-Type", "application/pdf");
-    res.send(buffer);
-  } catch (error) {
-    console.error("Error generating filtered estimation PDF:", error);
-    res.status(500).json({ error: "Failed to generate PDF" });
-  }
-};
+    const statuses = parsed.statuses ?? []
+    const clients = parsed.clients ?? []
+    const projects = parsed.projects ?? []
+    const search = parsed.search ?? ''
+    const page = parsed.page ?? 1
+    const pageSize = parsed.pageSize ?? 10
 
-// ========================
-// Filter
-// ========================
-export const getFilteredEstimationsHandler: RequestHandler = async (req, res) => {
-  try {
-    const {
-      statuses = [],
-      clients = [],
-      projects = [],
-      search = "",
-      page = 1,
-      pageSize = 10
-    } = req.body;
+    const statusArray: string[] = Array.isArray(statuses)
+      ? statuses.map(String)
+      : []
+
+    const clientArray: number[] = Array.isArray(clients)
+      ? clients
+          .map((c) => Number.parseInt(String(c), 10))
+          .filter((value) => !Number.isNaN(value))
+      : []
+
+    const projectArray: number[] = Array.isArray(projects)
+      ? projects
+          .map((p) => Number.parseInt(String(p), 10))
+          .filter((value) => !Number.isNaN(value))
+      : []
+
+    const numericPage = Number.parseInt(String(page), 10) || 1
+    const numericPageSize = Number.parseInt(String(pageSize), 10) || 10
 
     const { estimations, totalCount } = await getFilteredEstimationsWithPagination(
-      statuses,
-      clients,
-      projects,
+      statusArray,
+      clientArray,
+      projectArray,
       search,
-      page,
-      pageSize
-    );
+      numericPage,
+      numericPageSize
+    )
 
-    res.json({ data: estimations, totalCount });
+    res.json({ data: estimations, totalCount })
   } catch (error) {
-    console.error("Error in getFilteredEstimationsHandler:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error)
   }
-};
+}
+
+export const getPastEstimationsHandler: RequestHandler = async (_req, res, next) => {
+  try {
+    const pool = await poolPromise
+
+    const result = await pool.request().query(`
+      SELECT 
+        e.EstimationID,
+        e.Title AS EstimationName,
+        e.CreatedBy,
+        u.FirstName + ' ' + u.LastName AS EstimatorName,
+        e.CreatedAt,
+        (ISNULL(e.TotalMaterialCost, 0) + ISNULL(e.TotalLaborCost, 0)) AS TotalEstimatedCost,
+        COUNT(DISTINCT ei.EItemID) AS ItemCount,
+        MAX(eq.ModifiedAt) AS LastModified
+      FROM Estimations e
+        LEFT JOIN Users u ON e.CreatedBy = u.UserID
+        LEFT JOIN EstimationItems ei ON e.EstimationID = ei.EstimationID
+        LEFT JOIN EstimationItemSupplierQuotes eq ON ei.EItemID = eq.ItemID
+      GROUP BY
+        e.EstimationID,
+        e.Title,
+        e.CreatedBy,
+        u.FirstName,
+        u.LastName,
+        e.CreatedAt,
+        e.TotalMaterialCost,
+        e.TotalLaborCost
+      ORDER BY e.CreatedAt DESC
+    `)
+
+    res.json(result.recordset)
+  } catch (error) {
+    next(error)
+  }
+}
+
+// ========================
+// PDF / Excel exports
+// ========================
+
+export const exportEstimationPDFHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const estimationId = parseRouteId(req.params.id, 'EstimationID')
+
+    const buffer = await generateEstimationPDF(estimationId)
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="estimation_${estimationId}.pdf"`
+    )
+    res.send(buffer)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const exportEstimationSummaryPDFHandler: RequestHandler = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const estimationId = parseRouteId(req.params.id, 'EstimationID')
+
+    const buffer = await generateEstimationSummaryPDF(estimationId)
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="estimation_summary_${estimationId}.pdf"`
+    )
+    res.send(buffer)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const exportEstimationProcurementPDFHandler: RequestHandler = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const estimationId = parseRouteId(req.params.id, 'EstimationID')
+
+    const buffer = await generateEstimationProcurementPDF(estimationId)
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="estimation_procurement_${estimationId}.pdf"`
+    )
+    res.send(buffer)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const exportPackageProcurementPDFHandler: RequestHandler = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const packageId = parseRouteId(req.params.packageId, 'PackageID')
+
+    const buffer = await generatePackageProcurementPDF(packageId)
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="package_procurement_${packageId}.pdf"`
+    )
+    res.send(buffer)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const exportEstimationExcelHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const estimationId = parseRouteId(req.params.id, 'EstimationID')
+
+    const buffer = await generateEstimationExcel(estimationId)
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="estimation_${estimationId}.xlsx"`
+    )
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    res.send(buffer)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const exportEstimationSummaryExcelHandler: RequestHandler = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const estimationId = parseRouteId(req.params.id, 'EstimationID')
+
+    const buffer = await generateEstimationSummaryExcel(estimationId)
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="estimation_summary_${estimationId}.xlsx"`
+    )
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    res.send(buffer)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const exportEstimationProcurementExcelHandler: RequestHandler = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const estimationId = parseRouteId(req.params.id, 'EstimationID')
+
+    const buffer = await generateEstimationProcurementExcel(estimationId)
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="estimation_procurement_${estimationId}.xlsx"`
+    )
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    res.send(buffer)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const exportPackageProcurementExcelHandler: RequestHandler = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const packageId = parseRouteId(req.params.packageId, 'PackageID')
+
+    const buffer = await generatePackageProcurementExcel(packageId)
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="package_procurement_${packageId}.xlsx"`
+    )
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    res.send(buffer)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const exportFilteredEstimationsPDFHandler: RequestHandler = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const parsed = filterEstimationsBodySchema.parse(req.body ?? {})
+
+    const statuses = parsed.statuses ?? []
+    const clients = parsed.clients ?? []
+    const projects = parsed.projects ?? []
+    const search = parsed.search ?? ''
+
+    const statusArray: string[] = Array.isArray(statuses)
+      ? statuses.map(String)
+      : []
+
+    const clientArray: number[] = Array.isArray(clients)
+      ? clients
+          .map((c) => Number.parseInt(String(c), 10))
+          .filter((value) => !Number.isNaN(value))
+      : []
+
+    const projectArray: number[] = Array.isArray(projects)
+      ? projects
+          .map((p) => Number.parseInt(String(p), 10))
+          .filter((value) => !Number.isNaN(value))
+      : []
+
+    const buffer = await generateFilteredEstimationPDF(
+      statusArray,
+      clientArray,
+      projectArray,
+      search
+    )
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="filtered_estimations.pdf"'
+    )
+    res.send(buffer)
+  } catch (error) {
+    next(error)
+  }
+}
 
 // ========================
 // Packages
 // ========================
-export const getAllPackagesHandler: RequestHandler = async (_req, res) => {
+
+export const getAllPackagesHandler: RequestHandler = async (_req, res, next) => {
   try {
-    const data = await getAllPackages();
-    res.json(data);
-  } catch (err) {
-    console.error("Error in getAllPackagesHandler:", err);
-    res.status(500).json({ error: "Internal server error" });
+    const data = await getAllPackages()
+    res.json(data)
+  } catch (error) {
+    next(error)
   }
-};
+}
 
-export const getPackagesByEstimationIdHandler: RequestHandler = async (req, res): Promise<void> => {
+export const getPackagesByEstimationIdHandler: RequestHandler = async (
+  req,
+  res,
+  next
+) => {
   try {
-    let raw = req.query.estimationId;
+    const estimationId = parseIdFromQuery(req.query.estimationId, 'EstimationID')
 
-    // Handle array or ParsedQs
-    if (Array.isArray(raw)) raw = raw[0];
-    if (typeof raw !== "string") {
-      res.status(400).json({ error: "Invalid EstimationID" });
-      return;
-    }
+    const pool = await poolPromise
 
-    const estimationId = parseInt(raw, 10);
-    if (isNaN(estimationId) || estimationId <= 0) {
-      res.status(400).json({ error: "Invalid EstimationID" });
-      return;
-    }
-
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input("EstimationID", sql.Int, estimationId)
+    const result = await pool
+      .request()
+      .input('EstimationID', sql.Int, estimationId)
       .query(`
         SELECT 
           p.PackageID,
@@ -272,82 +582,82 @@ export const getPackagesByEstimationIdHandler: RequestHandler = async (req, res)
         LEFT JOIN Users mb ON p.ModifiedBy = mb.UserID
         WHERE p.EstimationID = @EstimationID
         ORDER BY p.PackageID
-      `);
+      `)
 
-    res.status(200).json(result.recordset);
-  } catch (err) {
-    console.error("❌ Error fetching packages:", err);
-    res.status(500).json({ error: "Failed to fetch packages" });
-  }
-};
-
-export const getPackageByIdHandler: RequestHandler = async (req, res) => {
-  try {
-    const packageId = parseInt(req.params.id);
-    if (!packageId) {
-      res.status(400).json({ error: "Invalid PackageID" });
-      return;
-    }
-
-    const data = await getPackageById(packageId);
-    res.json(data);
+    res.status(200).json(result.recordset)
   } catch (error) {
-    console.error("Error in getPackageByIdHandler:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error)
   }
-};
+}
 
-export const createPackageHandler: RequestHandler = async (req, res) => {
-  const data = await createPackage(req.body);
-  res.status(201).json(data);
-};
-
-export const updatePackageHandler: RequestHandler = async (req, res) => {
+export const getPackageByIdHandler: RequestHandler = async (req, res, next) => {
   try {
-    const packageId = parseInt(req.params.id);
-    if (!packageId) {
-      res.status(400).json({ error: "Invalid PackageID" });
-      return;
-    }
+    const packageId = parseRouteId(req.params.id, 'PackageID')
 
-    const data = await updatePackage(packageId, req.body);
-    res.json(data);
+    const data = await getPackageById(packageId)
+    res.json(data)
   } catch (error) {
-    console.error("Error in updatePackageHandler:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error)
   }
-};
+}
 
-export const deletePackageHandler: RequestHandler = async (req, res) => {
+export const createPackageHandler: RequestHandler = async (req, res, next) => {
   try {
-    const packageId = parseInt(req.params.id);
-    if (!packageId) {
-      res.status(400).json({ error: "Invalid PackageID" });
-      return;
-    }
+    const body = createPackageBodySchema.parse(req.body)
 
-    const data = await deletePackage(packageId);
-    res.json(data);
+    const created = await createPackage({
+      EstimationID: body.EstimationID,
+      PackageName: body.PackageName.trim(),
+      Description: body.Description
+    })
+
+    res.status(201).json(created)
   } catch (error) {
-    console.error("Error in deletePackageHandler:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error)
   }
-};
+}
+
+export const updatePackageHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const packageId = parseRouteId(req.params.id, 'PackageID')
+    const payload = updatePackageBodySchema.parse(req.body)
+
+    const updated = await updatePackage(packageId, {
+      ...payload,
+      PackageName: payload.PackageName.trim(),
+      Description: payload.Description ?? undefined
+    })
+
+    res.json(updated)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const deletePackageHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const packageId = parseRouteId(req.params.id, 'PackageID')
+
+    await deletePackage(packageId)
+    res.status(204).send()
+  } catch (error) {
+    next(error)
+  }
+}
 
 // ========================
 // Items
 // ========================
-export const getItemsByPackageIdHandler: RequestHandler = async (req, res) => {
-  const packageId = parseInt(req.query.packageId as string);
-  if (isNaN(packageId)) {
-    res.status(400).json({ message: "Invalid package ID" });
-    return;
-  }
 
+export const getItemsByPackageIdHandler: RequestHandler = async (req, res, next) => {
   try {
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input("PackageID", sql.Int, packageId)
+    const packageId = parseIdFromQuery(req.query.packageId, 'PackageID')
+
+    const pool = await poolPromise
+
+    const result = await pool
+      .request()
+      .input('PackageID', sql.Int, packageId)
       .query(`
         SELECT 
           ei.EItemID,
@@ -356,9 +666,8 @@ export const getItemsByPackageIdHandler: RequestHandler = async (req, res) => {
           ei.ItemID,
           ei.Quantity,
           ei.Description,
-          ei.EstimatedUnitCost,
-          ei.CreatedBy,
           ei.CreatedAt,
+          ei.CreatedBy,
           u.FirstName + ' ' + u.LastName AS CreatedByName,
           i.ItemName,
           i.UnitCost
@@ -366,75 +675,100 @@ export const getItemsByPackageIdHandler: RequestHandler = async (req, res) => {
         LEFT JOIN InventoryItems i ON ei.ItemID = i.InventoryItemID
         LEFT JOIN Users u ON ei.CreatedBy = u.UserID
         WHERE ei.PackageID = @PackageID
-      `);
+      `)
 
-    res.json(result.recordset); // ✅ Do not return this — just respond
-  } catch (err) {
-    console.error("Error fetching items by package:", err);
-    res.status(500).json({ message: "Internal server error" });
+    res.json(result.recordset)
+  } catch (error) {
+    next(error)
   }
-};
+}
 
-export const createItemHandler: RequestHandler = async (req, res) => {
-  const data = await createItem(req.body);
-  res.status(201).json(data);
-};
-
-export const updateItemHandler: RequestHandler = async (req, res) => {
+export const createItemHandler: RequestHandler = async (req, res, next) => {
   try {
-    const itemId = parseInt(req.params.itemId);
-    const { Quantity, Description } = req.body;
+    // keep shape flexible for now (createItem has its own typing/validation)
+    const createdItem = await createItem(req.body)
+    res.status(201).json(createdItem)
+  } catch (error) {
+    next(error)
+  }
+}
 
-    if (isNaN(itemId)) {
-      res.status(400).json({ message: "Invalid item ID" });
-      return;
-    }
+export const updateItemHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const itemId = parseRouteId(req.params.id, 'ItemID')
+    const body = updateItemBodySchema.parse(req.body)
 
-    const pool = await poolPromise;
-    await pool.request()
-      .input("EItemID", sql.Int, itemId)
-      .input("Quantity", sql.Int, Quantity)
-      .input("Description", sql.NVarChar(1000), Description)
+    const pool = await poolPromise
+
+    const result = await pool
+      .request()
+      .input('EItemID', sql.Int, itemId)
+      .input('Quantity', sql.Int, body.Quantity)
+      .input('Description', sql.NVarChar(1000), body.Description ?? '')
       .query(`
         UPDATE EstimationItems
         SET Quantity = @Quantity,
             Description = @Description
-        WHERE EItemID = @EItemID
-      `);
+        WHERE EItemID = @EItemID;
 
-    res.status(200).json({ message: "Estimation item updated" });
-  } catch (error) {
-    console.error("❌ Error updating item:", error);
-    res.status(500).json({ message: "Failed to update item" });
-  }
-};
+        SELECT 
+          ei.EItemID,
+          ei.EstimationID,
+          ei.PackageID,
+          ei.ItemID,
+          ei.Quantity,
+          ei.Description,
+          ei.CreatedAt,
+          ei.CreatedBy,
+          u.FirstName + ' ' + u.LastName AS CreatedByName,
+          i.ItemName,
+          i.UnitCost
+        FROM EstimationItems ei
+        LEFT JOIN InventoryItems i ON ei.ItemID = i.InventoryItemID
+        LEFT JOIN Users u ON ei.CreatedBy = u.UserID
+        WHERE ei.EItemID = @EItemID
+      `)
 
-export const deleteItemHandler: RequestHandler = async (req, res) => {
-  try {
-    const itemId = parseInt(req.params.itemId);
-    if (isNaN(itemId)) {
-      res.status(400).json({ message: "Invalid item ID" });
-      return;
+    if (result.recordset.length === 0) {
+      throw new AppError('Item not found', 404)
     }
 
-    const pool = await poolPromise;
-    await pool.request()
-      .input("EItemID", sql.Int, itemId)
-      .query("DELETE FROM EstimationItems WHERE EItemID = @EItemID");
-
-    res.status(200).json({ message: "Estimation item deleted" });
+    res.json(result.recordset[0])
   } catch (error) {
-    console.error("❌ Error deleting item:", error);
-    res.status(500).json({ message: "Failed to delete item" });
+    next(error)
   }
-};
+}
+
+export const deleteItemHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const itemId = parseRouteId(req.params.id, 'ItemID')
+
+    const pool = await poolPromise
+
+    await pool
+      .request()
+      .input('EItemID', sql.Int, itemId)
+      .query(`
+        DELETE FROM EstimationItemSupplierQuotes
+        WHERE ItemID = @EItemID;
+
+        DELETE FROM EstimationItems
+        WHERE EItemID = @EItemID;
+      `)
+
+    res.status(204).send()
+  } catch (error) {
+    next(error)
+  }
+}
 
 // ========================
 // Quotes
 // ========================
-export const getAllQuotesHandler: RequestHandler = async (req, res) => {
+
+export const getAllQuotesHandler: RequestHandler = async (_req, res, next) => {
   try {
-    const pool = await poolPromise;
+    const pool = await poolPromise
 
     const result = await pool.request().query(`
       SELECT TOP (100)
@@ -454,10 +788,12 @@ export const getAllQuotesHandler: RequestHandler = async (req, res) => {
         sup.SuppName AS SupplierName
       FROM EstimationItemSupplierQuotes q
         LEFT JOIN EstimationItems ei ON q.ItemID = ei.ItemID
-        LEFT JOIN EstimationSuppliers s ON q.SupplierID = s.SupplierID AND ei.EstimationID = s.EstimationID
+        LEFT JOIN EstimationSuppliers s
+          ON q.SupplierID = s.SupplierID
+          AND ei.EstimationID = s.EstimationID
         LEFT JOIN InventoryItems i ON q.ItemID = i.InventoryItemID
         LEFT JOIN Suppliers sup ON q.SupplierID = sup.SuppID
-    `);
+    `)
 
     const quotes = result.recordset.map((row) => ({
       QuoteID: row.QuoteID,
@@ -473,166 +809,139 @@ export const getAllQuotesHandler: RequestHandler = async (req, res) => {
       SupplierCurrency: row.SupplierCurrency,
       SupplierDeliveryDays: row.SupplierDeliveryDays,
       ItemName: row.ItemName,
-      SupplierName: row.SupplierName,
-    }));
+      SupplierName: row.SupplierName
+    }))
 
-    res.json(quotes);
-  } catch (err) {
-    console.error("Failed to load all quotes:", err);
-    res.status(500).json({ error: "Failed to load quotes" });
-  }
-};
-
-export const getPastEstimationsHandler: RequestHandler = async (req, res) => {
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request().query(`
-      SELECT 
-        e.EstimationID,
-        e.Title AS EstimationName,
-        e.CreatedBy,
-        u.FirstName + ' ' + u.LastName AS EstimatorName,
-        e.CreatedAt,
-        (ISNULL(e.TotalMaterialCost, 0) + ISNULL(e.TotalLaborCost, 0)) AS TotalEstimatedCost,
-        COUNT(DISTINCT ei.EItemID) AS ItemCount,
-        MAX(eq.ModifiedAt) AS LastModified
-      FROM Estimations e
-        LEFT JOIN Users u ON e.CreatedBy = u.UserID
-        LEFT JOIN EstimationItems ei ON e.EstimationID = ei.EstimationID
-        LEFT JOIN EstimationItemSupplierQuotes eq ON ei.ItemID = eq.ItemID
-      GROUP BY 
-        e.EstimationID,
-        e.Title,
-        e.CreatedBy,
-        u.FirstName,
-        u.LastName,
-        e.CreatedAt,
-        e.TotalMaterialCost,
-        e.TotalLaborCost
-      ORDER BY e.CreatedAt DESC
-    `);
-    res.json(result.recordset);
-  } catch (err) {
-    console.error("Failed to fetch past estimations:", err);
-    res.status(500).json({ message: "Failed to load past estimations" });
-  }
-};
-
-export const getQuotesByItemIdHandler: RequestHandler = async (req, res) => {
-  try {
-    const itemId = parseInt(req.query.itemId as string);
-    if (!itemId) {
-      res.status(400).json({ error: "Missing itemId" });
-      return;
-    }
-
-    const data = await getQuotesByItemId(itemId);
-    res.json(data);
+    res.json(quotes)
   } catch (error) {
-    console.error("Error in getQuotesByItemIdHandler:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error)
   }
-};
+}
 
-export const createSupplierQuoteHandler: RequestHandler = async (req, res) => {
-  const data = await createSupplierQuote(req.body);
-  res.status(201).json(data);
-};
-
-export const updateSupplierQuoteHandler: RequestHandler = async (req, res) => {
+export const getQuotesByItemIdHandler: RequestHandler = async (req, res, next) => {
   try {
-    const quoteId = parseInt(req.params.quoteId);
-    const {
-      QuotedUnitCost,
-      ExpectedDeliveryDays,
-      CurrencyCode,
-      Notes,
-      SupplierQuoteReference
-    } = req.body;
+    const itemId = parseIdFromQuery(req.query.itemId, 'ItemID')
 
-    if (isNaN(quoteId)) {
-      res.status(400).json({ message: "Invalid quote ID" });
-      return;
-    }
+    const quotes = await getQuotesByItemId(itemId)
+    res.json(quotes)
+  } catch (error) {
+    next(error)
+  }
+}
 
-    const pool = await poolPromise;
-    await pool.request()
-      .input("QuoteID", sql.Int, quoteId)
-      .input("QuotedUnitCost", sql.Decimal(18, 2), QuotedUnitCost)
-      .input("ExpectedDeliveryDays", sql.Int, ExpectedDeliveryDays)
-      .input("CurrencyCode", sql.VarChar(10), CurrencyCode)
-      .input("Notes", sql.NVarChar(1000), Notes)
-      .input("SupplierQuoteReference", sql.NVarChar(255), SupplierQuoteReference)
+export const createSupplierQuoteHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const body = createSupplierQuoteBodySchema.parse(req.body)
+    const createdQuote = await createSupplierQuote(body)
+    res.status(201).json(createdQuote)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const updateSupplierQuoteHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const quoteId = parseRouteId(req.params.id, 'QuoteID')
+    const body = updateSupplierQuoteBodySchema.parse(req.body)
+
+    const pool = await poolPromise
+
+    const result = await pool
+      .request()
+      .input('QuoteID', sql.Int, quoteId)
+      .input('QuotedUnitCost', sql.Decimal(18, 2), body.QuotedUnitCost)
+      .input('ExpectedDeliveryDays', sql.Int, body.ExpectedDeliveryDays)
+      .input('CurrencyCode', sql.NVarChar(10), body.CurrencyCode)
+      .input('IsSelected', sql.Bit, body.IsSelected)
+      .input('Notes', sql.NVarChar(sql.MAX), body.Notes ?? null)
       .query(`
         UPDATE EstimationItemSupplierQuotes
-        SET 
+        SET
           QuotedUnitCost = @QuotedUnitCost,
           ExpectedDeliveryDays = @ExpectedDeliveryDays,
           CurrencyCode = @CurrencyCode,
-          Notes = @Notes,
-          SupplierQuoteReference = @SupplierQuoteReference
+          IsSelected = @IsSelected,
+          Notes = @Notes
+        WHERE QuoteID = @QuoteID;
+
+        SELECT *
+        FROM EstimationItemSupplierQuotes
         WHERE QuoteID = @QuoteID
-      `);
+      `)
 
-    res.status(200).json({ message: "Supplier quote updated" });
-  } catch (err) {
-    console.error("❌ updateSupplierQuoteHandler error:", err);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
-
-export const deleteSupplierQuoteHandler: RequestHandler = async (req, res) => {
-  try {
-    const quoteId = parseInt(req.params.quoteId);
-    if (isNaN(quoteId)) {
-      res.status(400).json({ message: "Invalid quote ID" });
-      return;
+    if (result.recordset.length === 0) {
+      throw new AppError('Quote not found', 404)
     }
 
-    const pool = await poolPromise;
-    await pool.request()
-      .input("QuoteID", sql.Int, quoteId)
-      .query("DELETE FROM EstimationItemSupplierQuotes WHERE QuoteID = @QuoteID");
-
-    res.status(200).json({ message: "Supplier quote deleted" });
+    res.json(result.recordset[0])
   } catch (error) {
-    console.error("❌ Error deleting supplier quote:", error);
-    res.status(500).json({ message: "Failed to delete quote" });
+    next(error)
   }
-};
+}
 
-export const selectWinningQuoteHandler: RequestHandler = async (req, res) => {
+export const deleteSupplierQuoteHandler: RequestHandler = async (req, res, next) => {
   try {
-    const quoteId = parseInt(req.params.quoteId);
-    if (isNaN(quoteId)) {
-      res.status(400).json({ message: "Invalid quote ID" });
-      return;
-    }
+    const quoteId = parseRouteId(req.params.id, 'QuoteID')
 
-    await selectSupplierQuote(quoteId);
-    res.status(200).json({ message: "Quote awarded successfully" });
+    const pool = await poolPromise
+
+    await pool
+      .request()
+      .input('QuoteID', sql.Int, quoteId)
+      .query(`
+        DELETE FROM EstimationItemSupplierQuotes
+        WHERE QuoteID = @QuoteID
+      `)
+
+    res.status(204).send()
   } catch (error) {
-    console.error("❌ Error awarding quote:", error);
-    res.status(500).json({ message: "Failed to award quote" });
+    next(error)
   }
-};
+}
 
-export const getClientListHandler: RequestHandler = async (req, res) => {
-  const pool = await poolPromise;
-  const result = await pool.request().query(`
-    SELECT ClientID, ClientName
-    FROM Clients
-    ORDER BY ClientName
-  `);
-  res.json(result.recordset);
-};
+export const selectWinningQuoteHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const quoteId = parseRouteId(req.params.quoteId, 'QuoteID')
 
-export const getProjectListHandler: RequestHandler = async (req, res) => {
-  const pool = await poolPromise;
-  const result = await pool.request().query(`
-    SELECT ProjectID, ProjectName
-    FROM Projects
-    ORDER BY ProjectName
-  `);
-  res.json(result.recordset);
-};
+    const updated = await selectSupplierQuote(quoteId)
+    res.json(updated)
+  } catch (error) {
+    next(error)
+  }
+}
+
+// ========================
+// Reference lookups
+// ========================
+
+export const getClientListHandler: RequestHandler = async (_req, res, next) => {
+  try {
+    const pool = await poolPromise
+
+    const result = await pool.request().query(`
+      SELECT ClientID, ClientName
+      FROM Clients
+      ORDER BY ClientName
+    `)
+
+    res.json(result.recordset)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const getProjectListHandler: RequestHandler = async (_req, res, next) => {
+  try {
+    const pool = await poolPromise
+
+    const result = await pool.request().query(`
+      SELECT ProjectID, ProjName AS ProjectName
+      FROM Projects
+      ORDER BY ProjName
+    `)
+
+    res.json(result.recordset)
+  } catch (error) {
+    next(error)
+  }
+}

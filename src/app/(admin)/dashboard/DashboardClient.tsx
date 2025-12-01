@@ -2,7 +2,7 @@
 "use client";
 
 import React from "react";
-import type { UserSession } from "@/types/session";
+import type { UserSession } from "@/domain/auth/sessionTypes";
 import { Card, CardContent } from "@/components/ui/card";
 import dynamic from "next/dynamic";
 

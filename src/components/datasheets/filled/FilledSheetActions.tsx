@@ -4,8 +4,8 @@
 import React from "react";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
-import type { UserSession } from "@/types/session";
-import type { MinimalSheetForActions } from "@/types/sheet";
+import type { UserSession } from "@/domain/auth/sessionTypes";
+import type { MinimalSheetForActions } from "@/domain/datasheets/sheetTypes";
 import IconTooltip from "@/components/ui/tooltip/IconTooltip";
 import ExportSheetButtons from "@/components/datasheets/ExportSheetButtons";
 
@@ -114,16 +114,16 @@ export default function FilledSheetActions({
       )}
 
       {canDuplicate && (
-        <IconTooltip label="Duplicate Filled Sheet">
+        <IconTooltip label="Clone Filled Sheet">
           <button
             onClick={() =>
-              router.push(`/datasheets/filled/create?cloneId=${sheet.sheetId}`)
+              router.push(`/datasheets/filled/${sheet.sheetId}/clone`)
             }
-            title="Duplicate Filled Sheet"
+            title="Clone Filled Sheet"
           >
             <Image
               src="/images/duplicate.png"
-              alt="Duplicate"
+              alt="Clone"
               width={iconSize}
               height={iconSize}
             />

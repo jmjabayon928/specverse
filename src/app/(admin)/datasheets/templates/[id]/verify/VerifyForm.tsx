@@ -4,7 +4,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function VerifyForm({ sheetId }: { sheetId: number }) {
+export default function VerifyForm(props: Readonly<{ sheetId: number }>) {
+  const { sheetId } = props;
+
   const [action, setAction] = useState<"verify" | "reject" | "">("");
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(false);
@@ -50,35 +52,33 @@ export default function VerifyForm({ sheetId }: { sheetId: number }) {
 
   return (
     <form onSubmit={handleSubmit} className="mt-8 border-t pt-6">
-      <div className="mb-4">
-        <label className="block font-medium mb-2">Decision</label>
+      <fieldset className="mb-4">
+        <legend className="block font-medium mb-2">Decision</legend>
         <div className="flex items-center gap-6">
           <label className="inline-flex items-center">
             <input
               type="radio"
               name="action"
               value="verify"
-              className="mr-2"
               checked={action === "verify"}
               onChange={() => setAction("verify")}
               required
             />
-            Verify
+            <span className="ml-2">Verify</span>
           </label>
           <label className="inline-flex items-center">
             <input
               type="radio"
               name="action"
               value="reject"
-              className="mr-2"
               checked={action === "reject"}
               onChange={() => setAction("reject")}
               required
             />
-            Reject
+            <span className="ml-2">Reject</span>
           </label>
         </div>
-      </div>
+      </fieldset>
 
       {action === "reject" && (
         <div className="mb-4">
@@ -107,4 +107,3 @@ export default function VerifyForm({ sheetId }: { sheetId: number }) {
     </form>
   );
 }
-

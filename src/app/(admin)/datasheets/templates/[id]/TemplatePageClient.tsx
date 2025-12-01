@@ -3,13 +3,14 @@
 
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import SheetHeaderBar from "@/components/datasheets/SheetHeaderBar";
 import TemplateActions from "@/components/datasheets/templates/TemplateActions";
 import TemplateViewer from "./TemplateViewer";
 import { translations as labelTranslations } from "@/constants/translations";
-import type { UserSession } from "@/types/session";
-import type { UnifiedSheet, SheetStatus } from "@/types/sheet";
-import type { SheetTranslations } from "@/types/translation";
+import type { UserSession } from "@/domain/auth/sessionTypes";
+import type { UnifiedSheet, SheetStatus } from "@/domain/datasheets/sheetTypes";
+import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 
 interface Props {
   sheetId: number;
@@ -32,6 +33,8 @@ const TemplatePageClient: React.FC<Props> = ({
   defaultUnitSystem,
   initialTranslations,
 }) => {
+  const router = useRouter();
+
   const [lang, setLang] = useState<string>(defaultLanguage);
   const [unitSystem, setUnitSystem] = useState<"SI" | "USC">(defaultUnitSystem);
 
@@ -56,7 +59,12 @@ const TemplatePageClient: React.FC<Props> = ({
     const fetchTemplateWithTranslations = async () => {
       try {
         const res = await fetch(
-          `/api/backend/templates/${sheetId}?lang=${lang}&uom=${unitSystem}`
+          `/api/backend/templates/${sheetId}?lang=${encodeURIComponent(lang)}&uom=${unitSystem}`,
+          {
+            cache: "no-store",
+            credentials: "include",
+            headers: { Accept: "application/json" },
+          }
         );
         if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
         const data = await res.json();
@@ -91,6 +99,15 @@ const TemplatePageClient: React.FC<Props> = ({
     subsheetLabelMap: translations?.subsheets,
     sheetFieldMap: translations?.sheet,
     optionMap: translations?.options,
+  };
+
+  // Handlers for TemplateViewer buttons
+  const handleAddNote = (id: number) => {
+    router.push(`/datasheets/templates/${id}/notes/new`);
+  };
+
+  const handleAddAttachment = (id: number) => {
+    router.push(`/datasheets/templates/${id}/attachments/new`);
   };
 
   return (
@@ -155,6 +172,8 @@ const TemplatePageClient: React.FC<Props> = ({
         translations={viewerTranslations}
         language={lang}
         unitSystem={unitSystem}
+        onAddNote={handleAddNote}
+        onAddAttachment={handleAddAttachment}
       />
     </div>
   );

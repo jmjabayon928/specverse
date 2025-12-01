@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Estimation } from "@/types/estimation";
+import { Estimation } from "@/domain/estimations/estimationTypes";
 
 export function useEstimationData() {
   const [data, setData] = useState<Estimation[]>([]);

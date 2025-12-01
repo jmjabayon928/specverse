@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import PackageForm from '@/components/estimation/PackageForm';
-import { EstimationPackage } from '@/types/estimation';
+import { EstimationPackage } from '@/domain/estimations/estimationTypes';
 
 export default function EditPackagePage() {
   const { id } = useParams();

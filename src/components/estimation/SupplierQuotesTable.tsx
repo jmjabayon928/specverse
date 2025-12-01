@@ -1,5 +1,5 @@
 import React from "react";
-import { SupplierQuote } from "@/types/estimation";
+import { SupplierQuote } from "@/domain/estimations/estimationTypes";
 
 interface SupplierQuotesTableProps {
     quotes: SupplierQuote[];

@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { poolPromise, sql } from "../config/db";
 import { getUserPermissions } from "../database/permissionQueries";
-import { JwtPayload as CustomJwtPayload } from "@/types/JwtPayload";
+import { JwtPayload as CustomJwtPayload } from "@/domain/auth/JwtTypes";
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 

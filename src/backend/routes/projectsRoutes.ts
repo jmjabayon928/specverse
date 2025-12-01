@@ -1,17 +1,21 @@
-import express from "express";
-import { getAllProjects } from "../database/projectQueries";
+import { Router } from "express";
+import { verifyToken } from "../middleware/authMiddleware";
+import {
+  listProjects,
+  getProject,
+  createProject,
+  updateProject,
+  deleteProject,
+  getProjectOptions,
+} from "../controllers/projectsController";
 
-const router = express.Router();
+const router = Router();
 
-// GET /api/projects
-router.get("/", async (req, res) => {
-  try {
-    const data = await getAllProjects(); // ← this should return ProjectID and ProjName
-    res.json(data);
-  } catch (err) {
-    console.error("Failed to fetch projects:", err);
-    res.status(500).json({ error: "Failed to load projects" });
-  }
-});
+router.get("/", verifyToken, listProjects);
+router.get("/options", verifyToken, getProjectOptions); // clients + managers for form
+router.get("/:id", verifyToken, getProject);
+router.post("/", verifyToken, createProject);
+router.patch("/:id", verifyToken, updateProject);
+router.delete("/:id", verifyToken, deleteProject);
 
 export default router;

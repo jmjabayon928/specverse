@@ -9,7 +9,7 @@ interface InventoryEditPageProps {
   };
 }
 
-export default async function InventoryEditPage({ params }: InventoryEditPageProps) {
+export default async function InventoryEditPage({ params }: Readonly<InventoryEditPageProps>) {
   const itemId = parseInt(params.id);
   if (isNaN(itemId)) return notFound();
 

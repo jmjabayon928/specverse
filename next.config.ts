@@ -1,3 +1,4 @@
+// next.config.ts
 import path from "path";
 import { NextConfig } from "next";
 
@@ -8,7 +9,7 @@ const nextConfig: NextConfig = {
       use: ["@svgr/webpack"],
     });
 
-    // ✅ Important: Add alias for "@"
+    // ✅ Alias "@"
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
       "@": path.resolve(__dirname, "src"),
@@ -18,9 +19,15 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return [
+      // existing backend proxy (kept)
       {
         source: "/api/backend/:path*",
         destination: "http://localhost:5000/api/backend/:path*",
+      },
+      // ✅ new: mirror API proxy
+      {
+        source: "/api/mirror/:path*",
+        destination: "http://localhost:5000/api/mirror/:path*",
       },
     ];
   },

@@ -1,11 +1,10 @@
 // src/components/datasheets/templates/create/InfoTemplateBuilder.tsx
-
 "use client";
 
 import React from "react";
 import { TrashIcon, ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { groupedSIUnits } from "@/utils/units";
-import type { InfoField } from "@/types/sheet";
+import type { InfoField } from "@/domain/datasheets/sheetTypes";
 
 interface Props {
   subsheet: {
@@ -19,13 +18,9 @@ interface Props {
   formErrors?: Record<string, string[]>;
 }
 
-export default function InfoTemplateBuilder({
-  subsheet,
-  subsheetIndex,
-  onFieldsChange,
-  isEditMode,
-  formErrors = {},
-}: Props) {
+export default function InfoTemplateBuilder(props: Readonly<Props>) {
+  const { subsheet, subsheetIndex, onFieldsChange, isEditMode, formErrors = {} } = props;
+
   const safeFields = React.useMemo(() => subsheet.fields ?? [], [subsheet.fields]);
 
   const [localOptionValues, setLocalOptionValues] = React.useState<string[]>(
@@ -102,9 +97,16 @@ export default function InfoTemplateBuilder({
         const base = `subsheets.${subsheetIndex}.fields.${index}`;
         const getError = (key: keyof InfoField) => formErrors?.[`${base}.${key}`]?.[0];
 
+        // Stable input ids for a11y labels
+        const idLabel = `fld-${subsheetIndex}-${index}-label`;
+        const idType = `fld-${subsheetIndex}-${index}-type`;
+        const idUom = `fld-${subsheetIndex}-${index}-uom`;
+        const idAllowed = `fld-${subsheetIndex}-${index}-allowed`;
+        const idRequired = `fld-${subsheetIndex}-${index}-required`;
+
         return (
           <div
-            key={index}
+            key={`so:${field.sortOrder}`} // ✅ stable key (no array index)
             className="border p-3 rounded bg-gray-50 shadow-md space-y-2"
           >
             {isEditMode && (
@@ -140,8 +142,9 @@ export default function InfoTemplateBuilder({
 
             <div className="grid grid-cols-5 gap-4">
               <div>
-                <label className="text-sm font-medium">Label</label>
+                <label htmlFor={idLabel} className="text-sm font-medium">Label</label>
                 <input
+                  id={idLabel}
                   type="text"
                   value={field.label}
                   onChange={(e) => handleChange(index, "label", e.target.value)}
@@ -155,8 +158,9 @@ export default function InfoTemplateBuilder({
               </div>
 
               <div>
-                <label className="text-sm font-medium">Type</label>
+                <label htmlFor={idType} className="text-sm font-medium">Type</label>
                 <select
+                  id={idType}
                   value={field.infoType}
                   onChange={(e) => handleChange(index, "infoType", e.target.value as InfoField["infoType"])}
                   className={`w-full px-2 py-1 border rounded ${getError("infoType") ? "border-red-500" : ""}`}
@@ -173,8 +177,9 @@ export default function InfoTemplateBuilder({
               </div>
 
               <div>
-                <label className="text-sm font-medium">UOM</label>
+                <label htmlFor={idUom} className="text-sm font-medium">UOM</label>
                 <select
+                  id={idUom}
                   value={field.uom ?? ""}
                   onChange={(e) => handleChange(index, "uom", e.target.value)}
                   className={`w-full px-2 py-1 border rounded ${getError("uom") ? "border-red-500" : ""}`}
@@ -198,8 +203,9 @@ export default function InfoTemplateBuilder({
               </div>
 
               <div>
-                <label className="text-sm font-medium">Allowed Values</label>
+                <label htmlFor={idAllowed} className="text-sm font-medium">Allowed Values</label>
                 <input
+                  id={idAllowed}
                   type="text"
                   value={localOptionValues[index] || ""}
                   onChange={(e) => handleLocalChange(index, e.target.value)}
@@ -211,8 +217,9 @@ export default function InfoTemplateBuilder({
               </div>
 
               <div className="flex items-center pt-6">
-                <label className="text-sm font-medium mr-2">Required</label>
+                <label htmlFor={idRequired} className="text-sm font-medium mr-2">Required</label>
                 <input
+                  id={idRequired}
                   type="checkbox"
                   title="Required Field"
                   checked={field.required}
@@ -239,5 +246,3 @@ export default function InfoTemplateBuilder({
     </div>
   );
 }
-
-

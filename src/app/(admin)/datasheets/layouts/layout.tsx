@@ -1,0 +1,6 @@
+// src/app/(admin)/datasheets/layouts/layout.tsx
+export const dynamicParams = true;
+export const dynamic = "force-dynamic";
+export default function Layout({ children }: { readonly children: React.ReactNode }) {
+  return children;
+}

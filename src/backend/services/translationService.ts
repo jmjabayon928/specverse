@@ -1,7 +1,7 @@
 // src/backend/services/translationService.ts
 
 import { poolPromise, sql } from "@/backend/config/db";
-import type { SheetTranslations } from "@/types/translation";
+import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 
 export async function getSheetTranslations(sheetId: number, lang: string): Promise<SheetTranslations> {
   const pool = await poolPromise;

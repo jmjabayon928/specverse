@@ -5,12 +5,24 @@ export const fetchWithAuth = async <T>(
 ): Promise<T> => {
   const token = localStorage.getItem("token");
 
+  // Normalize HeadersInit → plain object
+  const toHeaderObject = (h: HeadersInit | undefined): Record<string, string> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    // Here h is a Record<string, string>
+    return h;
+  };
+
+  const extraHeaders = toHeaderObject(options.headers);
+
   const res = await fetch(url, {
+    // It’s fine to spread options first; our `headers` below will override
     ...options,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...extraHeaders,
     },
   });
 

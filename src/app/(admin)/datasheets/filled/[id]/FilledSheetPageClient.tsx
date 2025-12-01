@@ -3,14 +3,15 @@
 
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import SheetHeaderBar from "@/components/datasheets/SheetHeaderBar";
 import FilledSheetActions from "@/components/datasheets/filled/FilledSheetActions";
 import FilledSheetViewer from "../FilledSheetViewer";
 import { translations as labelTranslations } from "@/constants/translations";
 import { applySheetTranslations } from "@/utils/applySheetTranslations";
-import type { UserSession } from "@/types/session";
-import type { SheetStatus, UnifiedSheet } from "@/types/sheet";
-import type { SheetTranslations } from "@/types/translation";
+import type { UserSession } from "@/domain/auth/sessionTypes";
+import type { SheetStatus, UnifiedSheet } from "@/domain/datasheets/sheetTypes";
+import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 
 interface Props {
   sheetId: number;
@@ -31,6 +32,8 @@ const FilledSheetPageClient: React.FC<Props> = ({
   defaultLanguage,
   defaultUnitSystem,
 }) => {
+  const router = useRouter();
+
   const [lang, setLang] = useState<string>(defaultLanguage);
   const [unitSystem, setUnitSystem] = useState<"SI" | "USC">(defaultUnitSystem);
   const [translatedSheet, setTranslatedSheet] = useState<UnifiedSheet>(filledSheet);
@@ -68,7 +71,13 @@ const FilledSheetPageClient: React.FC<Props> = ({
       }
 
       try {
-        const res = await fetch(`/api/backend/filledsheets/${sheetId}?lang=${lang}`);
+        const res = await fetch(`/api/backend/filledsheets/${sheetId}?lang=${encodeURIComponent(lang)}`, {
+          cache: "no-store",
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+          },
+        });
         if (!res.ok) throw new Error("Failed to fetch sheet data");
 
         const result = await res.json();
@@ -94,6 +103,17 @@ const FilledSheetPageClient: React.FC<Props> = ({
     const next = unitSystem === "SI" ? "USC" : "SI";
     document.cookie = `unitSystem=${next}; path=/; max-age=31536000`;
     setUnitSystem(next);
+  };
+
+  // 🔹 Handlers passed to the viewer so the buttons work
+  const handleAddNote = (id: number) => {
+    // Navigate to your create-note flow for the filled sheet
+    router.push(`/datasheets/filled/${id}/notes/new`);
+  };
+
+  const handleAddAttachment = (id: number) => {
+    // Navigate to your add-attachment flow for the filled sheet
+    router.push(`/datasheets/filled/${id}/attachments/new`);
   };
 
   return (
@@ -153,6 +173,8 @@ const FilledSheetPageClient: React.FC<Props> = ({
         translations={translations}
         language={lang}
         unitSystem={unitSystem}
+        onAddNote={handleAddNote}
+        onAddAttachment={handleAddAttachment}
       />
     </div>
   );

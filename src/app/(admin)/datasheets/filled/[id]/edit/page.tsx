@@ -11,10 +11,10 @@ import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
 import { mapToUnifiedSheet } from "@/utils/templateViewMapper";
 
 interface PageProps {
-  params: { id: string };
+  readonly params: Readonly<{ id: string }>;
 }
 
-export default async function FilledEditPage(props: PageProps) {
+export default async function FilledEditPage(props: Readonly<PageProps>) {
   const { id } = props.params; // Avoid destructuring in the argument itself
   const sheetId = Number(id ?? "0");
 
@@ -32,7 +32,7 @@ export default async function FilledEditPage(props: PageProps) {
   const defaultValues = mapToUnifiedSheet({
     datasheet: filledData.datasheet,
     subsheets: filledData.datasheet.subsheets,
-    isTemplate: false, 
+    isTemplate: false,
   });
 
   return (
@@ -40,11 +40,26 @@ export default async function FilledEditPage(props: PageProps) {
       <FilledSheetEditorForm
         defaultValues={defaultValues}
         areas={referenceData.areas.map((a) => ({ label: a.name, value: a.id }))}
-        manufacturers={referenceData.manufacturers.map((m) => ({ label: m.name, value: m.id }))}
-        suppliers={referenceData.suppliers.map((s) => ({ label: s.name, value: s.id }))}
-        categories={referenceData.categories.map((c) => ({ label: c.name, value: c.id }))}
-        clients={referenceData.clients.map((c) => ({ label: c.name, value: c.id }))}
-        projects={referenceData.projects.map((p) => ({ label: p.name, value: p.id }))}
+        manufacturers={referenceData.manufacturers.map((m) => ({
+          label: m.name,
+          value: m.id,
+        }))}
+        suppliers={referenceData.suppliers.map((s) => ({
+          label: s.name,
+          value: s.id,
+        }))}
+        categories={referenceData.categories.map((c) => ({
+          label: c.name,
+          value: c.id,
+        }))}
+        clients={referenceData.clients.map((c) => ({
+          label: c.name,
+          value: c.id,
+        }))}
+        projects={referenceData.projects.map((p) => ({
+          label: p.name,
+          value: p.id,
+        }))}
       />
     </SecurePage>
   );

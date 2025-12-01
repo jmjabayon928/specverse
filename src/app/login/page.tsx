@@ -1,5 +1,4 @@
-// src/app/login/page.tsx
-'use client';
+'use client'
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -13,7 +12,7 @@ import Link from "next/link";
 export default function LoginPage() {
   const router = useRouter();
 
-  const [mounted, setMounted] = useState(false); 
+  const [mounted, setMounted] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -39,7 +38,7 @@ export default function LoginPage() {
     setError(""); // Clear previous error
 
     try {
-      const response = await fetch("http://localhost:5000/api/backend/auth/login", {
+      const response = await fetch("/api/backend/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -53,7 +52,7 @@ export default function LoginPage() {
       }
 
       // ✅ Optional: revalidate session if needed
-      const sessionCheck = await fetch("http://localhost:5000/api/backend/auth/session", {
+      const sessionCheck = await fetch("/api/backend/auth/session", {
         method: "GET",
         headers: {
           "Cache-Control": "no-cache",
@@ -120,16 +119,19 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
-              <span
+              <button
+                type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2"
+                className="absolute z-30 -translate-y-1/2 right-4 top-1/2 p-1 cursor-pointer 
+                          bg-transparent border-none focus:outline-none"
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? (
                   <EyeIcon className="fill-gray-500 dark:fill-gray-400" />
                 ) : (
                   <EyeCloseIcon className="fill-gray-500 dark:fill-gray-400" />
                 )}
-              </span>
+              </button>
             </div>
           </div>
           {error && <div className="text-sm text-red-600">{error}</div>}
@@ -140,12 +142,9 @@ export default function LoginPage() {
                 Keep me logged in
               </span>
             </div>
-            <Link
-              href="/reset-password"
-              className="text-sm text-brand-500 hover:text-brand-600 dark:text-brand-400"
-            >
-              Forgot password?
-            </Link>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              Forgot password? Contact your administrator.
+            </span>
           </div>
           <Button type="submit" className="w-full" size="sm">
             Sign in
@@ -153,13 +152,7 @@ export default function LoginPage() {
         </form>
         <div className="mt-5">
           <p className="text-sm font-normal text-center text-gray-700 dark:text-gray-400 sm:text-start">
-            Don&apos;t have an account?{" "}
-            <Link
-              href="/signup"
-              className="text-brand-500 hover:text-brand-600 dark:text-brand-400"
-            >
-              Sign Up
-            </Link>
+            Don&apos;t have an account? Contact your system administrator.
           </p>
         </div>
       </div>

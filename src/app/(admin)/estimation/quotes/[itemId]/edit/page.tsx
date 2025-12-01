@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import SupplierQuoteForm from '@/components/estimation/SupplierQuoteForm';
-import { SupplierQuote } from '@/types/estimation';
+import { SupplierQuote } from '@/domain/estimations/estimationTypes';
 
 export default function EditQuotePage() {
   const { id } = useParams();

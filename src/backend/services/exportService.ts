@@ -1,13 +1,13 @@
 import puppeteer from "puppeteer";
 import ExcelJS from "exceljs";
-import { Buffer } from "buffer";
-import fs from "fs";
-import path from "path";
+import { Buffer } from "node:buffer";
+import fs from "node:fs";
+import path from "node:path";
 import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
 import { convertToUSC } from "@/utils/unitConversionTable";
 import { getLabel } from "@/utils/translationUtils";
 import { translations } from "@/constants/translations";
-import type { UnifiedSheet, UnifiedSubsheet } from "@/types/sheet";
+import type { UnifiedSheet, UnifiedSubsheet } from "@/domain/datasheets/sheetTypes";
 
 interface DatasheetPDFExport {
   buffer: Buffer;
@@ -131,7 +131,7 @@ export async function generateDatasheetPDF(
 
   await browser.close();
 
-  const fileName = `${sheet.sheetName.replace(/\s+/g, "_")}_${sheet.sheetId}.pdf`;
+  const fileName = `${sheet.sheetName.replaceAll(/\s+/g, "_")}_${sheet.sheetId}.pdf`;
 
   return {
     buffer: Buffer.from(pdfBuffer.buffer), // ✅ fix type error

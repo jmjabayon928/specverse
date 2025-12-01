@@ -12,7 +12,7 @@ import {
 import {
   EstimationIcon,
   DataSheetsIcon,
-  //AdministrationIcon,
+  AdministrationIcon,
   InventoryIcon,
   ReportsIcon,
   AnalyticsIcon,
@@ -54,6 +54,8 @@ const navItems: NavItem[] = [
       { name: "Templates", path: "/datasheets/templates", pro: false },
       { name: "Filled Forms", path: "/datasheets/filled", pro: false },
       { name: "Revisions", path: "/datasheets/revisions", pro: false },
+      { name: "Layouts (Builder)", path: "/datasheets/layouts", pro: false },
+      { name: "Mirror (Preview)", path: "/datasheets/mirror", pro: false },
     ],
   },
   {
@@ -76,6 +78,20 @@ const navItems: NavItem[] = [
       { name: "Transactions", path: "/inventory/transactions" },
       { name: "Maintenance", path: "/inventory/maintenance" },
       { name: "Audit Logs", path: "/inventory/logs" },
+    ],
+  },
+  {
+    icon: <AdministrationIcon />,
+    name: "Administration",
+    roles: ["admin"],
+    subItems: [
+      { name: "Users", path: "/settings/users", pro: false },
+      { name: "Roles", path: "/settings/roles", pro: false },
+      { name: "Permissions", path: "/settings/permissions", pro: false },
+      { name: "Projects", path: "/settings/projects", pro: false },
+      { name: "Clients", path: "/settings/clients", pro: false },
+      { name: "Manufacturers", path: "/settings/manufacturers", pro: false },
+      { name: "Suppliers", path: "/settings/suppliers", pro: false },
     ],
   },
   {
@@ -300,14 +316,14 @@ const AppSidebar: React.FC = () => {
             <>
               <Image
                 className="dark:hidden"
-                src="/images/logo/logo.svg"
+                src="/images/logo/SpecVerse150x40.png"
                 alt="Logo"
                 width={150}
                 height={40}
               />
               <Image
                 className="hidden dark:block"
-                src="/images/logo/logo-dark.svg"
+                src="/images/logo/SpecVerse150x40.png"
                 alt="Logo"
                 width={150}
                 height={40}
@@ -315,7 +331,7 @@ const AppSidebar: React.FC = () => {
             </>
           ) : (
             <Image
-              src="/images/logo/logo-icon.svg"
+              src="/images/logo/SpecVerse32x32.png"
               alt="Logo"
               width={32}
               height={32}

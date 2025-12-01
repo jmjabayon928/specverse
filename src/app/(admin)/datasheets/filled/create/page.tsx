@@ -6,7 +6,7 @@ import FilledSheetForm from "./FilledSheetForm";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import { notFound } from "next/navigation";
 import { getSheetTranslations } from "@/backend/services/translationService";
-import type { SheetTranslations } from "@/types/translation";
+import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 
 interface PageProps {
   searchParams: {
@@ -15,7 +15,9 @@ interface PageProps {
   };
 }
 
-export default async function FilledSheetCreatePage({ searchParams }: PageProps) {
+export default async function FilledSheetCreatePage(props: Readonly<PageProps>) {
+  const { searchParams } = props;
+
   await requireAuth();
 
   const idParam = searchParams?.templateId;

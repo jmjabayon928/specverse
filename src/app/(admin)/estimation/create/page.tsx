@@ -50,7 +50,7 @@ export default function CreateEstimationPage() {
       <h2 className="text-xl font-bold mb-4">Create New Project Estimation</h2>
       <form onSubmit={handleCreate} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1">Project</label>
+          <label htmlFor="Project" className="block text-sm font-medium mb-1">Project</label>
           <select
             value={projectId}
             onChange={(e) => setProjectId(e.target.value)}
@@ -68,7 +68,7 @@ export default function CreateEstimationPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Title</label>
+          <label htmlFor="Title" className="block text-sm font-medium mb-1">Title</label>
           <input
             type="text"
             className="w-full border rounded px-3 py-2"
@@ -80,7 +80,7 @@ export default function CreateEstimationPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Description</label>
+          <label htmlFor="Description" className="block text-sm font-medium mb-1">Description</label>
           <textarea
             className="w-full border rounded px-3 py-2"
             rows={4}

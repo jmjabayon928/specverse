@@ -8,8 +8,8 @@ import convert from 'convert-units';
  * @returns Converted value as string (for input), or original on failure.
  */
 export function convertToUSC(valueStr: string, fromUnit: string): { value: string; unit: string } {
-  const value = parseFloat(valueStr);
-  if (isNaN(value)) return { value: valueStr, unit: fromUnit };
+  const value = Number.parseFloat(valueStr);
+  if (Number.isNaN(value)) return { value: valueStr, unit: fromUnit };
 
   try {
     const result = convert(value).from(fromUnit).toBest({ system: "imperial" });
@@ -30,8 +30,8 @@ export function convertToUSC(valueStr: string, fromUnit: string): { value: strin
  * @returns Converted SI value as string.
  */
 export function convertToSI(valueStr: string, fromUnit: string): { value: string; unit: string } {
-  const value = parseFloat(valueStr);
-  if (isNaN(value)) return { value: valueStr, unit: fromUnit };
+  const value = Number.parseFloat(valueStr);
+  if (Number.isNaN(value)) return { value: valueStr, unit: fromUnit };
 
   try {
     const result = convert(value).from(fromUnit).toBest({ system: 'metric' });

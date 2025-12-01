@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "react-hot-toast";
 import { itemSchema, ItemFormValues } from "@/validation/estimationSchema";
-import { EstimationItem } from "@/types/estimation";
+import { EstimationItem } from "@/domain/estimations/estimationTypes";
 
 interface InventoryItemOption {
   itemCode: number;

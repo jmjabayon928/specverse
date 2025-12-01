@@ -261,7 +261,6 @@ export async function getFilledSheetWorkflowSankeyFromDB() {
     const from = statusOrder[i];
     const to = statusOrder[i + 1];
 
-    //const fromCount = result.recordset.find((r) => r.Status === from)?.Count || 0;
     const toCount = result.recordset.find((r) => r.Status === to)?.Count || 0;
 
     // ✅ If at least some records moved into the 'to' status, simulate a flow

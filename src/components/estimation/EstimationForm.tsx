@@ -4,8 +4,8 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
-import { Estimation } from '@/types/estimation';
-import { Project } from '@/types/project';
+import { Estimation } from '@/domain/estimations/estimationTypes';
+import { Project } from '@/domain/projects/projectTypes';
 
 export type EstimationFormProps = {
   defaultValues?: Estimation;

@@ -75,7 +75,7 @@ export default function EstimationDashboardPage() {
         <div className="flex flex-wrap gap-4 justify-between items-start">
           <div className="flex flex-wrap gap-4">
             <div className="w-60">
-              <label className="text-sm font-semibold">Status</label>
+              <label htmlFor="Status" className="text-sm font-semibold">Status</label>
               <Select
                 isMulti
                 options={statusOptions}
@@ -89,7 +89,7 @@ export default function EstimationDashboardPage() {
             </div>
 
             <div className="w-60">
-              <label className="text-sm font-semibold">Client</label>
+              <label htmlFor="Client" className="text-sm font-semibold">Client</label>
               <Select
                 isMulti
                 options={clientOptions}
@@ -103,7 +103,7 @@ export default function EstimationDashboardPage() {
             </div>
 
             <div className="w-60">
-              <label className="text-sm font-semibold">Project</label>
+              <label htmlFor="Project" className="text-sm font-semibold">Project</label>
               <Select
                 isMulti
                 options={projectOptions}
@@ -117,7 +117,7 @@ export default function EstimationDashboardPage() {
             </div>
 
             <div className="w-64">
-              <label className="text-sm font-semibold">Search</label>
+              <label htmlFor="Search" className="text-sm font-semibold">Search</label>
               <input
                 type="text"
                 className="w-full px-3 py-2 border rounded"

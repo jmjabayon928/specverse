@@ -7,10 +7,10 @@ import { useRouter } from "next/navigation";
 import "react-datepicker/dist/react-datepicker.css";
 import { ZodError } from "zod";
 import { unifiedSheetSchema } from "@/validation/sheetSchema";
-import type { UnifiedSheet, UnifiedSubsheet } from "@/types/sheet";
+import type { UnifiedSheet, UnifiedSubsheet } from "@/domain/datasheets/sheetTypes";
 import { renderInput, renderSelect, renderDate } from "@/components/ui/form/FormHelper";
 import SubsheetBuilder from "./SubsheetBuilder";
-import type { Option } from "@/types/common";
+import type { Option } from "@/domain/shared/commonTypes";
 
 interface TemplateCreatorFormProps {
   mode: "create";
@@ -21,40 +21,51 @@ interface RefDataItem {
   name: string;
 }
 
+// ── Regexes hoisted & using RegExp.exec
+const RE_FIELD = /^subsheets\.(\d+)\.fields\.(\d+)\.(.+)$/;
+const RE_SUBSHEET = /^subsheets\.(\d+)\.(.+)$/;
+
+// ── Helper hoisted to avoid deep nesting
+const toOptions = (arr: RefDataItem[]): Option[] =>
+  Array.isArray(arr) ? arr.map((i) => ({ value: i.id, label: i.name })) : [];
+
 function flattenErrors(zodError: ZodError): Record<string, string[]> {
   const flattened: Record<string, string[]> = {};
-  zodError.errors.forEach((err) => {
-    if (err.path?.length > 0) {
-      const path = err.path.join(".");
+  for (const err of zodError.errors) {
+    if (err.path == null || err.path.length === 0) {
+      continue;
+    }
 
-      if (path.startsWith("subsheets.")) {
-        const match = path.match(/subsheets\.(\d+)\.fields\.(\d+)\.(.+)/);
-        if (match) {
-          const [, subsheetIndexStr, templateIndexStr, field] = match;
-          const subsheetIndex = parseInt(subsheetIndexStr, 10) + 1;
-          const templateIndex = parseInt(templateIndexStr, 10) + 1;
-          const key = `Subsheet #${subsheetIndex} - Template #${templateIndex} - ${field}`;
-          flattened[key] = [err.message];
-          return;
-        }
+    const path = err.path.join(".");
 
-        const matchSubsheet = path.match(/subsheets\.(\d+)\.(.+)/);
-        if (matchSubsheet) {
-          const [, subsheetIndexStr, field] = matchSubsheet;
-          const subsheetIndex = parseInt(subsheetIndexStr, 10) + 1;
-          const key = `Subsheet #${subsheetIndex} - ${field}`;
-          flattened[key] = [err.message];
-          return;
-        }
+    if (path.startsWith("subsheets.")) {
+      const matchField = RE_FIELD.exec(path);
+      if (matchField) {
+        const [, subsheetIndexStr, templateIndexStr, field] = matchField;
+        const subsheetIndex = Number.parseInt(subsheetIndexStr, 10) + 1;
+        const templateIndex = Number.parseInt(templateIndexStr, 10) + 1;
+        const key = `Subsheet #${subsheetIndex} - Template #${templateIndex} - ${field}`;
+        flattened[key] = [err.message];
+        continue;
       }
 
-      flattened[path] = [err.message];
+      const matchSubsheet = RE_SUBSHEET.exec(path);
+      if (matchSubsheet) {
+        const [, subsheetIndexStr, field] = matchSubsheet;
+        const subsheetIndex = Number.parseInt(subsheetIndexStr, 10) + 1;
+        const key = `Subsheet #${subsheetIndex} - ${field}`;
+        flattened[key] = [err.message];
+        continue;
+      }
     }
-  });
+
+    flattened[path] = [err.message];
+  }
   return flattened;
 }
 
-export default function TemplateCreatorForm({ mode }: TemplateCreatorFormProps) {
+export default function TemplateCreatorForm(props: Readonly<TemplateCreatorFormProps>) {
+  const { mode } = props;
   const router = useRouter();
   const isReadOnly = false;
 
@@ -113,9 +124,6 @@ export default function TemplateCreatorForm({ mode }: TemplateCreatorFormProps) 
 
         if (!res.ok || !result) throw new Error("Invalid reference data");
 
-        const toOptions = (arr: RefDataItem[]): Option[] =>
-          Array.isArray(arr) ? arr.map((i) => ({ value: i.id, label: i.name })) : [];
-
         setAreas(toOptions(result.areas));
         setManufacturers(toOptions(result.manufacturers));
         setSuppliers(toOptions(result.suppliers));
@@ -155,31 +163,36 @@ export default function TemplateCreatorForm({ mode }: TemplateCreatorFormProps) 
         manualErrors["Subsheet(s)"] = ["At least one subsheet is required."];
       }
 
-      parsed.subsheets.forEach((sub, i) => {
-        if (sub.fields.length === 0) {
-          manualErrors[`Subsheet #${i + 1}`] = [
+      let index = 0;
+      for (const subsheet of parsed.subsheets) {
+        const num = index + 1;
+
+        if (subsheet.fields.length === 0) {
+          manualErrors[`Subsheet #${num}`] = [
             "At least one information template is required in this subsheet.",
           ];
         }
-      });
+
+        index++;
+      }
 
       if (Object.keys(manualErrors).length > 0) {
         setFormErrors(manualErrors);
         return;
       }
 
-      const res = await fetch("/api/backend/templates/create", {
+      const res = await fetch("/api/backend/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(parsed),
-      });
+      })
 
       const resultJson = await res.json();
       if (!res.ok) throw new Error(resultJson.error || "Request failed");
 
       router.push(`/datasheets/templates/${resultJson.sheetId}`);
     } catch (err) {
-      const error = err as unknown;
+      const error = err; // no unnecessary assertion
       if (error instanceof ZodError || (typeof error === "object" && error && "errors" in error)) {
         const flat = flattenErrors(error as ZodError);
         setFormErrors(flat);

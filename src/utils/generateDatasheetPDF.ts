@@ -1,19 +1,17 @@
 // src/utils/generateDatasheetPDF.ts
 import puppeteer from "puppeteer";
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import { convertToUSC } from "@/utils/unitConversionTable";
 import { getLabel } from "@/utils/translationUtils";
 import { translations } from "@/constants/translations";
-import type { UnifiedSheet, UnifiedSubsheet } from "@/types/sheet";
-import { Buffer } from "buffer";
+import type { UnifiedSheet, UnifiedSubsheet } from "@/domain/datasheets/sheetTypes";
+import { Buffer } from "node:buffer";
 
 export interface DatasheetPDFResult {
   buffer: Buffer;
   fileName: string;
 }
-
-type LangCode = keyof typeof translations["sheetName"];
 
 export async function generateDatasheetPDF(
   sheet: UnifiedSheet,
@@ -22,16 +20,16 @@ export async function generateDatasheetPDF(
 ): Promise<DatasheetPDFResult> {
   const clean = (s: string | number | null | undefined) =>
     String(s ?? "")
-      .replace(/[\/\\?%*:|"<>]/g, "")
+      .replaceAll(/[/\\?%*:|"<>]/g, "")
       .trim()
-      .replace(/\s+/g, "_");
+      .replaceAll(/\s+/g, "_");
 
   const sheetType = sheet.isTemplate ? "Template" : "FilledSheet";
   const fileName = `${clean(sheetType)}-${clean(sheet.clientName)}-${clean(
     sheet.sheetName
   )}-RevNo-${clean(sheet.revisionNum)}-${uom}-${lang}.pdf`;
 
-  const langCode = lang as LangCode;
+  const langCode = lang;
 
   const uiMap: Record<string, string> = Object.fromEntries(
     Object.entries(translations).map(([key, value]) => [key, value[langCode] ?? key])
@@ -154,7 +152,7 @@ export async function generateDatasheetPDF(
           <td class="label">${getUI("companyDocNum")}</td><td class="value">${sheet.companyDocNum ?? "-"}</td>
         </tr>
         <tr class="data-row">
-          <td class="label">${getUI("companyProjectNum ")}</td><td class="value">${sheet.companyProjectNum ?? "-"}</td>
+          <td class="label">${getUI("companyProjectNum")}</td><td class="value">${sheet.companyProjectNum ?? "-"}</td>
           <td class="label">${getUI("areaName")}</td><td class="value">${sheet.areaName}</td>
         </tr>
         <tr class="data-row">
@@ -215,7 +213,7 @@ export async function generateDatasheetPDF(
         </tr>
         <tr class="data-row">
           <td class="label">${getUI("installDWG")}</td><td class="value">${sheet.installDwg ?? "-"}</td>
-          <td class="label">${getUI("codeStandard")}</td><td class="value">${sheet.codeStd ?? "-"}</td>
+          <td class="label">${getUI("codeStd")}</td><td class="value">${sheet.codeStd ?? "-"}</td>
         </tr>
         <tr class="data-row">
           <td class="label">${getUI("categoryName")}</td><td class="value">${sheet.categoryName}</td>

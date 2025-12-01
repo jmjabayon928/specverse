@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import EstimationForm from '@/components/estimation/EstimationForm';
-import { Estimation } from '@/types/estimation';
+import { Estimation } from '@/domain/estimations/estimationTypes';
 
 export default function EditEstimationPage() {
   const { id } = useParams();

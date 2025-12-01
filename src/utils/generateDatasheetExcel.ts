@@ -1,8 +1,8 @@
 // src/utils/generateDatasheetExcel.ts
 import ExcelJS from "exceljs";
-import fs from "fs";
-import path from "path";
-import { UnifiedSheet } from "@/types/sheet";
+import fs from "node:fs";
+import path from "node:path";
+import { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
 import { getLabel } from "@/utils/translationUtils";
 import { translations } from "@/constants/translations";
 

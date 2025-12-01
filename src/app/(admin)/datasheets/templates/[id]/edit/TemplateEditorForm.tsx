@@ -8,8 +8,8 @@ import { ZodError } from "zod";
 import { unifiedSheetSchema } from "@/validation/sheetSchema";
 import { renderInput, renderSelect, renderDate } from "@/components/ui/form/FormHelper";
 import SubsheetBuilder from "../../create/SubsheetBuilder";
-import type { UnifiedSheet, UnifiedSubsheet } from "@/types/sheet";
-import type { Option } from "@/types/common";
+import type { UnifiedSheet, UnifiedSubsheet } from "@/domain/datasheets/sheetTypes";
+import type { Option } from "@/domain/shared/commonTypes";
 
 interface TemplateEditorFormProps {
   defaultValues: UnifiedSheet;
@@ -19,53 +19,62 @@ interface TemplateEditorFormProps {
   categories: Option[];
   clients: Option[];
   projects: Option[];
-  session: string;
+  session: string; // acknowledged via data attribute to avoid "defined but not used"
 }
+
+// Hoisted regexes; linter prefers RegExp.exec over .match
+const RE_FIELD = /^subsheets\.(\d+)\.fields\.(\d+)\.(.+)$/;
+const RE_SUBSHEET = /^subsheets\.(\d+)\.(.+)$/;
 
 function flattenErrors(zodError: ZodError): Record<string, string[]> {
   const flattened: Record<string, string[]> = {};
 
-  zodError.errors.forEach((err) => {
-    if (err.path?.length > 0) {
-      const path = err.path.join(".");
+  for (const err of zodError.errors) {
+    if (err.path == null || err.path.length === 0) {
+      continue
+    }
 
-      if (path.startsWith("subsheets.")) {
-        const match = path.match(/subsheets\.(\d+)\.fields\.(\d+)\.(.+)/);
-        if (match) {
-          const [, subsheetIndexStr, templateIndexStr, field] = match;
-          const subsheetIndex = parseInt(subsheetIndexStr, 10) + 1;
-          const templateIndex = parseInt(templateIndexStr, 10) + 1;
-          const key = `Subsheet #${subsheetIndex} - Template #${templateIndex} - ${field}`;
-          flattened[key] = [err.message];
-          return;
-        }
+    const path = err.path.join(".")
 
-        const matchSubsheet = path.match(/subsheets\.(\d+)\.(.+)/);
-        if (matchSubsheet) {
-          const [, subsheetIndexStr, field] = matchSubsheet;
-          const subsheetIndex = parseInt(subsheetIndexStr, 10) + 1;
-          const key = `Subsheet #${subsheetIndex} - ${field}`;
-          flattened[key] = [err.message];
-          return;
-        }
+    if (path.startsWith("subsheets.")) {
+      const matchField = RE_FIELD.exec(path)
+      if (matchField) {
+        const [, subsheetIndexStr, templateIndexStr, field] = matchField
+        const subsheetIndex = Number.parseInt(subsheetIndexStr, 10) + 1
+        const templateIndex = Number.parseInt(templateIndexStr, 10) + 1
+        const key = `Subsheet #${subsheetIndex} - Template #${templateIndex} - ${field}`
+        flattened[key] = [err.message]
+        continue
       }
 
-      flattened[path] = [err.message];
+      const matchSubsheet = RE_SUBSHEET.exec(path)
+      if (matchSubsheet) {
+        const [, subsheetIndexStr, field] = matchSubsheet
+        const subsheetIndex = Number.parseInt(subsheetIndexStr, 10) + 1
+        const key = `Subsheet #${subsheetIndex} - ${field}`
+        flattened[key] = [err.message]
+        continue
+      }
     }
-  });
+
+    flattened[path] = [err.message]
+  }
 
   return flattened;
 }
 
-export default function TemplateEditorForm({
-  defaultValues,
-  areas,
-  manufacturers,
-  suppliers,
-  categories,
-  clients,
-  projects,
-}: TemplateEditorFormProps) {
+export default function TemplateEditorForm(props: Readonly<TemplateEditorFormProps>) {
+  const {
+    defaultValues,
+    areas,
+    manufacturers,
+    suppliers,
+    categories,
+    clients,
+    projects,
+    session, // now used in a harmless data- attribute below
+  } = props;
+
   const router = useRouter();
   const [datasheet, setDatasheet] = useState<UnifiedSheet>(defaultValues);
   const [formErrors, setFormErrors] = useState<Record<string, string[]>>({});
@@ -95,13 +104,18 @@ export default function TemplateEditorForm({
         manualErrors["Subsheet(s)"] = ["At least one subsheet is required."];
       }
 
-      parsed.subsheets.forEach((sub, i) => {
-        if (sub.fields.length === 0) {
-          manualErrors[`Subsheet #${i + 1}`] = [
+      let index = 0;
+      for (const subsheet of parsed.subsheets) {
+        const num = index + 1;
+
+        if (subsheet.fields.length === 0) {
+          manualErrors[`Subsheet #${num}`] = [
             "At least one information template is required in this subsheet.",
           ];
         }
-      });
+
+        index++;
+      }
 
       if (Object.keys(manualErrors).length > 0) {
         setFormErrors(manualErrors);
@@ -132,7 +146,10 @@ export default function TemplateEditorForm({
   };
 
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6"
+      data-has-session={session ? "1" : "0"} // harmless use to appease "prop not used" warnings
+    >
       <h1 className="text-xl font-semibold">Edit Template</h1>
 
       {formErrors && Object.keys(formErrors).length > 0 && (

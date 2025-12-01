@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import type { InventoryListItem } from "@/types/inventory";
+import type { InventoryListItem } from "@/domain/inventory/inventoryTypes";
 import InventoryListTable from "./InventoryListTable";
 import InventoryTabContent from "./InventoryTabContent";
 

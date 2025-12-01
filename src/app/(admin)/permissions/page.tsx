@@ -1,3 +1,4 @@
+// src/app/(admin)/permissions/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -97,8 +98,10 @@ export default function PermissionsPage() {
           <div key={role} className="mb-4">
             <h3 className="font-bold text-lg mb-1">{role}</h3>
             <ul className="list-disc pl-6 text-sm text-gray-700">
-              {rolePermissions[role].map((perm, idx) => (
-                <li key={idx} className="font-mono">{perm}</li>
+              {rolePermissions[role].map((perm) => (
+                <li key={`${role}:${perm}`} className="font-mono">
+                  {perm}
+                </li>
               ))}
               {rolePermissions[role].length === 0 && (
                 <li className="text-gray-400 italic">No permissions assigned.</li>

@@ -1,7 +1,7 @@
 // src/utils/applySheetTranslations.ts
 
-import type { UnifiedSheet } from "@/types/sheet";
-import type { SheetTranslations } from "@/types/translation";
+import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
+import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 
 export function applySheetTranslations(
   sheet: UnifiedSheet,

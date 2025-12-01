@@ -1,6 +1,7 @@
+// src/backend/middleware/authMiddleware.ts
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { JwtPayload as CustomJwtPayload } from "../../types/JwtPayload";
+import { JwtPayload as CustomJwtPayload } from "../../domain/auth/JwtTypes";
 import { checkUserPermission } from "../database/permissionQueries";
 
 const JWT_SECRET = process.env.JWT_SECRET!;

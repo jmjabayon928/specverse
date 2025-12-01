@@ -8,7 +8,7 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
 } from '@heroicons/react/24/outline';
-import type { UnifiedSubsheet } from "@/types/sheet";
+import type { UnifiedSubsheet } from "@/domain/datasheets/sheetTypes";
 
 type Props = {
   subsheets: UnifiedSubsheet[];

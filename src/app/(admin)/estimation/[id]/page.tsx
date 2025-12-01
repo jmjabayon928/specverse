@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { FileText, FileBarChart2 } from "lucide-react";
-import { Estimation, EstimationPackage, EstimationItem, SupplierQuote } from '@/types/estimation';
+import { Estimation, EstimationPackage, EstimationItem, SupplierQuote } from '@/domain/estimations/estimationTypes';
 import EstimationForm from '@/components/estimation/EstimationForm';
 import PackageForm from '@/components/estimation/PackageForm';
 import ItemForm from '@/components/estimation/ItemForm';

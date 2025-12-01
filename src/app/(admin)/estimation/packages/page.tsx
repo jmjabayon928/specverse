@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { EstimationPackage } from "@/types/estimation";
+import { EstimationPackage } from "@/domain/estimations/estimationTypes";
 
 export default function EstimationPackagesPage() {
   const [packages, setPackages] = useState<EstimationPackage[]>([]);

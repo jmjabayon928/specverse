@@ -1,14 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import React from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 
 interface CreateTransactionPageProps {
   params: { id: string };
 }
 
-export default function CreateTransactionPage({ params }: CreateTransactionPageProps) {
+export default function CreateTransactionPage({ params }: Readonly<CreateTransactionPageProps>) {
   const router = useRouter();
   const [transactionType, setTransactionType] = useState("Receive");
   const [quantityChanged, setQuantityChanged] = useState<number | "">("");
@@ -65,7 +64,7 @@ export default function CreateTransactionPage({ params }: CreateTransactionPageP
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1">Transaction Type</label>
+          <label htmlFor="Type of Transaction" className="block text-sm font-medium mb-1">Transaction Type</label>
           <select
             value={transactionType}
             onChange={(e) => setTransactionType(e.target.value)}
@@ -79,7 +78,7 @@ export default function CreateTransactionPage({ params }: CreateTransactionPageP
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Quantity Changed</label>
+          <label htmlFor="Quantity Changed" className="block text-sm font-medium mb-1">Quantity Changed</label>
           <input
             type="number"
             value={quantityChanged}
@@ -94,7 +93,7 @@ export default function CreateTransactionPage({ params }: CreateTransactionPageP
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">UOM (optional)</label>
+          <label htmlFor="UOM" className="block text-sm font-medium mb-1">UOM (optional)</label>
           <input
             type="text"
             value={uom}
@@ -105,7 +104,7 @@ export default function CreateTransactionPage({ params }: CreateTransactionPageP
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Reference Note (optional)</label>
+          <label htmlFor="Reference Note" className="block text-sm font-medium mb-1">Reference Note (optional)</label>
           <textarea
             value={referenceNote}
             onChange={(e) => setReferenceNote(e.target.value)}

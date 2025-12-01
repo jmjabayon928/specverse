@@ -1,6 +1,6 @@
 // src/utils/templateViewMapper.ts
 
-import type { FullTemplateInput, UnifiedSheet } from "@/types/sheet";
+import type { FullTemplateInput, UnifiedSheet } from "@/domain/datasheets/sheetTypes";
 
 export function mapToUnifiedSheet(input: FullTemplateInput): UnifiedSheet {
   return {

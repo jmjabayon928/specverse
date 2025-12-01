@@ -4,7 +4,7 @@
 import React from "react";
 import Link from "next/link";
 import { EyeIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { Estimation } from "@/types/estimation";
+import { Estimation } from "@/domain/estimations/estimationTypes";
 
 interface Props {
   estimations: Estimation[];

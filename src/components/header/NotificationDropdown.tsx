@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
-import { RawNotification, Notification } from "@/types/notification";
+import { RawNotification, Notification } from "@/domain/notifications/notificationTypes";
 
 export default function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
@@ -95,6 +95,64 @@ export default function NotificationDropdown() {
     return acc;
   }, {} as Record<string, Notification[]>);
 
+  const renderNotificationLink = (note: Notification) => {
+    const text = note.message || note.sheetName || "View Details"
+
+    if (note.link) {
+      return (
+        <a href={note.link} className="text-blue-600 hover:underline">
+          {text}
+        </a>
+      )
+    }
+
+    if (note.category === "Template" && note.sheetId) {
+      return (
+        <a
+          href={`/datasheets/templates/${note.sheetId}`}
+          className="text-blue-600 hover:underline"
+        >
+          {note.message || `New Template: ${note.sheetName}`}
+        </a>
+      )
+    }
+
+    if (note.category === "Datasheet" && note.sheetId) {
+      return (
+        <a
+          href={`/datasheets/filled/${note.sheetId}`}
+          className="text-blue-600 hover:underline"
+        >
+          {note.message || `New Datasheet: ${note.sheetName}`}
+        </a>
+      )
+    }
+
+    if (note.category === "Estimation" && typeof note.sheetId === "number") {
+      return (
+        <a
+          href={`/estimation/${note.sheetId}`}
+          className="text-blue-600 hover:underline"
+        >
+          {note.message || `New Estimation`}
+        </a>
+      )
+    }
+
+    if (note.category === "Inventory" && note.sheetId) {
+      return (
+        <a
+          href={`/inventory/item/${note.sheetId}`}
+          className="text-blue-600 hover:underline"
+        >
+          {note.message || `Inventory Updated`}
+        </a>
+      )
+    }
+
+    return <span>{note.message}</span>
+  }
+
   return (
     <div className="relative">
       <button
@@ -175,41 +233,9 @@ export default function NotificationDropdown() {
                               <span className="font-medium text-gray-800 dark:text-white/90">
                                 {note.senderName}
                               </span>{" "}
-                              {note.link ? (
-                                <a href={note.link} className="text-blue-600 hover:underline">
-                                  {note.message}
-                                </a>
-                              ) : note.sheetId && note.category === "Template" ? (
-                                <a
-                                  href={`/datasheets/templates/${note.sheetId}`}
-                                  className="text-blue-600 hover:underline"
-                                >
-                                  {note.message || `New Template: ${note.sheetName}`}
-                                </a>
-                              ) : note.sheetId && note.category === "Datasheet" ? (
-                                <a
-                                  href={`/datasheets/filled/${note.sheetId}`}
-                                  className="text-blue-600 hover:underline"
-                                >
-                                  {note.message || `New Datasheet: ${note.sheetName}`}
-                                </a>
-                              ) : note.category === "Estimation" && typeof note.sheetId === "number" ? (
-                                <a
-                                  href={`/estimation/${note.sheetId}`}
-                                  className="text-blue-600 hover:underline"
-                                >
-                                  {note.message || `New Estimation`}
-                                </a>
-                              ) : note.sheetId && note.category === "Inventory" ? (
-                                <a
-                                  href={`/inventory/item/${note.sheetId}`}
-                                  className="text-blue-600 hover:underline"
-                                >
-                                  {note.message || `Inventory Updated`}
-                                </a>
-                              ) : (
-                                <span>{note.message}</span>
-                              )}
+
+                              {renderNotificationLink(note)}
+                              
                             </span>
                             <span className="flex items-center gap-2 text-gray-500 text-theme-xs dark:text-gray-400">
                               <span>{note.category}</span>

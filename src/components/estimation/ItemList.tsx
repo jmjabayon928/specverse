@@ -1,6 +1,6 @@
 // src/components/estimation/ItemList.tsx
 import React from "react";
-import { EstimationItem } from "@/types/estimation";
+import { EstimationItem } from "@/domain/estimations/estimationTypes";
 
 interface ItemListProps {
     items: EstimationItem[];

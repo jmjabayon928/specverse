@@ -1,3 +1,4 @@
+// src/app/(admin)/datasheets/templates/[id]/approve/ApproveButton.tsx
 "use client";
 
 import { useState } from "react";
@@ -9,7 +10,9 @@ interface Props {
   sheetId: number;
 }
 
-export default function ApproveButton({ sheetId }: Props) {
+export default function ApproveButton(props: Readonly<Props>) {
+  const { sheetId } = props;
+
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 

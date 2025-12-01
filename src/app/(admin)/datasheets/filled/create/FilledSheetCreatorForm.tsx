@@ -5,10 +5,10 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import FilledSheetSubsheetForm from "./FilledSheetSubsheetForm";
 import { renderInput, renderSelect } from "@/components/ui/form/FormHelper";
-import type { UnifiedSheet } from "@/types/sheet";
-import type { Option } from "@/types/common";
+import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
+import type { Option } from "@/domain/shared/commonTypes";
 import { applySheetTranslations } from "@/utils/applySheetTranslations";
-import type { SheetTranslations } from "@/types/translation";
+import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 
 interface Props {
   template: UnifiedSheet;
@@ -16,10 +16,17 @@ interface Props {
   language: string;
 }
 
-export default function FilledSheetCreatorForm({ template, translations, language }: Props) {
+// Hoisted to avoid deep-nesting warnings
+function toOptions(arr: { id: number; name: string }[] | undefined | null): Option[] {
+  return Array.isArray(arr) ? arr.map((x) => ({ value: x.id, label: x.name })) : [];
+}
+
+export default function FilledSheetCreatorForm(props: Readonly<Props>) {
+  const { template, translations, language } = props;
   const router = useRouter();
 
   const [translatedSheet, setTranslatedSheet] = useState<UnifiedSheet>(template);
+  // keyed by InfoTemplateID
   const [fieldValues, setFieldValues] = useState<Record<number, string>>({});
   const [areas, setAreas] = useState<Option[]>([]);
   const [manufacturers, setManufacturers] = useState<Option[]>([]);
@@ -27,6 +34,7 @@ export default function FilledSheetCreatorForm({ template, translations, languag
   const [categories, setCategories] = useState<Option[]>([]);
   const [clients, setClients] = useState<Option[]>([]);
   const [projects, setProjects] = useState<Option[]>([]);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (language === "eng" || !translations) {
@@ -39,18 +47,15 @@ export default function FilledSheetCreatorForm({ template, translations, languag
 
   useEffect(() => {
     const fetchRefs = async () => {
-      const res = await fetch("/api/backend/references");
+      const res = await fetch("/api/backend/filledsheets/reference-options", { credentials: "include" });
       const data = await res.json();
 
-      const toOpts = (arr: { id: number; name: string }[]) =>
-        arr.map((x) => ({ value: x.id, label: x.name }));
-
-      setAreas(toOpts(data.areas));
-      setManufacturers(toOpts(data.manufacturers));
-      setSuppliers(toOpts(data.suppliers));
-      setCategories(toOpts(data.categories));
-      setClients(toOpts(data.clients));
-      setProjects(toOpts(data.projects));
+      setAreas(toOptions(data.areas));
+      setManufacturers(toOptions(data.manufacturers));
+      setSuppliers(toOptions(data.suppliers));
+      setCategories(toOptions(data.categories));
+      setClients(toOptions(data.clients));
+      setProjects(toOptions(data.projects));
     };
 
     fetchRefs();
@@ -86,7 +91,35 @@ export default function FilledSheetCreatorForm({ template, translations, languag
     }));
   };
 
-  const handleSubmit = async () => {
+  // Extra guard for subsheet required fields, in case any control bypasses native required.
+  function validateSubsheetRequired(): { ok: boolean; message?: string } {
+    for (const sub of filledSheet.subsheets || []) {
+      for (const f of sub.fields || []) {
+        if (f.required) {
+          const v = (fieldValues[f.id!] ?? "").trim();
+          if (!v) {
+            return {
+              ok: false,
+              message: `Please fill the required field "${f.label}" in subsheet "${sub.name}".`,
+            };
+          }
+        }
+      }
+    }
+    return { ok: true };
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); // onSubmit only fires if the form is valid (native checks). We prevent the full page reload.
+    setSubmitError(null);
+
+    // Extra guard for subsheet required fields
+    const v = validateSubsheetRequired();
+    if (!v.ok) {
+      setSubmitError(v.message || "Please complete all required fields.");
+      return;
+    }
+
     const payload = {
       ...filledSheet,
       fieldValues,
@@ -107,19 +140,21 @@ export default function FilledSheetCreatorForm({ template, translations, languag
 
       router.push(`/datasheets/filled/${resultJson.sheetId}?success=created`);
     } catch (error) {
-      console.error("\u274C Submission failed:", error);
-      alert((error as Error).message || "An error occurred while submitting the form.");
+      console.error("❌ Submission failed:", error);
+      setSubmitError((error as Error).message || "An error occurred while submitting the form.");
     }
-  };
+  }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 space-y-6">
+    <form className="max-w-6xl mx-auto px-4 space-y-6" onSubmit={handleSubmit} noValidate={false}>
       <h1 className="text-xl font-semibold">Create Filled Sheet</h1>
 
+      {/* Datasheet Details */}
       <fieldset className="border border-gray-300 rounded p-4">
         <legend className="text-md font-semibold px-2">Datasheet Details</legend>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-          {renderInput("Sheet Name", "sheetName", filledSheet, handleChange)}
+          {/* Mark key top-level fields as required */}
+          {renderInput("Sheet Name", "sheetName", filledSheet, handleChange, true)}
           {renderInput("Sheet Description", "sheetDesc", filledSheet, handleChange)}
           {renderInput("Additional Description", "sheetDesc2", filledSheet, handleChange)}
           {renderInput("Client Doc #", "clientDocNum", filledSheet, handleChange, false, {}, "number")}
@@ -132,11 +167,12 @@ export default function FilledSheetCreatorForm({ template, translations, languag
         </div>
       </fieldset>
 
+      {/* Equipment Details */}
       <fieldset className="border border-gray-300 rounded p-4">
         <legend className="text-md font-semibold px-2">Equipment Details</legend>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-          {renderInput("Equipment Name", "equipmentName", filledSheet, handleChange)}
-          {renderInput("Equipment Tag Number", "equipmentTagNum", filledSheet, handleChange)}
+          {renderInput("Equipment Name", "equipmentName", filledSheet, handleChange, true)}
+          {renderInput("Equipment Tag Number", "equipmentTagNum", filledSheet, handleChange, true)}
           {renderInput("Service Name", "serviceName", filledSheet, handleChange)}
           {renderInput("Required Quantity", "requiredQty", filledSheet, handleChange, false, {}, "number")}
           {renderInput("Item Location", "itemLocation", filledSheet, handleChange)}
@@ -150,16 +186,18 @@ export default function FilledSheetCreatorForm({ template, translations, languag
           {renderInput("PID", "pid", filledSheet, handleChange, false, {}, "number")}
           {renderInput("Install DWG", "installDwg", filledSheet, handleChange)}
           {renderInput("Code Standard", "codeStd", filledSheet, handleChange)}
-          {renderSelect("Category", "categoryId", filledSheet, handleChange, false, categories)}
-          {renderSelect("Client", "clientId", filledSheet, handleChange, false, clients)}
-          {renderSelect("Project", "projectId", filledSheet, handleChange, false, projects)}
+          {/* Make these selects required so native validation runs */}
+          {renderSelect("Category", "categoryId", filledSheet, handleChange, true, categories)}
+          {renderSelect("Client", "clientId", filledSheet, handleChange, true, clients)}
+          {renderSelect("Project", "projectId", filledSheet, handleChange, true, projects)}
         </div>
       </fieldset>
 
+      {/* Subsheet fields (already mark required based on template) */}
       <div className="space-y-6 mt-6">
-        {filledSheet.subsheets.map((sub, i) => (
+        {(filledSheet.subsheets || []).map((sub, i) => (
           <FilledSheetSubsheetForm
-            key={i}
+            key={sub.originalId ?? sub.id ?? `sub:${i}`}
             subsheet={sub}
             subsheetIndex={i}
             fieldValues={fieldValues}
@@ -168,16 +206,21 @@ export default function FilledSheetCreatorForm({ template, translations, languag
         ))}
       </div>
 
+      {submitError && (
+        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {submitError}
+        </div>
+      )}
+
       <div className="flex justify-end">
         <button
-          onClick={handleSubmit}
+          type="submit"
           className="px-6 py-3 bg-blue-600 text-white rounded hover:bg-blue-700"
+          title="Submit filled sheet"
         >
           Submit Filled Sheet
         </button>
       </div>
-    </div>
+    </form>
   );
 }
-
-

@@ -5,7 +5,7 @@
 import React from "react";
 import InfoTemplateBuilder from "./InfoTemplateBuilder";
 import { TrashIcon, ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
-import type { SheetMode, UnifiedSubsheet, InfoField } from "@/types/sheet";
+import type { SheetMode, UnifiedSubsheet, InfoField } from "@/domain/datasheets/sheetTypes";
 
 interface Props {
   subsheets: UnifiedSubsheet[];
@@ -16,14 +16,25 @@ interface Props {
   readOnly: boolean;
 }
 
-export default function SubsheetBuilder({
-  subsheets,
+export default function SubsheetBuilder(props: Readonly<Props>) {
+  const { subsheets,
   onChange,
   formErrors = {},
   mode,
-  previewMode,
-}: Props) {
+  previewMode, } = props;
   const isEditMode = mode === "create" || mode === "edit";
+
+  // Stable key mapping for subsheets to avoid array-index keys
+  const keyMapRef = React.useRef(new WeakMap<UnifiedSubsheet, string>());
+  const getKey = (s: UnifiedSubsheet, idx: number): string => {
+    if (typeof s.id === "number") return `id:${s.id}`;
+    let k = keyMapRef.current.get(s);
+    if (!k) {
+      k = `tmp:${idx}-${Date.now()}`;
+      keyMapRef.current.set(s, k);
+    }
+    return k;
+  };
 
   const handleRename = (index: number, name: string) => {
     const updated = [...subsheets];
@@ -51,6 +62,7 @@ export default function SubsheetBuilder({
   const handleMove = (index: number, direction: number) => {
     const newIndex = index + direction;
     if (newIndex < 0 || newIndex >= subsheets.length) return;
+
     const updated = [...subsheets];
     const [moved] = updated.splice(index, 1);
     updated.splice(newIndex, 0, moved);
@@ -71,7 +83,7 @@ export default function SubsheetBuilder({
 
         return (
           <div
-            key={index}
+            key={getKey(subsheet, index)}
             className="border rounded p-4 bg-white shadow space-y-4"
           >
             <div className="flex justify-between items-center">
@@ -119,11 +131,7 @@ export default function SubsheetBuilder({
             </div>
 
             <InfoTemplateBuilder
-              subsheet={{
-                id: subsheet.id,
-                name: subsheet.name,
-                fields: subsheet.fields,
-              }}
+              subsheet={subsheet}
               subsheetIndex={index}
               onFieldsChange={(fields) => handleFieldsChange(index, fields)}
               isEditMode={isEditMode && !previewMode}

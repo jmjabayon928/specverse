@@ -1,17 +1,18 @@
+// src/app/(admin)/datasheets/filled/FilledSheetViewer.tsx
 import React from "react";
-import type { UnifiedSheet } from "@/types/sheet";
-import type { SheetTranslations } from "@/types/translation";
+import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
+import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 import { translations as labelTranslations } from "@/constants/translations";
 import { convertToUSC } from "@/utils/unitConversionTable";
+import OtherConversionsCell from "@/utils/OtherConversionsCell";
 
 // ✅ Local fallback type (no need for types/unit.ts)
 type UnitSystem = "SI" | "USC";
 
-// ✅ Local conversion function (replaces missing convertValue)
+// ✅ Local conversion function
 function convertValue(value: string, unitSystem: UnitSystem, uom?: string): { value: string; uom: string } {
   if (!value || !uom || unitSystem === "SI") return { value, uom: uom ?? "" };
-
-  const result = convertToUSC(value, uom); // value is string, uom is string | null | undefined
+  const result = convertToUSC(value, uom);
   return { value: result.value, uom: result.unit };
 }
 
@@ -32,14 +33,77 @@ function getUILabel(key: string, language: string) {
 function safeFormatDate(input: string | Date | null | undefined): string {
   if (!input) return "-";
   const date = new Date(input);
-  return isNaN(date.getTime()) ? "-" : date.toISOString().slice(0, 10);
+  return Number.isNaN(date.getTime()) ? "-" : date.toISOString().slice(0, 10);
 }
+
+// Avoid “[object Object]” warnings by normalizing values to safe strings
+function toDisplay(v: unknown): string {
+  if (v === null || v === undefined) return "-";
+  if (v instanceof Date) return safeFormatDate(v);
+  const t = typeof v;
+  switch (t) {
+    case "string":
+      return v as string;
+    case "number":
+      return Number.isFinite(v as number) ? `${v as number}` : "-";
+    case "boolean":
+      return (v as boolean) ? "true" : "false";
+    default:
+      return "-";
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Local view-only types for notes & attachments (to avoid using `any`)
+   These mirror what your service returns and are optional on `sheet`.
+   ────────────────────────────────────────────────────────────────────────── */
+type SheetNoteDTO = {
+  id: number;
+  noteTypeId: number | null;
+  /** Optional: supply from backend (JOIN NoteTypes) */
+  noteTypeName?: string | null;
+  orderIndex: number | null;
+  body: string;
+  createdAt: string;              // ISO
+  createdBy?: number | null;
+  createdByName?: string | null;
+};
+
+type SheetAttachmentDTO = {
+  sheetAttachmentId: number;
+  orderIndex: number;
+  isFromTemplate: boolean;
+  linkedFromSheetId?: number | null;
+  cloneOnCreate: boolean;
+
+  id: number;
+  originalName: string;
+  storedName: string;
+  contentType: string;
+  fileSizeBytes: number;
+  storageProvider: string;
+  storagePath: string;
+  sha256?: string | null;
+  uploadedBy?: number | null;
+  uploadedByName?: string | null;
+  uploadedAt: string;             // ISO
+  isViewable: boolean;
+  fileUrl?: string;
+};
+
+type WithNotes = { notes?: SheetNoteDTO[] };
+type WithAttachments = { attachments?: SheetAttachmentDTO[] };
+type SheetWithExtras = UnifiedSheet & WithNotes & WithAttachments;
 
 interface Props {
   sheet: UnifiedSheet;
   translations: SheetTranslations | null;
   language: string;
   unitSystem: UnitSystem;
+
+  // Optional handlers for the buttons
+  onAddNote?: (sheetId: number) => void;
+  onAddAttachment?: (sheetId: number) => void;
 }
 
 const FilledSheetViewer: React.FC<Props> = ({
@@ -47,21 +111,75 @@ const FilledSheetViewer: React.FC<Props> = ({
   translations,
   language,
   unitSystem,
+  onAddNote,
+  onAddAttachment,
 }) => {
   const subsheetLabelMap = translations?.subsheets || {};
   const fieldLabelMap = translations?.labels || {};
 
   function getTranslatedSubsheetName(subOriginalId: number | undefined, fallback: string) {
-    return subOriginalId !== undefined
-      ? subsheetLabelMap?.[String(subOriginalId)] ?? fallback
-      : fallback;
+    if (subOriginalId === undefined) return fallback;
+    return subsheetLabelMap?.[String(subOriginalId)] ?? fallback;
   }
 
   function getTranslatedFieldLabel(fieldOriginalId: number | undefined, fallback: string) {
-    return fieldOriginalId !== undefined
-      ? fieldLabelMap?.[String(fieldOriginalId)] ?? fallback
-      : fallback;
+    if (fieldOriginalId === undefined) return fallback;
+    return fieldLabelMap?.[String(fieldOriginalId)] ?? fallback;
   }
+
+  // Access the optional arrays with STABLE refs to satisfy react-hooks/exhaustive-deps
+  const sheetX = sheet as SheetWithExtras;
+
+  const notes = React.useMemo<SheetNoteDTO[]>(
+    () => (Array.isArray(sheetX.notes) ? sheetX.notes : []),
+    [sheetX.notes]
+  );
+
+  const attachments = React.useMemo<SheetAttachmentDTO[]>(
+    () => (Array.isArray(sheetX.attachments) ? sheetX.attachments : []),
+    [sheetX.attachments]
+  );
+
+  // Handlers with proper type narrowing for sheetId
+  const canAddNote = Boolean(onAddNote && typeof sheet.sheetId === "number");
+  const canAddAttachment = Boolean(onAddAttachment && typeof sheet.sheetId === "number");
+
+  const handleAddNote = () => {
+    if (onAddNote && typeof sheet.sheetId === "number") onAddNote(sheet.sheetId);
+  };
+  const handleAddAttachment = () => {
+    if (onAddAttachment && typeof sheet.sheetId === "number") onAddAttachment(sheet.sheetId);
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // Group notes by note type (name if provided, else by id)
+  // ─────────────────────────────────────────────────────────────
+  type NoteGroup = { key: string; label: string; items: SheetNoteDTO[] };
+
+  const groupedNotes: NoteGroup[] = React.useMemo(() => {
+    const byType = new Map<string, NoteGroup>();
+    for (const n of notes) {
+      const idKey = n.noteTypeId !== null && n.noteTypeId !== undefined ? String(n.noteTypeId) : "unknown";
+      const label =
+        n.noteTypeName?.trim() ||
+        (n.noteTypeId !== null && n.noteTypeId !== undefined ? `Type ${n.noteTypeId}` : "Uncategorized");
+      if (!byType.has(idKey)) byType.set(idKey, { key: idKey, label, items: [] });
+      byType.get(idKey)!.items.push(n);
+    }
+    // sort groups by label asc
+    const groups = Array.from(byType.values()).sort((a, b) => a.label.localeCompare(b.label));
+    // sort items in each group by OrderIndex ASC, CreatedAt DESC
+    for (const g of groups) {
+      g.items.sort((a, b) => {
+        const oi = (a.orderIndex ?? 0) - (b.orderIndex ?? 0);
+        if (oi !== 0) return oi;
+        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+      });
+    }
+    return groups;
+  }, [notes]);
 
   return (
     <div className="space-y-8">
@@ -72,10 +190,10 @@ const FilledSheetViewer: React.FC<Props> = ({
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {["sheetName", "sheetDesc", "sheetDesc2"].map((key) => {
-            const value =
-              typeof translations?.sheet?.[key as keyof typeof translations.sheet] === "string"
-                ? translations.sheet?.[key as keyof typeof translations.sheet]
-                : String(sheet[key as keyof UnifiedSheet] ?? "-");
+            const translatedSheet = translations?.sheet as Record<string, unknown> | undefined;
+            const maybeTranslated = translatedSheet?.[key];
+            const fallback = sheet[key as keyof UnifiedSheet];
+            const value = typeof maybeTranslated === "string" ? maybeTranslated : toDisplay(fallback);
 
             return (
               <div key={key}>
@@ -100,9 +218,7 @@ const FilledSheetViewer: React.FC<Props> = ({
             const label = getUILabel(key, language);
             const rawValue = sheet[key as keyof UnifiedSheet];
             const isDate = key.toLowerCase().includes("date");
-            const value = isDate
-              ? safeFormatDate(rawValue as string | Date | null | undefined)
-              : String(rawValue ?? "-");
+            const value = isDate ? safeFormatDate(rawValue as string | Date | null | undefined) : toDisplay(rawValue);
 
             return (
               <div key={key} className={key === "rejectComment" ? "md:col-span-2" : ""}>
@@ -129,10 +245,7 @@ const FilledSheetViewer: React.FC<Props> = ({
             "categoryName", "clientName", "projectName"
           ].map((key) => {
             const raw = sheet[key as keyof UnifiedSheet];
-            const value =
-              typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean"
-                ? String(raw)
-                : "-";
+            const value = toDisplay(raw);
 
             return (
               <div key={key}>
@@ -149,7 +262,7 @@ const FilledSheetViewer: React.FC<Props> = ({
       </fieldset>
 
       {/* Subsheet Sections */}
-      {sheet.subsheets.map((sub, subIndex) => {
+      {sheet.subsheets.map((sub) => {
         const originalSubId = sub.originalId ?? sub.id;
         const translatedSubName = getTranslatedSubsheetName(originalSubId, sub.name);
         const totalFields = sub.fields.length;
@@ -158,53 +271,208 @@ const FilledSheetViewer: React.FC<Props> = ({
         const rightFields = sub.fields.slice(midpoint);
 
         return (
-          <fieldset key={`sub-${subIndex}-${originalSubId}`} className="border rounded p-4 mb-6">
+          <fieldset key={`sub-${originalSubId}`} className="border rounded p-4 mb-6">
             <div className="text-xl font-semibold mb-4">{translatedSubName}</div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[leftFields, rightFields].map((fieldGroup, groupIndex) => (
-                <table key={groupIndex} className="w-full table-auto border text-sm">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="border px-2 py-1">{getUILabel("InfoLabel", language)}</th>
-                      <th className="border px-2 py-1">{getUILabel("InfoOptions", language)}</th>
-                      <th className="border px-2 py-1">{getUILabel("InfoValue", language)}</th>
-                      <th className="border px-2 py-1">{getUILabel("InfoUOM", language)}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fieldGroup.map((field, fieldIndex) => {
-                      const originalFieldId = field.originalId ?? field.id;
-                      const translatedLabel = getTranslatedFieldLabel(originalFieldId, field.label);
-                      const numericValueOnly = formatFieldValue(unitSystem, String(field.value ?? ""), field.uom, false);
-                      const convertedUOM = getConvertedUOM(unitSystem, field.uom);
+              {[leftFields, rightFields].map((fieldGroup, groupIndex) => {
+                const side = groupIndex === 0 ? "left" : "right"; // stable, not index
+                return (
+                  <table key={`tbl-${originalSubId}-${side}`} className="w-full table-auto border text-sm">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="border px-2 py-1">{getUILabel("InfoLabel", language)}</th>
+                        <th className="border px-2 py-1">{getUILabel("InfoOptions", language)}</th>
+                        <th className="border px-2 py-1">{getUILabel("InfoValue", language)}</th>
+                        <th className="border px-2 py-1">{getUILabel("InfoUOM", language)}</th>
+                        {/* 🆕 5th column */}
+                        <th className="border px-2 py-1">{getUILabel("OtherConversions", language) ?? "Other Conversions"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fieldGroup.map((field, index) => {
+                        const originalFieldId = field.originalId ?? field.id;
+                        const translatedLabel = getTranslatedFieldLabel(originalFieldId, field.label);
 
-                      return (
-                        <tr
-                          key={`field-${subIndex}-${groupIndex}-${fieldIndex}-${originalFieldId}`}
-                          className={fieldIndex % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                        >
-                          <td className="border px-2 py-1">
-                            {field.required && (
-                              <span className="text-red-500 font-bold mr-1">*</span>
-                            )}
-                            {translatedLabel}
-                          </td>
-                          <td className="border px-2 py-1">
-                            {field.options?.length ? field.options.join(", ") : "-"}
-                          </td>
-                          <td className="border px-2 py-1">{numericValueOnly}</td>
-                          <td className="border px-2 py-1">{convertedUOM || "-"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              ))}
+                        // Value to display WITHOUT unit (e.g., "10.5") taking into account SI/USC toggle
+                        const numericValueOnly = formatFieldValue(
+                          unitSystem,
+                          String(field.value ?? ""),
+                          field.uom,
+                          false
+                        );
+
+                        // Unit displayed in this row (already toggled if USC)
+                        const convertedUOM = getConvertedUOM(unitSystem, field.uom);
+
+                        // Base unit for same-system alternates: in SI, use the SI UOM; in USC, use the USC-converted UOM
+                        const baseUnitForAlternates =
+                          unitSystem === "USC" ? (convertedUOM || field.uom || "") : (field.uom || "");
+
+                        // 🔐 Collision-proof row key (prefer unique ids; include side + index as final tie-breaker)
+                        const baseId = field.id ?? originalFieldId ?? "x";
+                        const rowKey = `field-${originalSubId}-${side}-${baseId}-${index}`;
+
+                        return (
+                          <tr key={rowKey} className="odd:bg-white even:bg-gray-50">
+                            <td className="border px-2 py-1">
+                              {field.required && <span className="text-red-500 font-bold mr-1">*</span>}
+                              {translatedLabel}
+                            </td>
+                            <td className="border px-2 py-1">
+                              {Array.isArray(field.options) && field.options.length > 0
+                                ? field.options.join(", ")
+                                : "-"}
+                            </td>
+                            <td className="border px-2 py-1">{numericValueOnly}</td>
+                            <td className="border px-2 py-1">{convertedUOM || "-"}</td>
+                            {/* 🆕 Same-system alternates rendered here */}
+                            <td className="border px-2 py-1">
+                              <OtherConversionsCell
+                                numericValue={numericValueOnly}
+                                unit={baseUnitForAlternates}
+                                system={unitSystem}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                );
+              })}
             </div>
           </fieldset>
         );
       })}
+
+      {/* Notes — grouped by note type */}
+      <fieldset className="border rounded p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-xl font-semibold">{getUILabel("Notes", language)}</div>
+          <button
+            type="button"
+            className="inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium hover:shadow disabled:opacity-50"
+            onClick={handleAddNote}
+            disabled={!canAddNote}
+            aria-label={getUILabel("AddNote", language)}
+            title={
+              canAddNote
+                ? getUILabel("AddNote", language)
+                : getUILabel("HandlerNotProvided", language) ?? "Handler not provided"
+            }
+          >
+            {getUILabel("AddNote", language) ?? "Add Note"}
+          </button>
+        </div>
+
+        {groupedNotes.length > 0 ? (
+          <div className="space-y-6">
+            {groupedNotes.map((grp) => (
+              <div key={`note-group-${grp.key}`}>
+                <div className="text-base font-semibold mb-2">
+                  {grp.label}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full table-auto border text-sm">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="border px-2 py-1 w-20">{getUILabel("Order", language) ?? "Order"}</th>
+                        <th className="border px-2 py-1">{getUILabel("NoteText", language) ?? "Note Text"}</th>
+                        <th className="border px-2 py-1 w-40">{getUILabel("CreatedBy", language) ?? "Created By"}</th>
+                        <th className="border px-2 py-1 w-32">{getUILabel("CreatedAt", language) ?? "Created At"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {grp.items.map((n) => (
+                        <tr key={`note-${grp.key}-${n.id}`} className="odd:bg-white even:bg-gray-50">
+                          <td className="border px-2 py-1 text-center">{n.orderIndex ?? "-"}</td>
+                          <td className="border px-2 py-1">
+                            <pre className="whitespace-pre-wrap text-sm">{n.body}</pre>
+                          </td>
+                          <td className="border px-2 py-1">{n.createdByName ?? "-"}</td>
+                          <td className="border px-2 py-1">{safeFormatDate(n.createdAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-gray-600">
+            {getUILabel("NoNotes", language) ?? "No notes"}
+          </div>
+        )}
+      </fieldset>
+
+      {/* Attachments */}
+      <fieldset className="border rounded p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-xl font-semibold">{getUILabel("Attachments", language)}</div>
+          <button
+            type="button"
+            className="inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium hover:shadow disabled:opacity-50"
+            onClick={handleAddAttachment}
+            disabled={!canAddAttachment}
+            aria-label={getUILabel("AddAttachment", language)}
+            title={
+              canAddAttachment
+                ? getUILabel("AddAttachment", language)
+                : getUILabel("HandlerNotProvided", language) ?? "Handler not provided"
+            }
+          >
+            {getUILabel("AddAttachment", language) ?? "Add Attachment"}
+          </button>
+        </div>
+
+        {attachments.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full table-auto border text-sm">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="border px-2 py-1">{getUILabel("FileName", language) ?? "File Name"}</th>
+                  <th className="border px-2 py-1">{getUILabel("UploadedBy", language) ?? "Uploaded By"}</th>
+                  <th className="border px-2 py-1">{getUILabel("UploadedAt", language) ?? "Uploaded At"}</th>
+                  <th className="border px-2 py-1">{getUILabel("Action", language) ?? "Action"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attachments.map((a) => {
+                  const link = a.fileUrl ?? "";
+                  return (
+                    <tr key={`att-${a.id}`} className="odd:bg-white even:bg-gray-50">
+                      <td className="border px-2 py-1">{a.originalName || `file-${a.id}`}</td>
+                      <td className="border px-2 py-1">{a.uploadedByName ?? "-"}</td>
+                      <td className="border px-2 py-1">{safeFormatDate(a.uploadedAt)}</td>
+                      <td className="border px-2 py-1">
+                        {link ? (
+                          <a
+                            href={link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {getUILabel("ViewDownload", language) ?? "View Image"}
+                          </a>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-sm text-gray-600">
+            {getUILabel("NoAttachments", language) ?? "No attachments"}
+          </div>
+        )}
+      </fieldset>
+
     </div>
   );
 };

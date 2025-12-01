@@ -1,6 +1,6 @@
 // src/backend/routes/notificationRoutes.ts
 import express, { Request, Response } from "express";
-import { UserSession } from "@/types/session";
+import { UserSession } from "@/domain/auth/sessionTypes";
 import { getNotificationsHandler } from "../controllers/notificationController";
 import { verifyToken } from "../middleware/authMiddleware";
 import { poolPromise, sql } from "../config/db";

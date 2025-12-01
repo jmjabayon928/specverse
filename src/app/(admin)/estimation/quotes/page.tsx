@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { SupplierQuote } from "@/types/estimation";
+import { SupplierQuote } from "@/domain/estimations/estimationTypes";
 
 export default function QuotesPage() {
   const [quotes, setQuotes] = useState<SupplierQuote[]>([]);

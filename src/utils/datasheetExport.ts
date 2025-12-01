@@ -25,28 +25,30 @@ export async function handleExport({
   try {
     const sheetType = isTemplate ? "templates" : "filledsheets";
 
-    // ✅ Match backend route style: /export/:id/pdf
     const response = await fetch(
       `/api/backend/${sheetType}/export/${sheetId}/${type}?uom=${unitSystem}&lang=${language}`,
-      {
-        method: "GET",
-        credentials: "include",
-      }
+      { method: "GET", credentials: "include" }
     );
 
     if (!response.ok) {
       throw new Error(`Export failed with status ${response.status}`);
     }
 
-    // ✅ Fallback filename
+    // Default filename
     let filename = `${isTemplate ? "Template" : "FilledSheet"}-${clientName}-${sheetName}-RevNo-${revisionNum}-${unitSystem}-${language}.${type === "pdf" ? "pdf" : "xlsx"}`;
 
-    // ✅ Use server-provided filename if available
+    // Prefer server-provided filename (RFC 5987: filename*=UTF-8'')
     const disposition = response.headers.get("Content-Disposition");
-    if (disposition && disposition.includes("filename*=")) {
-      const match = disposition.match(/filename\*=UTF-8''(.+)/);
-      if (match && match[1]) {
-        filename = decodeURIComponent(match[1]);
+    const re5987 = /filename\*=UTF-8''([^;]+)/;
+    const m5987 = re5987.exec(disposition ?? "");
+    if (m5987?.[1]) {
+      filename = decodeURIComponent(m5987[1]);
+    } else {
+      // Fallback: plain filename="..."
+      const rePlain = /filename="([^"]+)"/;
+      const mPlain = rePlain.exec(disposition ?? "");
+      if (mPlain?.[1]) {
+        filename = mPlain[1];
       }
     }
 

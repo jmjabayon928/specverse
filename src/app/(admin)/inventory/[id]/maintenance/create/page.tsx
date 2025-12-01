@@ -7,7 +7,7 @@ interface PageProps {
   params: { id: string };
 }
 
-export default function AddMaintenanceLogPage({ params }: PageProps) {
+export default function AddMaintenanceLogPage({ params }: Readonly<PageProps>) {
   const router = useRouter();
 
   // ✅ safely parse inventoryId from URL
@@ -69,7 +69,7 @@ export default function AddMaintenanceLogPage({ params }: PageProps) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Date</label>
+              <label htmlFor="maintenanceDate" className="block text-sm font-medium mb-1">Date</label>
               <input
                 type="date"
                 value={maintenanceDate}
@@ -81,7 +81,7 @@ export default function AddMaintenanceLogPage({ params }: PageProps) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Description</label>
+              <label htmlFor="description" className="block text-sm font-medium mb-1">Description</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -93,7 +93,7 @@ export default function AddMaintenanceLogPage({ params }: PageProps) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Notes (optional)</label>
+              <label htmlFor="notes" className="block text-sm font-medium mb-1">Notes (optional)</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}

@@ -4,7 +4,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function VerifyForm({ sheetId }: { sheetId: number }) {
+interface VerifyFormProps {
+  readonly sheetId: number;
+}
+
+export default function VerifyForm({ sheetId }: Readonly<VerifyFormProps>) {
   const [action, setAction] = useState<"verify" | "reject" | "">("");
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,7 +40,11 @@ export default function VerifyForm({ sheetId }: { sheetId: number }) {
       const result = await res.json();
 
       if (res.ok) {
-        router.push(`/datasheets/filled/${sheetId}?success=${action === "verify" ? "verified" : "rejected"}`);
+        router.push(
+          `/datasheets/filled/${sheetId}?success=${
+            action === "verify" ? "verified" : "rejected"
+          }`
+        );
       } else {
         alert(result.error || "Verification failed");
       }
@@ -50,11 +58,13 @@ export default function VerifyForm({ sheetId }: { sheetId: number }) {
 
   return (
     <form onSubmit={handleSubmit} className="mt-8 border-t pt-6">
-      <div className="mb-4">
-        <label className="block font-medium mb-2">Decision</label>
+      {/* A11y: group radios within a fieldset and use a legend */}
+      <fieldset className="mb-4">
+        <legend className="block font-medium mb-2">Decision</legend>
         <div className="flex items-center gap-6">
-          <label className="inline-flex items-center">
+          <div className="inline-flex items-center">
             <input
+              id="decision-verify"
               type="radio"
               name="action"
               value="verify"
@@ -63,10 +73,14 @@ export default function VerifyForm({ sheetId }: { sheetId: number }) {
               onChange={() => setAction("verify")}
               required
             />
-            Verify
-          </label>
-          <label className="inline-flex items-center">
+            <label htmlFor="decision-verify" className="cursor-pointer">
+              Verify
+            </label>
+          </div>
+
+          <div className="inline-flex items-center">
             <input
+              id="decision-reject"
               type="radio"
               name="action"
               value="reject"
@@ -75,10 +89,12 @@ export default function VerifyForm({ sheetId }: { sheetId: number }) {
               onChange={() => setAction("reject")}
               required
             />
-            Reject
-          </label>
+            <label htmlFor="decision-reject" className="cursor-pointer">
+              Reject
+            </label>
+          </div>
         </div>
-      </div>
+      </fieldset>
 
       {action === "reject" && (
         <div className="mb-4">

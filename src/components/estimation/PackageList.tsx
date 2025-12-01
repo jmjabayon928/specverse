@@ -1,5 +1,5 @@
 import React from "react";
-import { EstimationPackage } from "@/types/estimation";
+import { EstimationPackage } from "@/domain/estimations/estimationTypes";
 
 interface PackageListProps {
     packages: EstimationPackage[];

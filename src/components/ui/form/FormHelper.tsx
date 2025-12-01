@@ -3,7 +3,7 @@
 import React from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import type { Option } from "@/types/common";
+import type { Option } from "@/domain/shared/commonTypes";
 
 export function renderInput<T, K extends keyof T>(
   label: string,

@@ -4,8 +4,8 @@
 import React from "react";
 import SecurePage from "@/components/security/SecurePage";
 import FilledSheetCreatorForm from "./FilledSheetCreatorForm";
-import type { UnifiedSheet } from "@/types/sheet";
-import type { SheetTranslations } from "@/types/translation";
+import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
+import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 
 interface Props {
   template: UnifiedSheet;
@@ -13,7 +13,9 @@ interface Props {
   language: string;
 }
 
-export default function FilledSheetForm({ template, translations, language }: Props) {
+export default function FilledSheetForm(props: Readonly<Props>) {
+  const { template, translations, language } = props;
+
   return (
     <SecurePage requiredPermission="DATASHEET_CREATE">
       <FilledSheetCreatorForm

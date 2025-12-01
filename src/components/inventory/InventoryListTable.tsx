@@ -2,7 +2,7 @@
 "use client";
 
 import React from "react";
-import type { InventoryListItem } from "@/types/inventory";
+import type { InventoryListItem } from "@/domain/inventory/inventoryTypes";
 
 interface Props {
   inventory: InventoryListItem[];

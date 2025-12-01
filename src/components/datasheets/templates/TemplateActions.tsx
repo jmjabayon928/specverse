@@ -4,8 +4,8 @@
 import React from "react";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
-import type { UserSession } from "@/types/session";
-import type { MinimalSheetForActions } from "@/types/sheet";
+import type { UserSession } from "@/domain/auth/sessionTypes";
+import type { MinimalSheetForActions } from "@/domain/datasheets/sheetTypes";
 import IconTooltip from "@/components/ui/tooltip/IconTooltip";
 import ExportSheetButtons from "@/components/datasheets/ExportSheetButtons";
 
@@ -50,7 +50,7 @@ export default function TemplateActions({
 
   const canEdit =
     isCreator &&
-    status === "Rejected" &&
+    (status === "Draft" || status === "Modified Draft" || status === "Rejected") &&
     user?.permissions.includes("TEMPLATE_EDIT");
 
   const canVerify =
@@ -65,6 +65,15 @@ export default function TemplateActions({
 
   const canExport =
     user?.permissions.includes("TEMPLATE_EXPORT") && status === "Approved";
+
+  // NEW: Allow creating a FILLED sheet from an APPROVED template
+  // Accept any of these permission names (adjust to match your auth):
+  //  - "FILLED_CREATE" or "DATASHEET_CREATE" or "SHEET_CREATE"
+  const canCreateFilled =
+    status === "Approved" &&
+    user.permissions.some((p) =>
+      ["FILLED_CREATE", "DATASHEET_CREATE", "SHEET_CREATE"].includes(p)
+    );
 
   return (
     <div className={`flex flex-wrap items-center ${gap}`}>
@@ -117,16 +126,36 @@ export default function TemplateActions({
       )}
 
       {canDuplicate && (
-        <IconTooltip label="Duplicate Template">
+        <IconTooltip label="Clone Template">
           <button
             onClick={() =>
-              router.push(`/datasheets/templates/create?cloneId=${sheet.sheetId}`)
+              router.push(`/datasheets/templates/${sheet.sheetId}/clone`)
             }
-            title="Duplicate Template"
+            title="Clone Template"
           >
             <Image
               src="/images/duplicate.png"
-              alt="Duplicate"
+              alt="Clone"
+              width={iconSize}
+              height={iconSize}
+            />
+          </button>
+        </IconTooltip>
+      )}
+
+      {/* NEW: Create Filled Sheet from this Approved template */}
+      {canCreateFilled && (
+        <IconTooltip label="Create Filled Sheet">
+          <button
+            onClick={() =>
+              router.push(`/datasheets/filled/create?templateId=${sheet.sheetId}`)
+            }
+            title="Create Filled Sheet"
+          >
+            {/* Use an icon you have; update the path if needed */}
+            <Image
+              src="/images/fill-up.png"
+              alt="Create Filled Sheet"
               width={iconSize}
               height={iconSize}
             />

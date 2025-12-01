@@ -14,8 +14,9 @@ interface PageProps {
   params: { id: string };
 }
 
-export default async function TemplateEditPage({ params }: PageProps) {
+export default async function TemplateEditPage(props: Readonly<PageProps>) {
   // ✅ Ensure `params.id` is safely parsed and used
+  const { params } = props;
   const templateId = Number(params?.id ?? "0");
   if (!templateId || isNaN(templateId)) return notFound();
 

@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ItemForm from '@/components/estimation/ItemForm';
-import { EstimationItem } from '@/types/estimation';
+import { EstimationItem } from '@/domain/estimations/estimationTypes';
 
 export default function EditItemPage() {
   const { id } = useParams();

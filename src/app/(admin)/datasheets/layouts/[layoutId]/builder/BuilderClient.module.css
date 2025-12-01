@@ -1,0 +1,20 @@
+/* src/app/(admin)/datasheets/layouts/[layoutId]/builder/BuilderClient.module.css */
+
+.grid {
+  display: grid;
+  gap: var(--grid-gap, 2px);
+  grid-template-columns: repeat(var(--grid-cols, 24), minmax(0, 1fr));
+}
+
+/* Individual block placement (driven by CSS variables set via refs) */
+.block {
+  background: #ffffff;
+  border: 1px solid #e5e7eb; /* gray-200 */
+  border-radius: 0.25rem;
+  padding: 0.5rem; /* p-2 */
+  font-size: 0.75rem; /* text-xs */
+
+  /* Grid placement computed from CSS variables */
+  grid-column: var(--col-start, 1) / span var(--col-span, 1);
+  grid-row: var(--row-start, 1) / span var(--row-span, 1);
+}
