@@ -83,10 +83,12 @@ const connectWithRetry = async (
   }
 }
 
-const pool = await connectWithRetry(dbConfig, MAX_DB_CONNECT_ATTEMPTS)
-
 // Keep a promise-based export for existing callers that expect poolPromise.
-const poolPromise = Promise.resolve(pool)
+// NOTE: No top-level await (tsx/esbuild CJS limitation). Callers can `await poolPromise`.
+const poolPromise: Promise<sql.ConnectionPool> = connectWithRetry(
+  dbConfig,
+  MAX_DB_CONNECT_ATTEMPTS,
+)
 
 export { poolPromise, dbConfig }
 

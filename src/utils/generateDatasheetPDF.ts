@@ -371,7 +371,25 @@ export const generateDatasheetPDF = async (
     </html>
   `
 
-  const browser = await puppeteer.launch({ headless: true })
+  const launchBrowser = async (): Promise<import('puppeteer').Browser> => {
+    try {
+      return await puppeteer.launch({ headless: true })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const isMissingChrome =
+        msg.includes('Could not find Chrome') || msg.includes('resolveExecutablePath')
+
+      // Local-dev friendly fallback: use system-installed Chrome if Puppeteer-managed
+      // browser binaries are missing/not installed.
+      if (isMissingChrome) {
+        return await puppeteer.launch({ headless: true, channel: 'chrome' })
+      }
+
+      throw err
+    }
+  }
+
+  const browser = await launchBrowser()
   const page = await browser.newPage()
 
   await page.setContent(htmlContent, { waitUntil: 'networkidle0' })

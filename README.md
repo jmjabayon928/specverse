@@ -265,6 +265,42 @@ Includes:
 * **Storage:** Local public folder for logos, avatars (S3-ready)
 * **CI/CD:** Render or GitHub Actions for automated deployment *(in progress)*
 
+### 🖨️ PDF export (Puppeteer) — local dev / CI prerequisites
+
+SpecVerse generates datasheet PDFs using **Puppeteer**. Your machine/CI runner must have a usable Chrome/Chromium binary available.
+
+**Option A — Install Google Chrome (recommended for local dev)**
+
+- Install Chrome normally (Windows/macOS/Linux).
+- The PDF generator includes a local-dev fallback that tries to launch **system Chrome** via Puppeteer’s `channel: 'chrome'` when Puppeteer-managed browser binaries are missing.
+
+**Option B — Install Puppeteer-managed browser binaries (recommended for CI)**
+
+Run this once after `npm install`:
+
+```powershell
+npx puppeteer browsers install chrome
+```
+
+You can also inspect what Puppeteer sees:
+
+```powershell
+npx puppeteer browsers list
+```
+
+**Quick “doctor” check (verify PDF export prerequisites)**
+
+This launches a headless browser and immediately closes it:
+
+```powershell
+node -e "require('puppeteer').launch({ headless: true }).then(b => b.close()).then(() => console.log('✅ Puppeteer OK')).catch(e => { console.error('⛔ Puppeteer failed:', e && e.message ? e.message : e); process.exit(1) })"
+```
+
+**Troubleshooting**
+
+- If you see: `Error: Could not find Chrome (ver. ...)`  
+  Install Chrome (Option A) or run `npx puppeteer browsers install chrome` (Option B), then retry the export.
+
 ---
 
 ## ✅ Testing & Quality Assurance

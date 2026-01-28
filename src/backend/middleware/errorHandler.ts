@@ -9,6 +9,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
 
   let statusCode = 500
   let message = 'Internal server error'
+  let code = 'INTERNAL_SERVER_ERROR'
 
   if (err instanceof AppError) {
     if (typeof err.statusCode === 'number') {
@@ -20,9 +21,16 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
     }
   }
 
+  if (statusCode === 400) code = 'BAD_REQUEST'
+  if (statusCode === 401) code = 'UNAUTHORIZED'
+  if (statusCode === 403) code = 'FORBIDDEN'
+  if (statusCode === 404) code = 'NOT_FOUND'
+
   if (process.env.NODE_ENV !== 'production') {
     console.error(err)
   }
 
-  res.status(statusCode).json({ error: message })
+  // Backwards compatible shape: many clients expect `error`.
+  // New structured fields: `message` + `code`.
+  res.status(statusCode).json({ error: message, message, code })
 }

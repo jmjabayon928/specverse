@@ -30,6 +30,7 @@ import notificationRoutes from './routes/notificationRoutes'
 import referenceRoutes from '@/backend/routes/referenceRoutes'
 import statsRoutes from './routes/statsRoutes'
 import reportsRoutes from './routes/reportsRoutes'
+import { errorHandler } from './middleware/errorHandler'
 
 const app: Application = express()
 
@@ -257,5 +258,8 @@ app.get('/api/health', (_req: Request, res: Response) => {
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: 'Route not found' })
 })
+
+// Error handler (must be last)
+app.use(errorHandler)
 
 export default app

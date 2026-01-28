@@ -35,7 +35,38 @@ export const handleExport = async ({
     )
 
     if (!response.ok) {
-      throw new Error(`Export failed with status ${response.status}`)
+      let details = `Export failed with status ${response.status}`
+
+      try {
+        const contentType = response.headers.get('Content-Type') ?? ''
+
+        const isJson = contentType.toLowerCase().includes('application/json')
+        if (isJson) {
+          const body: unknown = await response.json()
+          if (body && typeof body === 'object') {
+            const rec = body as Record<string, unknown>
+            const msg =
+              (typeof rec.message === 'string' && rec.message.trim() !== ''
+                ? rec.message
+                : undefined) ??
+              (typeof rec.error === 'string' && rec.error.trim() !== '' ? rec.error : undefined)
+
+            if (msg) {
+              details = `Export failed: ${msg}`
+            }
+          }
+        } else {
+          const text = (await response.text()).trim()
+          if (text) {
+            // Avoid dumping full HTML bodies into alerts; keep it short.
+            details = `Export failed: ${text.slice(0, 300)}`
+          }
+        }
+      } catch {
+        // best-effort parsing only
+      }
+
+      throw new Error(details)
     }
 
     // Default filename
@@ -58,8 +89,11 @@ export const handleExport = async ({
     const blob = await response.blob()
     saveAs(blob, filename)
   } catch (error) {
-    // Still log for debugging; message stays user-friendly
     console.error('Export error:', error)
-    alert('An error occurred while exporting the datasheet.')
+    const message =
+      error instanceof Error && error.message.trim() !== ''
+        ? error.message
+        : 'An error occurred while exporting the datasheet.'
+    alert(message)
   }
 }
