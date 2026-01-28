@@ -1,212 +1,341 @@
-import { poolPromise, sql } from "../config/db";
+// src/backend/services/clientsService.ts
+import { poolPromise, sql } from '../config/db'
 
-/** SQL row */
 interface ClientRowSQL {
-  ClientID: number;
-  ClientCode: string;
-  ClientName: string;
-  ClientEmail: string;
-  ClientPhone: string;
-  ClientAddress: string;
-  ContactPerson: string;
-  ClientLogo: string;
-  CreatedAt?: Date | string;
-  UpdatedAt?: Date | string;
+  ClientID: number
+  ClientCode: string
+  ClientName: string
+  ClientEmail: string
+  ClientPhone: string
+  ClientAddress: string
+  ContactPerson: string
+  ClientLogo: string
+  CreatedAt?: Date | string
+  UpdatedAt?: Date | string
 }
-interface CountRow { Total: number; }
 
-/** Public DTOs */
+interface CountRow {
+  Total: number
+}
+
 export interface ClientDTO {
-  ClientID: number;
-  ClientCode: string;
-  ClientName: string;
-  ClientEmail: string;
-  ClientPhone: string;
-  ClientAddress: string;
-  ContactPerson: string;
-  ClientLogo: string;
-  CreatedAt?: string;
-  UpdatedAt?: string;
+  ClientID: number
+  ClientCode: string
+  ClientName: string
+  ClientEmail: string
+  ClientPhone: string
+  ClientAddress: string
+  ContactPerson: string
+  ClientLogo: string
+  CreatedAt?: string
+  UpdatedAt?: string
 }
 
 export interface ListClientsParams {
-  page: number;
-  pageSize: number;
-  search?: string;
+  page: number
+  pageSize: number
+  search?: string
 }
+
 export interface ListClientsResult {
-  page: number;
-  pageSize: number;
-  total: number;
-  rows: ClientDTO[];
+  page: number
+  pageSize: number
+  total: number
+  rows: ClientDTO[]
 }
 
 export interface CreateClientInput {
-  ClientCode: string; ClientName: string; ClientEmail: string; ClientPhone: string;
-  ClientAddress: string; ContactPerson: string; ClientLogo: string;
+  ClientCode: string
+  ClientName: string
+  ClientEmail: string
+  ClientPhone: string
+  ClientAddress: string
+  ContactPerson: string
+  ClientLogo: string
 }
+
 export interface UpdateClientInput {
-  ClientCode?: string; ClientName?: string; ClientEmail?: string; ClientPhone?: string;
-  ClientAddress?: string; ContactPerson?: string; ClientLogo?: string;
+  ClientCode?: string | null
+  ClientName?: string | null
+  ClientEmail?: string | null
+  ClientPhone?: string | null
+  ClientAddress?: string | null
+  ContactPerson?: string | null
+  ClientLogo?: string | null
 }
 
-/** Helpers */
-const toISO = (x?: Date | string) => (x ? new Date(x).toISOString() : undefined);
-const mapRow = (r: ClientRowSQL): ClientDTO => ({
-  ClientID: r.ClientID,
-  ClientCode: r.ClientCode,
-  ClientName: r.ClientName,
-  ClientEmail: r.ClientEmail,
-  ClientPhone: r.ClientPhone,
-  ClientAddress: r.ClientAddress,
-  ContactPerson: r.ContactPerson,
-  ClientLogo: r.ClientLogo,
-  CreatedAt: toISO(r.CreatedAt),
-  UpdatedAt: toISO(r.UpdatedAt),
-});
+const toISO = (value?: Date | string): string | undefined => {
+  if (value) {
+    return new Date(value).toISOString()
+  }
 
-function isUniqueViolation(err: unknown): boolean {
-  const e = err as { originalError?: { number?: number; message?: string } };
-  const code = e?.originalError?.number;
-  const msg = e?.originalError?.message ?? "";
-  return code === 2601 || code === 2627 || msg.includes("UX_Clients_Code");
+  return undefined
 }
 
-function bindSearch(request: sql.Request, search: string): { where: string } {
-  const q = (search ?? "").trim();
-  if (!q) return { where: "" };
-  request.input("q", sql.NVarChar(255), `%${q}%`);
+const mapRow = (row: ClientRowSQL): ClientDTO => ({
+  ClientID: row.ClientID,
+  ClientCode: row.ClientCode,
+  ClientName: row.ClientName,
+  ClientEmail: row.ClientEmail,
+  ClientPhone: row.ClientPhone,
+  ClientAddress: row.ClientAddress,
+  ContactPerson: row.ContactPerson,
+  ClientLogo: row.ClientLogo,
+  CreatedAt: toISO(row.CreatedAt),
+  UpdatedAt: toISO(row.UpdatedAt),
+})
+
+const isUniqueViolation = (error: unknown): boolean => {
+  const candidate = error as { originalError?: { number?: number; message?: string } }
+  const code = candidate.originalError?.number
+  const message = candidate.originalError?.message ?? ''
+
+  if (code === 2601 || code === 2627) {
+    return true
+  }
+
+  if (message.includes('UX_Clients_Code')) {
+    return true
+  }
+
+  return false
+}
+
+const bindSearch = (request: sql.Request, search: string | undefined): { where: string } => {
+  const trimmed = (search ?? '').trim()
+
+  if (trimmed.length === 0) {
+    return { where: '' }
+  }
+
+  request.input('q', sql.NVarChar(255), `%${trimmed}%`)
+
   return {
-    where: `WHERE (c.ClientName LIKE @q OR c.ClientCode LIKE @q OR c.ClientEmail LIKE @q OR c.ClientPhone LIKE @q)`,
-  };
+    where:
+      'WHERE (c.ClientName LIKE @q OR c.ClientCode LIKE @q OR c.ClientEmail LIKE @q OR c.ClientPhone LIKE @q)',
+  }
 }
 
-/** List with paging + search */
-export async function listClients(params: ListClientsParams): Promise<ListClientsResult> {
-  const page = Math.max(1, params.page);
-  const pageSize = Math.min(Math.max(1, params.pageSize), 100);
-  const offset = (page - 1) * pageSize;
-  const search = params.search ?? "";
+export const listClients = async (params: ListClientsParams): Promise<ListClientsResult> => {
+  const page = Math.max(1, params.page)
+  const pageSize = Math.min(Math.max(1, params.pageSize), 100)
+  const offset = (page - 1) * pageSize
+  const search = params.search ?? ''
 
-  const p = await poolPromise;
+  const pool = await poolPromise
 
-  // Data page
-  const reqData = p.request();
-  reqData.input("Offset", sql.Int, offset);
-  reqData.input("PageSize", sql.Int, pageSize);
-  const { where } = bindSearch(reqData, search);
+  const dataRequest = pool.request()
+  dataRequest.input('Offset', sql.Int, offset)
+  dataRequest.input('PageSize', sql.Int, pageSize)
 
-  const data = await reqData.query<ClientRowSQL>(`
-    SELECT c.ClientID, c.ClientCode, c.ClientName, c.ClientEmail, c.ClientPhone,
-           c.ClientAddress, c.ContactPerson, c.ClientLogo, c.CreatedAt, c.UpdatedAt
+  const { where } = bindSearch(dataRequest, search)
+
+  const data = await dataRequest.query<ClientRowSQL>(`
+    SELECT
+      c.ClientID,
+      c.ClientCode,
+      c.ClientName,
+      c.ClientEmail,
+      c.ClientPhone,
+      c.ClientAddress,
+      c.ContactPerson,
+      c.ClientLogo,
+      c.CreatedAt,
+      c.UpdatedAt
     FROM dbo.Clients c
     ${where}
     ORDER BY c.ClientID DESC
     OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-  `);
-  const rows = (data.recordset ?? []).map(mapRow);
+  `)
 
-  // Count
-  const reqCount = p.request();
-  bindSearch(reqCount, search);
-  const count = await reqCount.query<CountRow>(`
+  const rows = data.recordset.map((row) => mapRow(row))
+
+  const countRequest = pool.request()
+  bindSearch(countRequest, search)
+
+  const count = await countRequest.query<CountRow>(`
     SELECT COUNT(1) AS Total
     FROM dbo.Clients c
     ${where};
-  `);
-  const total = count.recordset[0]?.Total ?? 0;
+  `)
 
-  return { page, pageSize, total, rows };
+  const total = count.recordset[0]?.Total ?? 0
+
+  return {
+    page,
+    pageSize,
+    total,
+    rows,
+  }
 }
 
-/** Get by id */
-export async function getClientById(id: number): Promise<ClientDTO | null> {
-  const p = await poolPromise;
-  const r = await p.request()
-    .input("id", sql.Int, id)
+export const getClientById = async (id: number): Promise<ClientDTO | null> => {
+  const pool = await poolPromise
+
+  const result = await pool
+    .request()
+    .input('id', sql.Int, id)
     .query<ClientRowSQL>(`
-      SELECT c.ClientID, c.ClientCode, c.ClientName, c.ClientEmail, c.ClientPhone,
-             c.ClientAddress, c.ContactPerson, c.ClientLogo, c.CreatedAt, c.UpdatedAt
+      SELECT
+        c.ClientID,
+        c.ClientCode,
+        c.ClientName,
+        c.ClientEmail,
+        c.ClientPhone,
+        c.ClientAddress,
+        c.ContactPerson,
+        c.ClientLogo,
+        c.CreatedAt,
+        c.UpdatedAt
       FROM dbo.Clients c
       WHERE c.ClientID = @id;
-    `);
-  const row = r.recordset[0];
-  return row ? mapRow(row) : null;
+    `)
+
+  const row = result.recordset[0]
+
+  if (!row) {
+    return null
+  }
+
+  return mapRow(row)
 }
 
-/** Create — returns new ClientID */
-export async function createClient(input: CreateClientInput): Promise<number> {
+export const createClient = async (input: CreateClientInput): Promise<number> => {
   try {
-    const p = await poolPromise;
-    const r = await p.request()
-      .input("ClientCode", sql.VarChar(20), input.ClientCode)
-      .input("ClientName", sql.VarChar(150), input.ClientName)
-      .input("ClientEmail", sql.VarChar(150), input.ClientEmail)
-      .input("ClientPhone", sql.VarChar(150), input.ClientPhone)
-      .input("ClientAddress", sql.VarChar(150), input.ClientAddress)
-      .input("ContactPerson", sql.VarChar(150), input.ContactPerson)
-      .input("ClientLogo", sql.VarChar(150), input.ClientLogo)
+    const pool = await poolPromise
+
+    const result = await pool
+      .request()
+      .input('ClientCode', sql.VarChar(20), input.ClientCode)
+      .input('ClientName', sql.VarChar(150), input.ClientName)
+      .input('ClientEmail', sql.VarChar(150), input.ClientEmail)
+      .input('ClientPhone', sql.VarChar(150), input.ClientPhone)
+      .input('ClientAddress', sql.VarChar(150), input.ClientAddress)
+      .input('ContactPerson', sql.VarChar(150), input.ContactPerson)
+      .input('ClientLogo', sql.VarChar(150), input.ClientLogo)
       .query<{ ClientID: number }>(`
-        INSERT INTO dbo.Clients
-          (ClientCode, ClientName, ClientEmail, ClientPhone, ClientAddress, ContactPerson, ClientLogo)
+        INSERT INTO dbo.Clients (
+          ClientCode,
+          ClientName,
+          ClientEmail,
+          ClientPhone,
+          ClientAddress,
+          ContactPerson,
+          ClientLogo,
+          CreatedAt,
+          UpdatedAt
+        )
         OUTPUT inserted.ClientID
-        VALUES
-          (@ClientCode, @ClientName, @ClientEmail, @ClientPhone, @ClientAddress, @ContactPerson, @ClientLogo);
-      `);
-    return r.recordset[0].ClientID;
-  } catch (err: unknown) {
-    if (isUniqueViolation(err)) {
-      const e = new Error("CLIENTCODE_CONFLICT");
-      e.name = "CLIENTCODE_CONFLICT";
-      throw e;
+        VALUES (
+          @ClientCode,
+          @ClientName,
+          @ClientEmail,
+          @ClientPhone,
+          @ClientAddress,
+          @ContactPerson,
+          @ClientLogo,
+          SYSUTCDATETIME(),
+          SYSUTCDATETIME()
+        );
+      `)
+
+    return result.recordset[0].ClientID
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const conflict = new Error('CLIENTCODE_CONFLICT')
+      conflict.name = 'CLIENTCODE_CONFLICT'
+      throw conflict
     }
-    throw err;
+
+    throw error
   }
 }
 
-/** Update — returns true if updated */
-export async function updateClient(id: number, input: UpdateClientInput): Promise<boolean> {
+export const updateClient = async (
+  id: number,
+  input: UpdateClientInput,
+): Promise<boolean> => {
   try {
-    const p = await poolPromise;
+    const pool = await poolPromise
 
-    const sets: string[] = [];
-    const req = p.request().input("id", sql.Int, id);
+    const sets: string[] = []
+    const request = pool.request().input('id', sql.Int, id)
 
-    if (input.ClientCode !== undefined) { sets.push("ClientCode = @ClientCode"); req.input("ClientCode", sql.VarChar(20), input.ClientCode ?? null); }
-    if (input.ClientName !== undefined) { sets.push("ClientName = @ClientName"); req.input("ClientName", sql.VarChar(150), input.ClientName ?? null); }
-    if (input.ClientEmail !== undefined) { sets.push("ClientEmail = @ClientEmail"); req.input("ClientEmail", sql.VarChar(150), input.ClientEmail ?? null); }
-    if (input.ClientPhone !== undefined) { sets.push("ClientPhone = @ClientPhone"); req.input("ClientPhone", sql.VarChar(150), input.ClientPhone ?? null); }
-    if (input.ClientAddress !== undefined) { sets.push("ClientAddress = @ClientAddress"); req.input("ClientAddress", sql.VarChar(150), input.ClientAddress ?? null); }
-    if (input.ContactPerson !== undefined) { sets.push("ContactPerson = @ContactPerson"); req.input("ContactPerson", sql.VarChar(150), input.ContactPerson ?? null); }
-    if (input.ClientLogo !== undefined) { sets.push("ClientLogo = @ClientLogo"); req.input("ClientLogo", sql.VarChar(150), input.ClientLogo ?? null); }
+    if (Object.hasOwn(input, 'ClientCode')) {
+      sets.push('ClientCode = @ClientCode')
+      request.input('ClientCode', sql.VarChar(20), input.ClientCode ?? null)
+    }
 
-    if (sets.length === 0) return true;
+    if (Object.hasOwn(input, 'ClientName')) {
+      sets.push('ClientName = @ClientName')
+      request.input('ClientName', sql.VarChar(150), input.ClientName ?? null)
+    }
 
-    const r = await req.query<{ Affected: number }>(`
+    if (Object.hasOwn(input, 'ClientEmail')) {
+      sets.push('ClientEmail = @ClientEmail')
+      request.input('ClientEmail', sql.VarChar(150), input.ClientEmail ?? null)
+    }
+
+    if (Object.hasOwn(input, 'ClientPhone')) {
+      sets.push('ClientPhone = @ClientPhone')
+      request.input('ClientPhone', sql.VarChar(150), input.ClientPhone ?? null)
+    }
+
+    if (Object.hasOwn(input, 'ClientAddress')) {
+      sets.push('ClientAddress = @ClientAddress')
+      request.input('ClientAddress', sql.VarChar(150), input.ClientAddress ?? null)
+    }
+
+    if (Object.hasOwn(input, 'ContactPerson')) {
+      sets.push('ContactPerson = @ContactPerson')
+      request.input('ContactPerson', sql.VarChar(150), input.ContactPerson ?? null)
+    }
+
+    if (Object.hasOwn(input, 'ClientLogo')) {
+      sets.push('ClientLogo = @ClientLogo')
+      request.input('ClientLogo', sql.VarChar(150), input.ClientLogo ?? null)
+    }
+
+    if (sets.length === 0) {
+      return true
+    }
+
+    sets.push('UpdatedAt = SYSUTCDATETIME()')
+
+    const result = await request.query<{ Affected: number }>(`
       UPDATE dbo.Clients
-      SET ${sets.join(", ")}
+      SET ${sets.join(', ')}
       WHERE ClientID = @id;
       SELECT @@ROWCOUNT AS Affected;
-    `);
-    return (r.recordset[0]?.Affected ?? 0) > 0;
-  } catch (err: unknown) {
-    if (isUniqueViolation(err)) {
-      const e = new Error("CLIENTCODE_CONFLICT");
-      e.name = "CLIENTCODE_CONFLICT";
-      throw e;
+    `)
+
+    const affected = result.recordset[0]?.Affected ?? 0
+
+    return affected > 0
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const conflict = new Error('CLIENTCODE_CONFLICT')
+      conflict.name = 'CLIENTCODE_CONFLICT'
+      throw conflict
     }
-    throw err;
+
+    throw error
   }
 }
 
-/** Delete — returns true if a row was deleted */
-export async function deleteClient(id: number): Promise<boolean> {
-  const p = await poolPromise;
-  const r = await p.request()
-    .input("id", sql.Int, id)
+export const deleteClient = async (id: number): Promise<boolean> => {
+  const pool = await poolPromise
+
+  const result = await pool
+    .request()
+    .input('id', sql.Int, id)
     .query<{ Affected: number }>(`
-      DELETE FROM dbo.Clients WHERE ClientID = @id;
+      DELETE FROM dbo.Clients
+      WHERE ClientID = @id;
       SELECT @@ROWCOUNT AS Affected;
-    `);
-  return (r.recordset[0]?.Affected ?? 0) > 0;
+    `)
+
+  const affected = result.recordset[0]?.Affected ?? 0
+
+  return affected > 0
 }

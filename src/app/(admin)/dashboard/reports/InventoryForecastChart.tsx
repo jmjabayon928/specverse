@@ -45,17 +45,19 @@ export default function InventoryForecastChart() {
   const [itemNames, setItemNames] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch("/api/backend/reports/inventory-forecast")
+    fetch("/api/backend/reports/inventory-forecast", { credentials: "include" })
       .then((res) => res.json())
       .then((result: InventoryForecastEntry[]) => {
         const grouped: GroupedData = {};
         const uniqueItemNames = new Set<string>();
 
-        result.forEach((entry) => {
-          if (!grouped[entry.month]) grouped[entry.month] = {};
-          grouped[entry.month][entry.itemName] = entry.totalQuantity ?? 0;
-          uniqueItemNames.add(entry.itemName);
-        });
+        for (const entry of result) {
+          grouped[entry.month] ??= {}
+
+          grouped[entry.month][entry.itemName] = entry.totalQuantity ?? 0
+
+          uniqueItemNames.add(entry.itemName)
+        }
 
         const chartData: ChartDataEntry[] = Object.entries(grouped).map(
           ([month, items]) => ({

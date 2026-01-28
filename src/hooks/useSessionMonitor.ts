@@ -67,7 +67,6 @@ export function useSessionMonitor(
       resetTimer()
     }
 
-    // Jeff-style: for…of instead of forEach
     for (const event of events) {
       globalThis.addEventListener(event, handleActivity)
     }

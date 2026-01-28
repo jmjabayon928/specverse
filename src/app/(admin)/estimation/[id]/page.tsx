@@ -21,7 +21,7 @@ export interface InventoryItem {
 export default function EstimationDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const estimationId = parseInt(params.id as string);
+  const estimationId = Number.parseInt(params.id as string);
   const isEditing = searchParams.get('edit') === 'true';
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
 
@@ -54,7 +54,7 @@ export default function EstimationDetailPage() {
     const updatedQuotesByItem = { ...quotesByItem };
 
     for (const packageId in itemsByPackage) {
-      const items = itemsByPackage[parseInt(packageId)];
+      const items = itemsByPackage[Number.parseInt(packageId)];
       for (const item of items) {
         newState[item.EItemID] = !showAllQuotes;
 
@@ -97,7 +97,7 @@ export default function EstimationDetailPage() {
   }, []);
 
   useEffect(() => {
-    if (!isNaN(estimationId)) {
+    if (!Number.isNaN(estimationId)) {
       fetch(`${baseUrl}/api/backend/estimation/${estimationId}`, { credentials: "include" })
         .then(res => res.json())
         .then(data => {
@@ -110,7 +110,7 @@ export default function EstimationDetailPage() {
   }, [estimationId, baseUrl]);
 
   useEffect(() => {
-    if (!isNaN(estimationId)) {
+    if (!Number.isNaN(estimationId)) {
       const fetchData = async () => {
         try {
           const packagesRes = await fetch(`/api/backend/estimation/packages?estimationId=${estimationId}`, {
@@ -289,7 +289,7 @@ export default function EstimationDetailPage() {
   useEffect(() => {
     if (isPrintView) {
       setTimeout(() => {
-        window.print();
+        globalThis.print();
       }, 500);
     }
   }, [isPrintView]);
@@ -402,7 +402,7 @@ export default function EstimationDetailPage() {
         <EstimationForm
           defaultValues={estimation}
           mode="edit"
-          onSubmitSuccess={() => window.location.href = `/estimation/${estimationId}`}
+          onSubmitSuccess={() => globalThis.location.href = `/estimation/${estimationId}`}
         />
       ) : (
         <div className="grid grid-cols-4 gap-4 bg-white p-4 rounded shadow text-sm">

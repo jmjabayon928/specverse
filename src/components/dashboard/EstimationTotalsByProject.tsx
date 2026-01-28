@@ -35,7 +35,9 @@ const EstimationTotalsByProject: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/backend/stats/estimation-totals");
+        const res = await fetch("/api/backend/stats/estimation-totals", {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error("Failed to fetch estimation totals");
 
         const json: RawEstimationTotals[] = await res.json();

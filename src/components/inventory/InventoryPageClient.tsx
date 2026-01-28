@@ -10,7 +10,7 @@ interface Props {
   inventory: InventoryListItem[];
   canEditStock: boolean;
   canEditMaintenance: boolean;
-  onSelectItem?: (id: number) => void; // ✅ Make this optional
+  onSelectItem?: (id: number) => void;
 }
 
 export default function InventoryPageClient({
@@ -20,14 +20,13 @@ export default function InventoryPageClient({
   onSelectItem,
 }: Props) {
   const [selectedInventoryId, setSelectedInventoryId] = useState<number | null>(null);
-  const [activeTab] = useState("transactions"); // you can add tab switching later
+  const [activeTab] = useState("transactions");
 
-  // ✅ Local handler: if no onSelectItem is provided, fallback to inline panel
   const handleSelectItem = (id: number) => {
     if (onSelectItem) {
-      onSelectItem(id); 
+      onSelectItem(id);
     } else {
-      setSelectedInventoryId(id); 
+      setSelectedInventoryId(id);
     }
   };
 
@@ -37,7 +36,7 @@ export default function InventoryPageClient({
 
       <InventoryListTable
         inventory={inventory}
-        onSelectItem={handleSelectItem} 
+        onSelectItem={handleSelectItem}
       />
 
       {selectedInventoryId && (

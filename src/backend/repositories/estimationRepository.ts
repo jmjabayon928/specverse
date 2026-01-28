@@ -175,6 +175,87 @@ export const deleteEstimation = async (id: number): Promise<boolean> => {
   return totalRows > 0
 }
 
+const addStatusesFilter = (
+  filter: EstimationFilter,
+  request: sql.Request,
+  whereClauses: string[]
+): void => {
+  const statuses = filter.statuses
+
+  if (statuses && statuses.length > 0) {
+    const placeholders: string[] = []
+
+    for (let index = 0; index < statuses.length; index++) {
+      const status = statuses[index]
+      const paramName = `Status${index}`
+
+      placeholders.push(`@${paramName}`)
+      request.input(paramName, sql.NVarChar(50), status)
+    }
+
+    whereClauses.push(`e.Status IN (${placeholders.join(', ')})`)
+  }
+}
+
+const addClientsFilter = (
+  filter: EstimationFilter,
+  request: sql.Request,
+  whereClauses: string[]
+): void => {
+  const clients = filter.clients
+
+  if (clients && clients.length > 0) {
+    const placeholders: string[] = []
+
+    for (let index = 0; index < clients.length; index++) {
+      const clientId = clients[index]
+      const paramName = `Client${index}`
+
+      placeholders.push(`@${paramName}`)
+      request.input(paramName, sql.Int, clientId)
+    }
+
+    whereClauses.push(`e.ClientID IN (${placeholders.join(', ')})`)
+  }
+}
+
+const addProjectsFilter = (
+  filter: EstimationFilter,
+  request: sql.Request,
+  whereClauses: string[]
+): void => {
+  const projects = filter.projects
+
+  if (projects && projects.length > 0) {
+    const placeholders: string[] = []
+
+    for (let index = 0; index < projects.length; index++) {
+      const projectId = projects[index]
+      const paramName = `Project${index}`
+
+      placeholders.push(`@${paramName}`)
+      request.input(paramName, sql.Int, projectId)
+    }
+
+    whereClauses.push(`e.ProjectID IN (${placeholders.join(', ')})`)
+  }
+}
+
+const addSearchFilter = (
+  filter: EstimationFilter,
+  request: sql.Request,
+  whereClauses: string[]
+): void => {
+  const search = filter.search?.trim()
+
+  if (search && search.length > 0) {
+    request.input('SearchTerm', sql.NVarChar(255), `%${search}%`)
+    whereClauses.push(
+      '(e.Title LIKE @SearchTerm OR e.Description LIKE @SearchTerm)'
+    )
+  }
+}
+
 export const filterEstimations = async (
   filter: EstimationFilter
 ): Promise<EstimationFilterResult> => {
@@ -183,48 +264,10 @@ export const filterEstimations = async (
 
   const whereClauses: string[] = []
 
-  if (filter.statuses && filter.statuses.length > 0) {
-    const placeholders: string[] = []
-
-    filter.statuses.forEach((status, index) => {
-      const paramName = `Status${index}`
-      placeholders.push(`@${paramName}`)
-      request.input(paramName, sql.NVarChar(50), status)
-    })
-
-    whereClauses.push(`e.Status IN (${placeholders.join(', ')})`)
-  }
-
-  if (filter.clients && filter.clients.length > 0) {
-    const placeholders: string[] = []
-
-    filter.clients.forEach((clientId, index) => {
-      const paramName = `Client${index}`
-      placeholders.push(`@${paramName}`)
-      request.input(paramName, sql.Int, clientId)
-    })
-
-    whereClauses.push(`e.ClientID IN (${placeholders.join(', ')})`)
-  }
-
-  if (filter.projects && filter.projects.length > 0) {
-    const placeholders: string[] = []
-
-    filter.projects.forEach((projectId, index) => {
-      const paramName = `Project${index}`
-      placeholders.push(`@${paramName}`)
-      request.input(paramName, sql.Int, projectId)
-    })
-
-    whereClauses.push(`e.ProjectID IN (${placeholders.join(', ')})`)
-  }
-
-  if (filter.search && filter.search.trim().length > 0) {
-    request.input('SearchTerm', sql.NVarChar(255), `%${filter.search.trim()}%`)
-    whereClauses.push(
-      '(e.Title LIKE @SearchTerm OR e.Description LIKE @SearchTerm)'
-    )
-  }
+  addStatusesFilter(filter, request, whereClauses)
+  addClientsFilter(filter, request, whereClauses)
+  addProjectsFilter(filter, request, whereClauses)
+  addSearchFilter(filter, request, whereClauses)
 
   const page = filter.page ?? 1
   const pageSize = filter.pageSize ?? 10
@@ -255,9 +298,10 @@ export const filterEstimations = async (
     TotalCount?: number
   })[]
 
+  const first = estimations[0]
   const totalCount =
-    estimations.length > 0 && typeof estimations[0].TotalCount === 'number'
-      ? estimations[0].TotalCount
+    estimations.length > 0 && typeof first?.TotalCount === 'number'
+      ? first.TotalCount
       : 0
 
   return {

@@ -31,7 +31,9 @@ export default function DatasheetLifecycleChart() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch("/api/backend/stats/datasheet-lifecycle");
+        const res = await fetch("/api/backend/stats/datasheet-lifecycle", {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error("Failed to fetch lifecycle data");
 
         const json: RawDatasheetDuration[] = await res.json();

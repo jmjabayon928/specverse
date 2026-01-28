@@ -1,66 +1,89 @@
 // src/components/datasheets/templates/edit/TemplateEditorForm.tsx
 
-"use client";
+'use client'
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
-import { ZodError } from "zod";
-import { unifiedSheetSchema } from "@/validation/sheetSchema";
-import { renderInput, renderSelect, renderDate } from "@/components/ui/form/FormHelper";
-import SubsheetBuilder from "../../create/SubsheetBuilder";
-import type { UnifiedSheet, UnifiedSubsheet } from "@/domain/datasheets/sheetTypes";
-import type { Option } from "@/domain/shared/commonTypes";
+import React, { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { ZodError } from 'zod'
+import { unifiedSheetSchema } from '@/validation/sheetSchema'
+import { renderInput, renderSelect, renderDate } from '@/components/ui/form/FormHelper'
+import SubsheetBuilder from '../../create/SubsheetBuilder'
+import type { UnifiedSheet, UnifiedSubsheet } from '@/domain/datasheets/sheetTypes'
+import type { Option } from '@/domain/shared/commonTypes'
 
-interface TemplateEditorFormProps {
-  defaultValues: UnifiedSheet;
-  areas: Option[];
-  manufacturers: Option[];
-  suppliers: Option[];
-  categories: Option[];
-  clients: Option[];
-  projects: Option[];
-  session: string; // acknowledged via data attribute to avoid "defined but not used"
+type TemplateEditorFormProps = {
+  defaultValues: UnifiedSheet
+  areas: Option[]
+  manufacturers: Option[]
+  suppliers: Option[]
+  categories: Option[]
+  clients: Option[]
+  projects: Option[]
+  session: string
 }
 
-// Hoisted regexes; linter prefers RegExp.exec over .match
-const RE_FIELD = /^subsheets\.(\d+)\.fields\.(\d+)\.(.+)$/;
-const RE_SUBSHEET = /^subsheets\.(\d+)\.(.+)$/;
+const fieldPathRegex = /^subsheets\.(\d+)\.fields\.(\d+)\.(.+)$/
+const subsheetPathRegex = /^subsheets\.(\d+)\.(.+)$/
 
-function flattenErrors(zodError: ZodError): Record<string, string[]> {
-  const flattened: Record<string, string[]> = {};
+const flattenErrors = (error: ZodError): Record<string, string[]> => {
+  const flattened: Record<string, string[]> = {}
 
-  for (const err of zodError.errors) {
-    if (err.path == null || err.path.length === 0) {
+  for (const issue of error.errors) {
+    if (issue.path === undefined || issue.path.length === 0) {
       continue
     }
 
-    const path = err.path.join(".")
+    const path = issue.path.join('.')
 
-    if (path.startsWith("subsheets.")) {
-      const matchField = RE_FIELD.exec(path)
-      if (matchField) {
-        const [, subsheetIndexStr, templateIndexStr, field] = matchField
+    if (path.startsWith('subsheets.')) {
+      const fieldMatch = fieldPathRegex.exec(path)
+      if (fieldMatch) {
+        const [, subsheetIndexStr, templateIndexStr, field] = fieldMatch
         const subsheetIndex = Number.parseInt(subsheetIndexStr, 10) + 1
         const templateIndex = Number.parseInt(templateIndexStr, 10) + 1
         const key = `Subsheet #${subsheetIndex} - Template #${templateIndex} - ${field}`
-        flattened[key] = [err.message]
+        flattened[key] = [issue.message]
         continue
       }
 
-      const matchSubsheet = RE_SUBSHEET.exec(path)
-      if (matchSubsheet) {
-        const [, subsheetIndexStr, field] = matchSubsheet
+      const subsheetMatch = subsheetPathRegex.exec(path)
+      if (subsheetMatch) {
+        const [, subsheetIndexStr, field] = subsheetMatch
         const subsheetIndex = Number.parseInt(subsheetIndexStr, 10) + 1
         const key = `Subsheet #${subsheetIndex} - ${field}`
-        flattened[key] = [err.message]
+        flattened[key] = [issue.message]
         continue
       }
     }
 
-    flattened[path] = [err.message]
+    flattened[path] = [issue.message]
   }
 
-  return flattened;
+  return flattened
+}
+
+const buildManualErrors = (validated: UnifiedSheet): Record<string, string[]> => {
+  const manualErrors: Record<string, string[]> = {}
+
+  if (validated.subsheets.length === 0) {
+    manualErrors['Subsheet(s)'] = ['At least one subsheet is required.']
+    return manualErrors
+  }
+
+  let index = 0
+  for (const subsheet of validated.subsheets) {
+    const displayIndex = index + 1
+
+    if (subsheet.fields.length === 0) {
+      manualErrors[`Subsheet #${displayIndex}`] = [
+        'At least one information template is required in this subsheet.',
+      ]
+    }
+
+    index += 1
+  }
+
+  return manualErrors
 }
 
 export default function TemplateEditorForm(props: Readonly<TemplateEditorFormProps>) {
@@ -72,159 +95,312 @@ export default function TemplateEditorForm(props: Readonly<TemplateEditorFormPro
     categories,
     clients,
     projects,
-    session, // now used in a harmless data- attribute below
-  } = props;
+    session,
+  } = props
 
-  const router = useRouter();
-  const [datasheet, setDatasheet] = useState<UnifiedSheet>(defaultValues);
-  const [formErrors, setFormErrors] = useState<Record<string, string[]>>({});
+  const router = useRouter()
+
+  const [datasheet, setDatasheet] = useState<UnifiedSheet>(defaultValues)
+  const [formErrors, setFormErrors] = useState<Record<string, string[]>>({})
 
   const handleChange = <K extends keyof UnifiedSheet>(field: K, value: UnifiedSheet[K]) => {
-    setDatasheet((prev) => ({ ...prev, [field]: value }));
-  };
+    setDatasheet((previous) => ({
+      ...previous,
+      [field]: value,
+    }))
+  }
 
   const handleSubsheetsChange = (subsheets: UnifiedSubsheet[]) => {
-    setDatasheet((prev) => ({ ...prev, subsheets }));
-  };
+    setDatasheet((previous) => ({
+      ...previous,
+      subsheets,
+    }))
+  }
 
   const handleSubmit = async () => {
     try {
-      const result = unifiedSheetSchema.safeParse(datasheet);
+      const parseResult = unifiedSheetSchema.safeParse(datasheet)
 
-      if (!result.success) {
-        const flat = flattenErrors(result.error);
-        setFormErrors(flat);
-        return;
+      if (!parseResult.success) {
+        setFormErrors(flattenErrors(parseResult.error))
+        return
       }
 
-      const parsed = result.data;
-      const manualErrors: Record<string, string[]> = {};
-
-      if (parsed.subsheets.length === 0) {
-        manualErrors["Subsheet(s)"] = ["At least one subsheet is required."];
-      }
-
-      let index = 0;
-      for (const subsheet of parsed.subsheets) {
-        const num = index + 1;
-
-        if (subsheet.fields.length === 0) {
-          manualErrors[`Subsheet #${num}`] = [
-            "At least one information template is required in this subsheet.",
-          ];
-        }
-
-        index++;
-      }
+      const validated = parseResult.data
+      const manualErrors = buildManualErrors(validated)
 
       if (Object.keys(manualErrors).length > 0) {
-        setFormErrors(manualErrors);
-        return;
+        setFormErrors(manualErrors)
+        return
       }
 
-      console.log("📤 Submitting subsheets:", datasheet.subsheets);
+      const sheetId = validated.sheetId
+      const response = await fetch(`/api/backend/templates/${sheetId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(validated),
+      })
 
-      const res = await fetch(`/api/backend/templates/${datasheet.sheetId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(datasheet),
-      });
+      const payload = await response.json()
+      if (!response.ok) {
+        const message = payload?.error ?? 'Update failed'
+        throw new Error(message)
+      }
 
-      const resultJson = await res.json();
-      if (!res.ok) throw new Error(resultJson.error || "Update failed");
-
-      router.push(`/datasheets/templates/${resultJson.sheetId}`);
-    } catch (err) {
-      if (err instanceof ZodError) {
-        const flat = flattenErrors(err);
-        setFormErrors(flat);
+      router.push(`/datasheets/templates/${payload.sheetId}`)
+    } catch (error) {
+      if (error instanceof ZodError) {
+        setFormErrors(flattenErrors(error))
       } else {
-        setFormErrors({ Unknown: [(err as Error).message || "Update failed."] });
+        const message = error instanceof Error ? error.message : 'Update failed'
+        setFormErrors({
+          Unknown: [message],
+        })
       }
-      console.error("❌ Submit error:", err);
+
+      console.error('Template update error', error)
     }
-  };
+  }
+
+  const hasErrors = Object.keys(formErrors).length > 0
 
   return (
-    <div
-      className="space-y-6"
-      data-has-session={session ? "1" : "0"} // harmless use to appease "prop not used" warnings
-    >
-      <h1 className="text-xl font-semibold">Edit Template</h1>
+    <div className='space-y-6' data-has-session={session.length > 0 ? '1' : '0'}>
+      <h1 className='text-xl font-semibold'>Edit Template</h1>
 
-      {formErrors && Object.keys(formErrors).length > 0 && (
-        <div className="p-4 bg-red-100 text-red-700 border border-red-400 rounded">
-          <ul className="list-disc pl-5 space-y-1">
+      {hasErrors && (
+        <div className='p-4 bg-red-100 text-red-700 border border-red-400 rounded'>
+          <ul className='list-disc pl-5 space-y-1'>
             {Object.entries(formErrors).map(([key, messages]) => (
               <li key={key}>
-                <strong>{key}</strong>: {messages.join(", ")}
+                <strong>{key}</strong>: {messages.join(', ')}
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      <fieldset className="border border-gray-300 rounded p-4">
-        <legend className="text-md font-semibold px-2">Datasheet Details</legend>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-          {renderInput("Sheet Name", "sheetName", datasheet, handleChange, false, formErrors)}
-          {renderInput("Sheet Description", "sheetDesc", datasheet, handleChange, false, formErrors)}
-          {renderInput("Additional Description", "sheetDesc2", datasheet, handleChange, false, formErrors)}
-          {renderInput("Client Doc #", "clientDocNum", datasheet, handleChange, false, formErrors, "number")}
-          {renderInput("Client Project #", "clientProjectNum", datasheet, handleChange, false, formErrors, "number")}
-          {renderInput("Company Doc #", "companyDocNum", datasheet, handleChange, false, formErrors, "number")}
-          {renderInput("Company Project #", "companyProjectNum", datasheet, handleChange, false, formErrors, "number")}
-          {renderSelect("Area", "areaId", datasheet, handleChange, false, areas, formErrors)}
-          {renderInput("Package Name", "packageName", datasheet, handleChange, false, formErrors)}
-          {renderInput("Revision Number", "revisionNum", datasheet, handleChange, false, formErrors, "number")}
-          {renderDate("Revision Date", "revisionDate", datasheet, handleChange, false, formErrors)}
+      <fieldset className='border border-gray-300 rounded p-4'>
+        <legend className='text-md font-semibold px-2'>Datasheet Details</legend>
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mt-2'>
+          {renderInput('Sheet Name', 'sheetName', datasheet, handleChange, false, formErrors)}
+          {renderInput('Sheet Description', 'sheetDesc', datasheet, handleChange, false, formErrors)}
+          {renderInput(
+            'Additional Description',
+            'sheetDesc2',
+            datasheet,
+            handleChange,
+            false,
+            formErrors
+          )}
+          {renderInput(
+            'Client Doc #',
+            'clientDocNum',
+            datasheet,
+            handleChange,
+            false,
+            formErrors,
+            'number'
+          )}
+          {renderInput(
+            'Client Project #',
+            'clientProjectNum',
+            datasheet,
+            handleChange,
+            false,
+            formErrors,
+            'number'
+          )}
+          {renderInput(
+            'Company Doc #',
+            'companyDocNum',
+            datasheet,
+            handleChange,
+            false,
+            formErrors,
+            'number'
+          )}
+          {renderInput(
+            'Company Project #',
+            'companyProjectNum',
+            datasheet,
+            handleChange,
+            false,
+            formErrors,
+            'number'
+          )}
+          {renderSelect('Area', 'areaId', datasheet, handleChange, false, areas, formErrors)}
+          {renderInput('Package Name', 'packageName', datasheet, handleChange, false, formErrors)}
+          {renderInput(
+            'Revision Number',
+            'revisionNum',
+            datasheet,
+            handleChange,
+            false,
+            formErrors,
+            'number'
+          )}
+          {renderDate(
+            'Revision Date',
+            'revisionDate',
+            datasheet,
+            handleChange,
+            false,
+            formErrors
+          )}
         </div>
       </fieldset>
 
-      <fieldset className="border border-gray-300 rounded p-4">
-        <legend className="text-md font-semibold px-2">Equipment Details</legend>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-          {renderInput("Equipment Name", "equipmentName", datasheet, handleChange, false, formErrors)}
-          {renderInput("Equipment Tag Number", "equipmentTagNum", datasheet, handleChange, false, formErrors)}
-          {renderInput("Service Name", "serviceName", datasheet, handleChange, false, formErrors)}
-          {renderInput("Required Quantity", "requiredQty", datasheet, handleChange, false, formErrors, "number")}
-          {renderInput("Item Location", "itemLocation", datasheet, handleChange, false, formErrors)}
-          {renderSelect("Manufacturer", "manuId", datasheet, handleChange, false, manufacturers, formErrors)}
-          {renderSelect("Supplier", "suppId", datasheet, handleChange, false, suppliers, formErrors)}
-          {renderInput("Install Package #", "installPackNum", datasheet, handleChange, false, formErrors)}
-          {renderInput("Equipment Size", "equipSize", datasheet, handleChange, false, formErrors, "number")}
-          {renderInput("Model Number", "modelNum", datasheet, handleChange, false, formErrors)}
-          {renderInput("Driver", "driver", datasheet, handleChange, false, formErrors)}
-          {renderInput("Location DWG", "locationDwg", datasheet, handleChange, false, formErrors)}
-          {renderInput("PID", "pid", datasheet, handleChange, false, formErrors, "number")}
-          {renderInput("Install DWG", "installDwg", datasheet, handleChange, false, formErrors)}
-          {renderInput("Code Standard", "codeStd", datasheet, handleChange, false, formErrors)}
-          {renderSelect("Category", "categoryId", datasheet, handleChange, false, categories, formErrors)}
-          {renderSelect("Client", "clientId", datasheet, handleChange, false, clients, formErrors)}
-          {renderSelect("Project", "projectId", datasheet, handleChange, false, projects, formErrors)}
+      <fieldset className='border border-gray-300 rounded p-4'>
+        <legend className='text-md font-semibold px-2'>Equipment Details</legend>
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mt-2'>
+          {renderInput(
+            'Equipment Name',
+            'equipmentName',
+            datasheet,
+            handleChange,
+            false,
+            formErrors
+          )}
+          {renderInput(
+            'Equipment Tag #',
+            'equipmentTagNum',
+            datasheet,
+            handleChange,
+            false,
+            formErrors
+          )}
+          {renderInput('Service Name', 'serviceName', datasheet, handleChange, false, formErrors)}
+          {renderSelect(
+            'Category',
+            'categoryId',
+            datasheet,
+            handleChange,
+            false,
+            categories,
+            formErrors
+          )}
+          {renderSelect(
+            'Manufacturer',
+            'manuId',
+            datasheet,
+            handleChange,
+            false,
+            manufacturers,
+            formErrors
+          )}
+          {renderSelect(
+            'Supplier',
+            'suppId',
+            datasheet,
+            handleChange,
+            false,
+            suppliers,
+            formErrors
+          )}
+          {renderInput(
+            'Equipment Size',
+            'equipSize',
+            datasheet,
+            handleChange,
+            false,
+            formErrors,
+            'number'
+          )}
+          {renderInput('Model #', 'modelNum', datasheet, handleChange, false, formErrors)}
+          {renderInput('Driver', 'driver', datasheet, handleChange, false, formErrors)}
         </div>
       </fieldset>
 
-      <div className="mt-6">
-        <h2 className="text-lg font-semibold mb-2">Subsheet(s)</h2>
+      <fieldset className='border border-gray-300 rounded p-4'>
+        <legend className='text-md font-semibold px-2'>Project & Location</legend>
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mt-2'>
+          {renderSelect('Client', 'clientId', datasheet, handleChange, false, clients, formErrors)}
+          {renderSelect(
+            'Project',
+            'projectId',
+            datasheet,
+            handleChange,
+            false,
+            projects,
+            formErrors
+          )}
+          {renderInput(
+            'Item Location',
+            'itemLocation',
+            datasheet,
+            handleChange,
+            false,
+            formErrors
+          )}
+          {renderInput(
+            'Required Quantity',
+            'requiredQty',
+            datasheet,
+            handleChange,
+            false,
+            formErrors,
+            'number'
+          )}
+          {renderInput('Code / Std', 'codeStd', datasheet, handleChange, false, formErrors)}
+          {renderInput(
+            'Location DWG',
+            'locationDwg',
+            datasheet,
+            handleChange,
+            false,
+            formErrors
+          )}
+          {renderInput('PID #', 'pid', datasheet, handleChange, false, formErrors, 'number')}
+          {renderInput(
+            'Install DWG',
+            'installDwg',
+            datasheet,
+            handleChange,
+            false,
+            formErrors
+          )}
+          {renderInput(
+            'Install Package #',
+            'installPackNum',
+            datasheet,
+            handleChange,
+            false,
+            formErrors
+          )}
+        </div>
+      </fieldset>
+
+      <fieldset className='border border-gray-300 rounded p-4'>
+        <legend className='text-md font-semibold px-2'>Subsheet Templates</legend>
+        
+        <div className='p-4 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 rounded mb-4'>
+          <p className='text-sm font-medium'>
+            Template structure editing is temporarily disabled. You can edit metadata above, but subsheet and field structure changes will not be saved yet.
+          </p>
+        </div>
+
         <SubsheetBuilder
           subsheets={datasheet.subsheets}
           onChange={handleSubsheetsChange}
-          mode="edit"
-          previewMode={false}
-          readOnly={false}
           formErrors={formErrors}
+          mode='edit'
+          previewMode={false}
+          readOnly={true}
         />
-      </div>
+      </fieldset>
 
-      <div className="flex justify-end">
+      <div className='flex justify-end'>
         <button
+          type='button'
+          className='px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700'
           onClick={handleSubmit}
-          className="px-6 py-3 bg-blue-600 text-white rounded hover:bg-blue-700"
         >
-          Update Template
+          Save Changes
         </button>
       </div>
     </div>
-  );
+  )
 }

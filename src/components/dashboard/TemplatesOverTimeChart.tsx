@@ -24,7 +24,9 @@ const TemplatesOverTimeChart: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/backend/stats/templates-over-time");
+        const res = await fetch("/api/backend/stats/templates-over-time", {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error("Failed to fetch templates data");
         const json = await res.json();
         setData(json);

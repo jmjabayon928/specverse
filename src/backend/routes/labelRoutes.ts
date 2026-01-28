@@ -1,3 +1,4 @@
+// src/backend/routes/labelRoutes.ts
 import { Router } from "express";
 import { poolPromise, sql } from "../config/db";
 
@@ -22,10 +23,10 @@ router.get("/ui-labels", async (req, res) => {
         WHERE LanguageCode = @LanguageCode
       `);
 
-    const labelMap: Record<string, string> = {};
-    result.recordset.forEach((row) => {
-      labelMap[row.LabelKey] = row.TranslatedText;
-    });
+    const labelMap: Record<string, string> = {}
+    for (const row of result.recordset) {
+      labelMap[row.LabelKey] = row.TranslatedText
+    }
 
     res.json(labelMap);
   } catch (error) {

@@ -17,7 +17,9 @@ const DatasheetsByStatus: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/backend/stats/datasheets-by-status");
+        const res = await fetch("/api/backend/stats/datasheets-by-status", {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error("Failed to fetch datasheets by status");
         const json = await res.json();
         setData(json);

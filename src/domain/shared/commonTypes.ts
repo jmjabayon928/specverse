@@ -1,5 +1,6 @@
-// src/types/common.ts
+// src/domain/shared/commonTypes.ts
+
 export type Option = {
-  label: string;
-  value: number;
-};
+  label: string
+  value: number
+}

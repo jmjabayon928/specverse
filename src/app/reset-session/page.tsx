@@ -1,3 +1,4 @@
+// src/app/reset-session/page.tsx
 "use client";
 
 import { useEffect } from "react";
@@ -7,22 +8,24 @@ export default function ResetSessionPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // 🚫 Clear localStorage
+    // Clear localStorage
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.clear();
 
-    // 🚫 Attempt to clear cookies (client-side)
-    document.cookie.split(";").forEach(cookie => {
-      document.cookie = cookie
-        .replace(/^ +/, "")
-        .replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`);
-    });
+    // Attempt to clear cookies (client-side)
+    const cookies = document.cookie.split(';')
 
-    // ✅ Optional: call backend to clear HttpOnly cookie
+    for (const raw of cookies) {
+      const cookie = raw.replace(/^ +/, '')
+      const expired = cookie.replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`)
+      document.cookie = expired
+    }
+
+    // Optional: call backend to clear HttpOnly cookie
     fetch("/api/backend/auth/logout", { method: "POST" });
 
-    // ⏳ Wait a moment then redirect
+    // Wait a moment then redirect
     setTimeout(() => {
       router.replace("/login");
     }, 1000);

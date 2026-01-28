@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import { poolPromise, sql } from "../config/db";
 import { getFilledSheetDetailsById } from "../services/filledSheetService";
 import { getTemplateDetailsById } from "../services/templateService";
-import { generateDatasheetPDF, generateDatasheetExcel } from "../services/exportService";
+import { generateDatasheetPDF, generateDatasheetExcel } from "../services/_exportService";
 
 // 🟢 Helper to load the right datasheet
 async function getSheetData(sheetId: number, lang: string, uom: "SI" | "USC") {

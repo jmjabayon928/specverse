@@ -1,61 +1,70 @@
 // src/utils/unitConversion.ts
-import convert from 'convert-units';
+import convert from 'convert-units'
 
 /**
- * Converts SI value to USC.
- * @param valueStr - The value in SI (string from input or DB).
- * @param fromUnit - The SI unit (e.g., 'm', 'kg', 'L').
- * @returns Converted value as string (for input), or original on failure.
+ * Convert an SI value to its best USC (imperial) unit.
+ * Returns the original value and unit if parsing or conversion fails.
  */
-export function convertToUSC(valueStr: string, fromUnit: string): { value: string; unit: string } {
-  const value = Number.parseFloat(valueStr);
-  if (Number.isNaN(value)) return { value: valueStr, unit: fromUnit };
+export function convertToUSC(
+  valueStr: string,
+  fromUnit: string,
+): { value: string; unit: string } {
+  const value = Number.parseFloat(valueStr)
+
+  if (Number.isNaN(value)) {
+    return { value: valueStr, unit: fromUnit }
+  }
 
   try {
-    const result = convert(value).from(fromUnit).toBest({ system: "imperial" });
+    const result = convert(value).from(fromUnit).toBest({ system: 'imperial' })
+
     return {
       value: result.val.toFixed(2),
       unit: result.unit,
-    };
-  } catch (err) {
-    console.warn(`convertToUSC failed for ${valueStr} ${fromUnit}`, err);
-    return { value: valueStr, unit: fromUnit };
+    }
+  } catch (error) {
+    console.warn(`convertToUSC failed for ${valueStr} ${fromUnit}`, error)
+    return { value: valueStr, unit: fromUnit }
   }
 }
 
 /**
- * Converts USC value back to SI.
- * @param valueStr - The value in USC (from input).
- * @param fromUnit - The USC unit (e.g., 'ft', 'lb', 'gal').
- * @returns Converted SI value as string.
+ * Convert a USC (imperial) value back to a best-fit SI unit.
+ * Returns the original value and unit if parsing or conversion fails.
  */
-export function convertToSI(valueStr: string, fromUnit: string): { value: string; unit: string } {
-  const value = Number.parseFloat(valueStr);
-  if (Number.isNaN(value)) return { value: valueStr, unit: fromUnit };
+export function convertToSI(
+  valueStr: string,
+  fromUnit: string,
+): { value: string; unit: string } {
+  const value = Number.parseFloat(valueStr)
+
+  if (Number.isNaN(value)) {
+    return { value: valueStr, unit: fromUnit }
+  }
 
   try {
-    const result = convert(value).from(fromUnit).toBest({ system: 'metric' });
+    const result = convert(value).from(fromUnit).toBest({ system: 'metric' })
+
     return {
       value: result.val.toFixed(2),
       unit: result.unit,
-    };
-  } catch (err) {
-    console.warn(`convertToSI failed for ${valueStr} ${fromUnit}`, err);
-    return { value: valueStr, unit: fromUnit };
+    }
+  } catch (error) {
+    console.warn(`convertToSI failed for ${valueStr} ${fromUnit}`, error)
+    return { value: valueStr, unit: fromUnit }
   }
 }
 
 /**
- * Returns the best-matching USC unit for a given SI unit.
- * @param fromUnit - The SI unit.
- * @returns Equivalent USC unit as string, or original unit on failure.
+ * Return the best matching USC unit for a given SI unit.
+ * Falls back to the original unit if conversion fails.
  */
 export function getUSCUnit(fromUnit: string): string {
   try {
-    const result = convert(1).from(fromUnit).toBest({ system: 'imperial' });
-    return result.unit;
-  } catch (err) {
-    console.warn(`getUSCUnit failed for ${fromUnit}`, err);
-    return fromUnit;
+    const result = convert(1).from(fromUnit).toBest({ system: 'imperial' })
+    return result.unit
+  } catch (error) {
+    console.warn(`getUSCUnit failed for ${fromUnit}`, error)
+    return fromUnit
   }
 }

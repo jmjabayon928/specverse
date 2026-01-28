@@ -1,20 +1,20 @@
 // src/backend/controllers/templateController.ts
 
-import type { Request, NextFunction, RequestHandler } from "express"
-import { z } from "zod"
+import type { Request, NextFunction, RequestHandler } from 'express'
+import { z } from 'zod'
 
-import type { UserSession } from "@/domain/auth/sessionTypes"
+import type { UserSession } from '@/domain/auth/sessionTypes'
 import type {
   UnifiedSheet,
   NoteUpdatePayload,
-} from "@/domain/datasheets/sheetTypes"
+} from '@/domain/datasheets/sheetTypes'
 
 import {
   // lists & references
   fetchAllTemplates,
   fetchTemplateReferenceOptions,
 
-  // Core
+  // core template operations
   getTemplateDetailsById,
   createTemplate,
   updateTemplate,
@@ -40,13 +40,14 @@ import {
   fetchTemplateStructure,
 
   // export
-  exportTemplatePDF,
-  exportTemplateExcel,
+  exportTemplatePDF as exportTemplatePDFService,
+  exportTemplateExcel as exportTemplateExcelService,
 
+  // optional equipment-tag check
   doesTemplateEquipmentTagExist,
-} from "@/backend/services/templateService"
+} from '@/backend/services/templateService'
 
-import { AppError } from "@/backend/errors/AppError"
+import { AppError } from '@/backend/errors/AppError'
 
 /* ───────────────────────────────────────────
    Helpers
@@ -61,27 +62,30 @@ function asUser(req: Request): UserSession | null {
 }
 
 function parseLang(q: unknown): string {
-  if (typeof q === "string" && q.trim().length > 0) {
+  if (typeof q === 'string' && q.trim().length > 0) {
     return q.trim()
   }
 
   if (Array.isArray(q)) {
     const first = q[0]
-    if (typeof first === "string" && first.trim().length > 0) {
+    if (typeof first === 'string' && first.trim().length > 0) {
       return first.trim()
     }
   }
 
-  return "eng"
+  return 'eng'
 }
 
-function parseUom(q: unknown): "SI" | "USC" {
+function parseUom(q: unknown): 'SI' | 'USC' {
   const value = Array.isArray(q) ? q[0] : q
-  return value === "USC" ? "USC" : "SI"
+  if (value === 'USC') {
+    return 'USC'
+  }
+  return 'SI'
 }
 
 function parseId(raw: string | string[] | undefined): number | null {
-  if (typeof raw !== "string") {
+  if (typeof raw !== 'string') {
     return null
   }
 
@@ -94,35 +98,35 @@ function parseId(raw: string | string[] | undefined): number | null {
 }
 
 function normalizeQueryStringParam(v: unknown): string {
-  if (typeof v === "string") {
+  if (typeof v === 'string') {
     return v.trim()
   }
 
   if (Array.isArray(v)) {
     const first = v[0]
-    if (typeof first === "string") {
+    if (typeof first === 'string') {
       return first.trim()
     }
   }
 
-  return ""
+  return ''
 }
 
 function normalizeQueryNumberParam(v: unknown): number {
-  if (typeof v === "number") {
+  if (typeof v === 'number') {
     return v
   }
 
-  if (typeof v === "string") {
+  if (typeof v === 'string') {
     return Number(v)
   }
 
   if (Array.isArray(v)) {
     const first = v[0]
-    if (typeof first === "number") {
+    if (typeof first === 'number') {
       return first
     }
-    if (typeof first === "string") {
+    if (typeof first === 'string') {
       return Number(first)
     }
   }
@@ -137,7 +141,7 @@ const handleError = (next: NextFunction, err: unknown, fallbackMessage: string):
   }
 
   if (err instanceof z.ZodError) {
-    next(new AppError("Invalid request payload", 400))
+    next(new AppError('Invalid request payload', 400))
     return
   }
 
@@ -178,11 +182,11 @@ const updateTemplateBodySchema = z
 
 const verifyTemplateBodySchema = z
   .object({
-    action: z.enum(["verify", "reject"]).optional(),
+    action: z.enum(['verify', 'reject']).optional(),
     rejectionComment: z.string().optional(),
   })
-  .transform((value): { action: "verify" | "reject"; rejectionComment?: string } => ({
-    action: value.action ?? "verify",
+  .transform((value): { action: 'verify' | 'reject'; rejectionComment?: string } => ({
+    action: value.action ?? 'verify',
     rejectionComment: value.rejectionComment,
   }))
 
@@ -211,9 +215,9 @@ export const templateHealth: RequestHandler = (_req, res) => {
    Structure (builder)
    ─────────────────────────────────────────── */
 
-export const getTemplateStructureHandler: RequestHandler = async (req, res, next) => {
+export const getTemplateStructure: RequestHandler = async (req, res, next) => {
   try {
-    // support /:sheetId/structure or /:templateId/structure
+    // support /:sheetId/structure or /:templateId/structure or /:id/structure
     const raw =
       (req.params as Record<string, string | undefined>).sheetId ??
       (req.params as Record<string, string | undefined>).templateId ??
@@ -221,14 +225,14 @@ export const getTemplateStructureHandler: RequestHandler = async (req, res, next
 
     const templateId = parseId(raw)
     if (templateId == null) {
-      next(new AppError("Invalid template ID", 400))
+      next(new AppError('Invalid template ID', 400))
       return
     }
 
     const structure = await fetchTemplateStructure(templateId)
     res.status(200).json(structure)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to fetch template structure")
+    handleError(next, err, 'Failed to fetch template structure')
   }
 }
 
@@ -241,7 +245,7 @@ export const getAllTemplatesHandler: RequestHandler = async (_req, res, next) =>
     const rows = await fetchAllTemplates()
     res.status(200).json(rows)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to fetch templates")
+    handleError(next, err, 'Failed to fetch templates')
   }
 }
 
@@ -250,7 +254,7 @@ export const getTemplateReferenceOptionsHandler: RequestHandler = async (_req, r
     const data = await fetchTemplateReferenceOptions()
     res.status(200).json(data)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to fetch template reference options")
+    handleError(next, err, 'Failed to fetch template reference options')
   }
 }
 
@@ -258,25 +262,25 @@ export const getTemplateReferenceOptionsHandler: RequestHandler = async (_req, r
    Get by ID
    ─────────────────────────────────────────── */
 
-export const getTemplateByIdHandler: RequestHandler = async (req, res, next) => {
+export const getTemplateById: RequestHandler = async (req, res, next) => {
   try {
     const parsedParams = idParamsSchema.parse(req.params)
     const templateId = parseId(parsedParams.id)
 
     if (templateId == null) {
-      next(new AppError("Invalid template ID", 400))
+      next(new AppError('Invalid template ID', 400))
       return
     }
 
     const lang = parseLang(req.query.lang)
 
-    res.set("Cache-Control", "private, no-store")
-    res.set("Vary", "Accept-Language, Cookie")
+    res.set('Cache-Control', 'private, no-store')
+    res.set('Vary', 'Accept-Language, Cookie')
 
     const data = await getTemplateDetailsById(templateId, lang)
     res.status(200).json(data)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to get template")
+    handleError(next, err, 'Failed to get template')
   }
 }
 
@@ -288,7 +292,7 @@ export const createTemplateHandler: RequestHandler = async (req, res, next) => {
   try {
     const user = asUser(req)
     if (user?.userId == null) {
-      next(new AppError("Unauthorized", 401))
+      next(new AppError('Unauthorized', 401))
       return
     }
 
@@ -303,7 +307,7 @@ export const createTemplateHandler: RequestHandler = async (req, res, next) => {
     const newId = await createTemplate(payload, user.userId)
     res.status(201).json({ sheetId: newId })
   } catch (err: unknown) {
-    handleError(next, err, "Failed to create template")
+    handleError(next, err, 'Failed to create template')
   }
 }
 
@@ -315,7 +319,7 @@ export const updateTemplateHandler: RequestHandler = async (req, res, next) => {
   try {
     const user = asUser(req)
     if (user?.userId == null) {
-      next(new AppError("Unauthorized", 401))
+      next(new AppError('Unauthorized', 401))
       return
     }
 
@@ -323,7 +327,7 @@ export const updateTemplateHandler: RequestHandler = async (req, res, next) => {
     const sheetId = parseId(parsedParams.id)
 
     if (sheetId == null) {
-      next(new AppError("Invalid template ID", 400))
+      next(new AppError('Invalid template ID', 400))
       return
     }
 
@@ -338,7 +342,7 @@ export const updateTemplateHandler: RequestHandler = async (req, res, next) => {
     const updatedId = await updateTemplate(sheetId, payload, user.userId)
     res.status(200).json({ sheetId: updatedId })
   } catch (err: unknown) {
-    handleError(next, err, "Failed to update template")
+    handleError(next, err, 'Failed to update template')
   }
 }
 
@@ -352,14 +356,14 @@ export const verifyTemplateHandler: RequestHandler = async (req, res, next) => {
     const sheetId = parseId(parsedParams.id)
 
     if (sheetId == null) {
-      next(new AppError("Invalid template ID", 400))
+      next(new AppError('Invalid template ID', 400))
       return
     }
 
     const user = asUser(req)
     const userId = user?.userId
     if (userId == null) {
-      next(new AppError("Unauthorized", 401))
+      next(new AppError('Unauthorized', 401))
       return
     }
 
@@ -368,7 +372,7 @@ export const verifyTemplateHandler: RequestHandler = async (req, res, next) => {
     await verifyTemplate(sheetId, action, rejectionComment, userId)
     res.status(200).json({ sheetId, action, rejectionComment })
   } catch (err: unknown) {
-    handleError(next, err, "Failed to verify or reject template")
+    handleError(next, err, 'Failed to verify or reject template')
   }
 }
 
@@ -382,21 +386,21 @@ export const approveTemplateHandler: RequestHandler = async (req, res, next) => 
     const sheetId = parseId(parsedParams.id)
 
     if (sheetId == null) {
-      next(new AppError("Invalid template ID", 400))
+      next(new AppError('Invalid template ID', 400))
       return
     }
 
     const user = asUser(req)
     const userId = user?.userId
     if (userId == null) {
-      next(new AppError("Unauthorized", 401))
+      next(new AppError('Unauthorized', 401))
       return
     }
 
     const updatedId = await approveTemplate(sheetId, userId)
     res.status(200).json({ sheetId: updatedId })
   } catch (err: unknown) {
-    handleError(next, err, "Failed to approve template")
+    handleError(next, err, 'Failed to approve template')
   }
 }
 
@@ -408,7 +412,7 @@ export const cloneTemplateHandler: RequestHandler = async (req, res, next) => {
   try {
     const user = asUser(req)
     if (user?.userId == null) {
-      next(new AppError("Unauthorized", 401))
+      next(new AppError('Unauthorized', 401))
       return
     }
 
@@ -416,7 +420,7 @@ export const cloneTemplateHandler: RequestHandler = async (req, res, next) => {
     const sourceId = parseId(parsedParams.id)
 
     if (sourceId == null) {
-      next(new AppError("Invalid source template ID", 400))
+      next(new AppError('Invalid source template ID', 400))
       return
     }
 
@@ -425,7 +429,7 @@ export const cloneTemplateHandler: RequestHandler = async (req, res, next) => {
     const result = await cloneTemplateFrom(sourceId, overrides, user.userId)
     res.status(201).json(result)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to clone template")
+    handleError(next, err, 'Failed to clone template')
   }
 }
 
@@ -439,14 +443,14 @@ export const listTemplateNotesHandler: RequestHandler = async (req, res, next) =
     const sheetId = parseId(parsedParams.id)
 
     if (sheetId == null) {
-      next(new AppError("Invalid template ID", 400))
+      next(new AppError('Invalid template ID', 400))
       return
     }
 
     const notes = await listTemplateNotes(sheetId)
     res.status(200).json(notes)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to list template notes")
+    handleError(next, err, 'Failed to list template notes')
   }
 }
 
@@ -454,7 +458,7 @@ export const createTemplateNoteHandler: RequestHandler = async (req, res, next) 
   try {
     const user = asUser(req)
     if (user?.userId == null) {
-      next(new AppError("Unauthorized", 401))
+      next(new AppError('Unauthorized', 401))
       return
     }
 
@@ -462,30 +466,31 @@ export const createTemplateNoteHandler: RequestHandler = async (req, res, next) 
     const sheetId = parseId(parsedParams.id)
 
     if (sheetId == null) {
-      next(new AppError("Invalid template ID", 400))
+      next(new AppError('Invalid template ID', 400))
       return
     }
 
     const payload = noteCreateSchema.parse(req.body)
     const text = payload.text.trim()
     if (text.length === 0) {
-      next(new AppError("Note text is required", 400))
+      next(new AppError('Note text is required', 400))
       return
     }
 
     const rawNoteType = (req.body as { noteTypeId?: unknown }).noteTypeId
     let noteTypeId: number | null = null
 
-    if (typeof rawNoteType === "number" && Number.isFinite(rawNoteType)) {
+    if (typeof rawNoteType === 'number' && Number.isFinite(rawNoteType)) {
       noteTypeId = rawNoteType
-    } else if (typeof rawNoteType === "string") {
+    } else if (typeof rawNoteType === 'string') {
       const parsed = Number(rawNoteType)
       if (Number.isFinite(parsed)) {
         noteTypeId = parsed
       }
     }
 
-    const resolvedNoteTypeId = noteTypeId ?? 1
+    // keep legacy behavior: 0 means "no type" and service/SQL maps it to NULL
+    const resolvedNoteTypeId = noteTypeId ?? 0
 
     const note = await addSheetNote({
       sheetId,
@@ -497,7 +502,7 @@ export const createTemplateNoteHandler: RequestHandler = async (req, res, next) 
 
     res.status(201).json(note)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to create template note")
+    handleError(next, err, 'Failed to create template note')
   }
 }
 
@@ -508,22 +513,22 @@ export const updateTemplateNoteHandler: RequestHandler = async (req, res, next) 
     const noteId = parseId(parsedParams.noteId)
 
     if (sheetId == null || noteId == null) {
-      next(new AppError("Invalid parameters", 400))
+      next(new AppError('Invalid parameters', 400))
       return
     }
 
     const payloadParsed = noteUpdateSchema.parse(req.body)
-    const text = payloadParsed.text?.trim() ?? ""
+    const text = payloadParsed.text?.trim() ?? ''
 
     if (text.length === 0) {
-      next(new AppError("Note text is required", 400))
+      next(new AppError('Note text is required', 400))
       return
     }
 
     const user = asUser(req)
     const userId = user?.userId
     if (userId == null) {
-      next(new AppError("Unauthorized", 401))
+      next(new AppError('Unauthorized', 401))
       return
     }
 
@@ -532,7 +537,7 @@ export const updateTemplateNoteHandler: RequestHandler = async (req, res, next) 
 
     res.status(200).json({ sheetId, noteId })
   } catch (err: unknown) {
-    handleError(next, err, "Failed to update template note")
+    handleError(next, err, 'Failed to update template note')
   }
 }
 
@@ -543,23 +548,24 @@ export const deleteTemplateNoteHandler: RequestHandler = async (req, res, next) 
     const noteId = parseId(parsedParams.noteId)
 
     if (sheetId == null || noteId == null) {
-      next(new AppError("Invalid parameters", 400))
+      next(new AppError('Invalid parameters', 400))
       return
     }
 
     await deleteTemplateNote(sheetId, noteId)
-    res.status(204).end()
+    // keep legacy behavior: 200 with a body
+    res.status(200).json({ ok: true })
   } catch (err: unknown) {
-    handleError(next, err, "Failed to delete template note")
+    handleError(next, err, 'Failed to delete template note')
   }
 }
 
-export const getAllNoteTypesHandler: RequestHandler = async (_req, res, next) => {
+export const getNoteTypesHandler: RequestHandler = async (_req, res, next) => {
   try {
     const rows = await getAllNoteTypes()
     res.status(200).json(rows)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to fetch note types")
+    handleError(next, err, 'Failed to fetch note types')
   }
 }
 
@@ -573,14 +579,14 @@ export const listTemplateAttachmentsHandler: RequestHandler = async (req, res, n
     const sheetId = parseId(parsedParams.id)
 
     if (sheetId == null) {
-      next(new AppError("Invalid template ID", 400))
+      next(new AppError('Invalid template ID', 400))
       return
     }
 
     const items = await listTemplateAttachments(sheetId)
     res.status(200).json(items)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to list template attachments")
+    handleError(next, err, 'Failed to list template attachments')
   }
 }
 
@@ -588,7 +594,7 @@ export const uploadTemplateAttachmentHandler: RequestHandler = async (req, res, 
   try {
     const user = asUser(req)
     if (user?.userId == null) {
-      next(new AppError("Unauthorized", 401))
+      next(new AppError('Unauthorized', 401))
       return
     }
 
@@ -596,13 +602,13 @@ export const uploadTemplateAttachmentHandler: RequestHandler = async (req, res, 
     const sheetId = parseId(parsedParams.id)
 
     if (sheetId == null) {
-      next(new AppError("Invalid template ID", 400))
+      next(new AppError('Invalid template ID', 400))
       return
     }
 
     const file = (req as unknown as { file?: Express.Multer.File }).file
     if (file == null) {
-      next(new AppError("No file uploaded", 400))
+      next(new AppError('No file uploaded', 400))
       return
     }
 
@@ -615,7 +621,7 @@ export const uploadTemplateAttachmentHandler: RequestHandler = async (req, res, 
 
     res.status(201).json(saved)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to upload template attachment")
+    handleError(next, err, 'Failed to upload template attachment')
   }
 }
 
@@ -626,14 +632,15 @@ export const deleteTemplateAttachmentHandler: RequestHandler = async (req, res, 
     const attachmentId = parseId(parsedParams.attachmentId)
 
     if (sheetId == null || attachmentId == null) {
-      next(new AppError("Invalid parameters", 400))
+      next(new AppError('Invalid parameters', 400))
       return
     }
 
     await deleteTemplateAttachment(sheetId, attachmentId)
-    res.status(204).end()
+    // keep legacy behavior: 200 with a body
+    res.status(200).json({ ok: true })
   } catch (err: unknown) {
-    handleError(next, err, "Failed to delete template attachment")
+    handleError(next, err, 'Failed to delete template attachment')
   }
 }
 
@@ -641,48 +648,58 @@ export const deleteTemplateAttachmentHandler: RequestHandler = async (req, res, 
    Export
    ─────────────────────────────────────────── */
 
-export const exportTemplatePDFHandler: RequestHandler = async (req, res, next) => {
+export const exportTemplatePDF: RequestHandler = async (req, res, next) => {
   try {
     const parsedParams = idParamsSchema.parse(req.params)
     const templateId = parseId(parsedParams.id)
 
     if (templateId == null) {
-      next(new AppError("Invalid template ID", 400))
+      next(new AppError('Invalid template ID', 400))
       return
     }
 
     const lang = parseLang(req.query.lang)
     const uom = parseUom(req.query.uom)
 
-    const filePath = await exportTemplatePDF(templateId, lang, uom)
+    res.set('Cache-Control', 'private, no-store')
+    res.set('Vary', 'Accept-Language, Cookie')
+
+    const { filePath, fileName } = await exportTemplatePDFService(templateId, lang, uom)
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
     res.status(200).sendFile(filePath)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to export template PDF")
+    handleError(next, err, 'Failed to export template PDF')
   }
 }
 
-export const exportTemplateExcelHandler: RequestHandler = async (req, res, next) => {
+export const exportTemplateExcel: RequestHandler = async (req, res, next) => {
   try {
     const parsedParams = idParamsSchema.parse(req.params)
     const templateId = parseId(parsedParams.id)
 
     if (templateId == null) {
-      next(new AppError("Invalid template ID", 400))
+      next(new AppError('Invalid template ID', 400))
       return
     }
 
     const lang = parseLang(req.query.lang)
     const uom = parseUom(req.query.uom)
 
-    const filePath = await exportTemplateExcel(templateId, lang, uom)
+    res.set('Cache-Control', 'private, no-store')
+    res.set('Vary', 'Accept-Language, Cookie')
+
+    const { filePath, fileName } = await exportTemplateExcelService(templateId, lang, uom)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
     res.status(200).sendFile(filePath)
   } catch (err: unknown) {
-    handleError(next, err, "Failed to export template Excel")
+    handleError(next, err, 'Failed to export template Excel')
   }
 }
 
 /* ───────────────────────────────────────────
-   Misc (equipment tag check stub)
+   Equipment tag check (optional)
    ─────────────────────────────────────────── */
 
 export const checkTemplateEquipmentTagHandler: RequestHandler = async (req, res, next) => {
@@ -693,13 +710,13 @@ export const checkTemplateEquipmentTagHandler: RequestHandler = async (req, res,
 
     const hasRequiredInputs = tag.length > 0 && projectId > 0
     if (!hasRequiredInputs) {
-      next(new AppError("tag and projectId are required", 400))
+      next(new AppError('tag and projectId are required', 400))
       return
     }
 
     const exists = await doesTemplateEquipmentTagExist(tag, projectId)
     res.status(200).json({ exists })
   } catch (err: unknown) {
-    handleError(next, err, "Failed to check template equipment tag")
+    handleError(next, err, 'Failed to check template equipment tag')
   }
 }

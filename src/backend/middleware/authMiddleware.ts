@@ -1,36 +1,38 @@
 // src/backend/middleware/authMiddleware.ts
-import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
-import { JwtPayload as CustomJwtPayload } from "../../domain/auth/JwtTypes";
-import { checkUserPermission } from "../database/permissionQueries";
+import type { Request, Response, NextFunction, RequestHandler } from 'express'
+import jwt from 'jsonwebtoken'
+import { AppError } from '../errors/AppError'
+import type { JwtPayload as CustomJwtPayload } from '../../domain/auth/JwtTypes'
+import { checkUserPermission } from '../database/permissionQueries'
 
-const JWT_SECRET = process.env.JWT_SECRET!;
+const JWT_SECRET = process.env.JWT_SECRET
 
-export const verifyToken = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void => {
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is not defined in environment variables')
+}
+
+export const verifyToken: RequestHandler = (req: Request, res: Response, next: NextFunction): void => {
   if (req.skipAuth) {
-    console.log("✅ Skipping auth for test");
-    return next();
+    console.log('✅ Skipping auth for test')
+    next()
+    return
   }
 
-  const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
+  const token = req.cookies.token || req.headers.authorization?.split(' ')[1]
 
   if (!token) {
-    console.warn("⛔ No token received");
-    res.status(401).json({ message: "Unauthorized - No token" });
-    return;
+    console.warn('⛔ No token received')
+    next(new AppError('Unauthorized - No token', 401))
+    return
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload;
+    const decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload
 
     if (!decoded.userId || !decoded.role) {
-      console.warn("⛔ Token payload missing required fields");
-      res.status(403).json({ message: "Invalid token payload" });
-      return;
+      console.warn('⛔ Token payload missing required fields')
+      next(new AppError('Invalid token payload', 403))
+      return
     }
 
     req.user = {
@@ -39,35 +41,36 @@ export const verifyToken = (
       role: decoded.role,
       email: decoded.email,
       name: decoded.name,
-      profilePic: decoded.profilePic,
+      profilePic: decoded.profilePic ?? undefined,
       permissions: decoded.permissions ?? [],
-    };
+    }
 
-    next();
-  } catch (err) {
-    console.error("❌ Token verification error:", err);
-    res.status(403).json({ message: "Invalid or expired session" });
+    next()
+  } catch (error) {
+    console.error('❌ Token verification error:', error)
+    next(new AppError('Invalid or expired session', 403))
   }
-};
+}
 
-export function requirePermission(permissionKey: string) {
+export const requirePermission = (permissionKey: string): RequestHandler => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
-        res.status(403).send("Missing user in request");
-        return;
+        next(new AppError('Missing user in request', 403))
+        return
       }
 
-      const hasPermission = await checkUserPermission(req.user.userId, permissionKey);
+      const hasPermission = await checkUserPermission(req.user.userId, permissionKey)
+
       if (!hasPermission) {
-        res.status(403).send("Permission denied");
-        return;
+        next(new AppError('Permission denied', 403))
+        return
       }
 
-      next();
-    } catch (err) {
-      console.error("Permission middleware error:", err);
-      res.status(500).send("Server error");
+      next()
+    } catch (error) {
+      console.error('Permission middleware error:', error)
+      next(new AppError('Server error', 500))
     }
-  };
+  }
 }

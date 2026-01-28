@@ -28,9 +28,9 @@ export default function InventoryListTable({ inventory, onSelectItem }: Props) {
               className="cursor-pointer hover:bg-gray-50 transition"
               onClick={() => onSelectItem(item.inventoryId)}
             >
-              <td className="border px-4 py-2">{item.SheetName}</td>
-              <td className="border px-4 py-2">{item.Quantity}</td>
-              <td className="border px-4 py-2">{item.WarehouseName}</td>
+              <td className="border px-4 py-2">{item.sheetName}</td>
+              <td className="border px-4 py-2">{item.quantity}</td>
+              <td className="border px-4 py-2">{item.warehouseName}</td>
             </tr>
           ))}
           {inventory.length === 0 && (

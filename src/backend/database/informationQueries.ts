@@ -1,11 +1,5 @@
+// src/backend/database/informationQueries.ts
 import { poolPromise, sql } from "../config/db";
-
-type InfoRow = {
-  InfoID: number;
-  InfoTemplateID: number;
-  Value: string | number | null;
-  Label: string;
-};
 
 /**
  * Get all information for a given SubID and SheetID.
@@ -50,10 +44,10 @@ export async function getTranslatedTemplateLabels(sheetId: number, languageCode:
     `);
 
   // ✅ THIS is where you put the block
-  const templateMap: Record<string, string> = {};
-  result.recordset.forEach((row: InfoRow) => {
-    templateMap[row.InfoTemplateID] = row.Label;
-  });
+  const templateMap: Record<string, string> = {}
+  for (const row of result.recordset) {
+    templateMap[row.InfoTemplateID] = row.Label
+  }
 
   return templateMap;
 }

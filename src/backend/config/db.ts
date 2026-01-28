@@ -4,23 +4,39 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
-// 🔍 Determine trustServerCertificate dynamically
-function getTrustServerCertificate(): boolean {
+const MAX_DB_CONNECT_ATTEMPTS = 3
+const DB_RETRY_DELAY_MS = 2000
+
+// Decide trustServerCertificate based on the current environment.
+// In production, HOST_ENVIRONMENT must be explicitly set.
+const getTrustServerCertificate = (): boolean => {
   const env = process.env.HOST_ENVIRONMENT
 
-  switch (env) {
-    case 'local':
-      return true
-    case 'render':
-    case 'vercel':
-      return false
-    default:
-      console.warn('⚠️ Unknown HOST_ENVIRONMENT, defaulting to trustServerCertificate: true')
-      return true
+  if (env === 'local') {
+    return true
   }
+
+  if (env === 'render' || env === 'vercel') {
+    return false
+  }
+
+  const nodeEnv = process.env.NODE_ENV
+
+  if (nodeEnv === 'production') {
+    throw new Error(
+      'HOST_ENVIRONMENT must be set to "local", "render", or "vercel" when NODE_ENV=production',
+    )
+  }
+
+  console.warn(
+    '⚠️ HOST_ENVIRONMENT is not set or unknown, defaulting trustServerCertificate to true',
+  )
+
+  return true
 }
 
-const dbConfig = {
+// Strongly typed config using mssql's config interface
+const dbConfig: sql.config = {
   user: process.env.DB_USER ?? '',
   password: process.env.DB_PASSWORD ?? '',
   server: process.env.DB_SERVER ?? '',
@@ -36,23 +52,43 @@ if (!dbConfig.user || !dbConfig.password || !dbConfig.server || !dbConfig.databa
   throw new Error('⛔ Missing required database environment variables. Check your .env file.')
 }
 
-// ✅ Top-level await instead of promise chain
-let pool: sql.ConnectionPool
+const wait = (ms: number): Promise<void> =>
+  new Promise(resolve => {
+    setTimeout(resolve, ms)
+  })
 
-try {
-  pool = await new sql.ConnectionPool(dbConfig).connect()
-  if (process.env.NODE_ENV !== 'test') {
-    console.log('✅ Connected to SQL Server')
+const connectWithRetry = async (
+  config: sql.config,
+  attemptsLeft: number,
+): Promise<sql.ConnectionPool> => {
+  try {
+    const connectionPool = await new sql.ConnectionPool(config).connect()
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('✅ Connected to SQL Server')
+    }
+    return connectionPool
+  } catch (error) {
+    if (attemptsLeft <= 1) {
+      console.error('⛔ Database connection failed after multiple attempts:', error)
+      throw error
+    }
+
+    const attemptNumber = MAX_DB_CONNECT_ATTEMPTS - attemptsLeft + 1
+    console.warn(
+      `⚠️ Database connection failed (attempt ${attemptNumber}), retrying in ${DB_RETRY_DELAY_MS}ms`,
+    )
+
+    await wait(DB_RETRY_DELAY_MS)
+    return connectWithRetry(config, attemptsLeft - 1)
   }
-} catch (err) {
-  console.error('⛔ Database Connection Failed:', err)
-  throw err
 }
 
-// Export the pool promise for backwards compatibility (if needed)
+const pool = await connectWithRetry(dbConfig, MAX_DB_CONNECT_ATTEMPTS)
+
+// Keep a promise-based export for existing callers that expect poolPromise.
 const poolPromise = Promise.resolve(pool)
 
 export { poolPromise, dbConfig }
 
-// ⚡ Recommended modern re-export style (fixing the warning)
+// Re-export mssql under a single namespace to avoid multiple imports elsewhere.
 export * as sql from 'mssql'

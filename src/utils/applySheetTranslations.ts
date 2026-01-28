@@ -1,20 +1,22 @@
 // src/utils/applySheetTranslations.ts
 
-import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
-import type { SheetTranslations } from "@/domain/i18n/translationTypes";
+import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
+import type { SheetTranslations } from '@/domain/i18n/translationTypes'
 
-export function applySheetTranslations(
+export const applySheetTranslations = (
   sheet: UnifiedSheet,
   translations: SheetTranslations | null
-): UnifiedSheet {
-  if (!translations) return sheet;
+): UnifiedSheet => {
+  if (!translations) {
+    return sheet
+  }
 
   const {
     sheet: sheetLabelMap,
     subsheets: subsheetLabelMap,
     labels: fieldLabelMap,
     options: optionLabelMap,
-  } = translations;
+  } = translations
 
   return {
     ...sheet,
@@ -25,27 +27,36 @@ export function applySheetTranslations(
     serviceName: sheetLabelMap?.serviceName ?? sheet.serviceName,
 
     subsheets: sheet.subsheets.map((subsheet) => {
-      const templateSubId = subsheet.originalId ?? subsheet.id ?? -1;
-      const translatedSubName =
-        templateSubId !== -1 ? subsheetLabelMap?.[String(templateSubId)] : undefined;
+      const templateSubId = subsheet.originalId ?? subsheet.id ?? -1
+
+      if (templateSubId === -1) {
+        return subsheet
+      }
+
+      const translatedSubName = subsheetLabelMap?.[String(templateSubId)]
 
       const translatedFields = subsheet.fields.map((field) => {
-        const templateFieldId = field.originalId ?? field.id ?? -1;
-        const translatedLabel = templateFieldId !== -1 ? fieldLabelMap?.[String(templateFieldId)] : undefined;
-        const translatedOptions = templateFieldId !== -1 ? optionLabelMap?.[String(templateFieldId)] : undefined;
+        const templateFieldId = field.originalId ?? field.id ?? -1
+
+        if (templateFieldId === -1) {
+          return field
+        }
+
+        const translatedLabel = fieldLabelMap?.[String(templateFieldId)]
+        const translatedOptions = optionLabelMap?.[String(templateFieldId)]
 
         return {
           ...field,
           label: translatedLabel ?? field.label,
           options: translatedOptions ?? field.options ?? [],
-        };
-      });
+        }
+      })
 
       return {
         ...subsheet,
         name: translatedSubName ?? subsheet.name,
         fields: translatedFields,
-      };
+      }
     }),
-  };
+  }
 }

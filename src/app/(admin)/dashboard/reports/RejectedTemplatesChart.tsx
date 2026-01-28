@@ -25,7 +25,9 @@ export default function RejectedTemplatesChart() {
   useEffect(() => {
     const fetchRejectionData = async () => {
       try {
-        const res = await fetch("/api/backend/reports/rejected-templates");
+        const res = await fetch("/api/backend/reports/rejected-templates", {
+          credentials: "include",
+        });
         if (!res.ok) {
           throw new Error(`HTTP error! Status: ${res.status}`);
         }

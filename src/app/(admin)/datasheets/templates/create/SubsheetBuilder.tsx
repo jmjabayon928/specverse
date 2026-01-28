@@ -1,130 +1,154 @@
 // src/components/datasheets/templates/create/SubsheetBuilder.tsx
 
-"use client";
+'use client'
 
-import React from "react";
-import InfoTemplateBuilder from "./InfoTemplateBuilder";
-import { TrashIcon, ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
-import type { SheetMode, UnifiedSubsheet, InfoField } from "@/domain/datasheets/sheetTypes";
+import React from 'react'
+import { TrashIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
+import InfoTemplateBuilder from './InfoTemplateBuilder'
+import type { SheetMode, UnifiedSubsheet, InfoField } from '@/domain/datasheets/sheetTypes'
 
-interface Props {
-  subsheets: UnifiedSubsheet[];
-  onChange: (updated: UnifiedSubsheet[]) => void;
-  formErrors?: Record<string, string[]>;
-  mode: SheetMode;
-  previewMode: boolean;
-  readOnly: boolean;
+type SubsheetBuilderProps = {
+  subsheets: UnifiedSubsheet[]
+  onChange: (subsheets: UnifiedSubsheet[]) => void
+  formErrors?: Record<string, string[]>
+  mode: SheetMode
+  previewMode: boolean
+  readOnly: boolean
 }
 
-export default function SubsheetBuilder(props: Readonly<Props>) {
-  const { subsheets,
-  onChange,
-  formErrors = {},
-  mode,
-  previewMode, } = props;
-  const isEditMode = mode === "create" || mode === "edit";
+const buildSubsheetError = (
+  formErrors: Record<string, string[]>,
+  index: number,
+  field: string
+): string | undefined => {
+  const key = `subsheets.${index}.${field}`
+  const messages = formErrors[key]
+  if (messages === undefined || messages.length === 0) {
+    return undefined
+  }
 
-  // Stable key mapping for subsheets to avoid array-index keys
-  const keyMapRef = React.useRef(new WeakMap<UnifiedSubsheet, string>());
-  const getKey = (s: UnifiedSubsheet, idx: number): string => {
-    if (typeof s.id === "number") return `id:${s.id}`;
-    let k = keyMapRef.current.get(s);
-    if (!k) {
-      k = `tmp:${idx}-${Date.now()}`;
-      keyMapRef.current.set(s, k);
-    }
-    return k;
-  };
+  return messages[0]
+}
+
+const createEmptySubsheet = (): UnifiedSubsheet => ({
+  id: Date.now(),
+  name: '',
+  fields: [],
+})
+
+const renameSubsheet = (subsheets: UnifiedSubsheet[], index: number, name: string) => {
+  const updated = [...subsheets]
+  updated[index] = {
+    ...updated[index],
+    name,
+  }
+  return updated
+}
+
+const removeSubsheetAt = (subsheets: UnifiedSubsheet[], index: number) =>
+  subsheets.filter((_, currentIndex) => currentIndex !== index)
+
+const moveSubsheet = (subsheets: UnifiedSubsheet[], index: number, direction: number) => {
+  const nextIndex = index + direction
+  const lastIndex = subsheets.length - 1
+
+  const isOutOfRange = nextIndex < 0 || nextIndex > lastIndex
+  if (isOutOfRange) {
+    return subsheets
+  }
+
+  const updated = [...subsheets]
+  const [moved] = updated.splice(index, 1)
+  updated.splice(nextIndex, 0, moved)
+
+  return updated
+}
+
+const updateFields = (subsheets: UnifiedSubsheet[], index: number, fields: InfoField[]) => {
+  const updated = [...subsheets]
+  updated[index] = {
+    ...updated[index],
+    fields,
+  }
+  return updated
+}
+
+export default function SubsheetBuilder(props: Readonly<SubsheetBuilderProps>) {
+  const { subsheets, onChange, formErrors = {}, mode, previewMode, readOnly } = props
+
+  const canEdit = (mode === 'create' || mode === 'edit') && !previewMode && !readOnly
 
   const handleRename = (index: number, name: string) => {
-    const updated = [...subsheets];
-    updated[index].name = name;
-    onChange(updated);
-  };
+    onChange(renameSubsheet(subsheets, index, name))
+  }
 
   const handleAdd = () => {
-    const updated = [
-      ...subsheets,
-      {
-        id: Date.now(),
-        name: "",
-        fields: [],
-      },
-    ];
-    onChange(updated);
-  };
+    onChange([...subsheets, createEmptySubsheet()])
+  }
 
   const handleDelete = (index: number) => {
-    const updated = subsheets.filter((_, i) => i !== index);
-    onChange(updated);
-  };
+    onChange(removeSubsheetAt(subsheets, index))
+  }
 
   const handleMove = (index: number, direction: number) => {
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= subsheets.length) return;
-
-    const updated = [...subsheets];
-    const [moved] = updated.splice(index, 1);
-    updated.splice(newIndex, 0, moved);
-    onChange(updated);
-  };
+    onChange(moveSubsheet(subsheets, index, direction))
+  }
 
   const handleFieldsChange = (index: number, fields: InfoField[]) => {
-    const updated = [...subsheets];
-    updated[index].fields = fields;
-    onChange(updated);
-  };
+    onChange(updateFields(subsheets, index, fields))
+  }
 
   return (
-    <div className="space-y-6">
+    <div className='space-y-6'>
       {subsheets.map((subsheet, index) => {
-        const base = `subsheets.${index}`;
-        const getError = (field: string) => formErrors?.[`${base}.${field}`]?.[0];
+        const errorMessage = buildSubsheetError(formErrors, index, 'name')
+        const id = subsheet.id ?? index
 
         return (
           <div
-            key={getKey(subsheet, index)}
-            className="border rounded p-4 bg-white shadow space-y-4"
+            key={id}
+            className='border rounded p-4 bg-white shadow space-y-4'
           >
-            <div className="flex justify-between items-center">
+            <div className='flex justify-between items-center gap-2'>
               <input
-                type="text"
+                type='text'
                 value={subsheet.name}
-                onChange={(e) => handleRename(index, e.target.value)}
-                disabled={!isEditMode || previewMode}
-                placeholder="Subsheet Name"
+                onChange={(event) => handleRename(index, event.target.value)}
+                disabled={!canEdit}
+                placeholder='Subsheet Name'
                 className={`text-lg font-semibold border rounded px-2 py-1 w-full ${
-                  getError("name") ? "border-red-500" : ""
+                  errorMessage ? 'border-red-500' : ''
                 }`}
-                title={getError("name")}
+                title={errorMessage}
               />
-              {isEditMode && (
-                <div className="flex gap-2 ml-2">
+
+              {canEdit && (
+                <div className='flex gap-2'>
                   <button
-                    type="button"
-                    title="Move Up"
+                    type='button'
+                    title='Move Up'
                     onClick={() => handleMove(index, -1)}
                     disabled={index === 0}
-                    className="p-1 border rounded hover:bg-gray-100"
+                    className='p-1 border rounded hover:bg-gray-100 disabled:opacity-50'
                   >
-                    <ChevronUpIcon className="h-4 w-4 text-gray-600" />
+                    <ChevronUpIcon className='h-4 w-4 text-gray-600' />
                   </button>
                   <button
-                    type="button"
-                    title="Move Down"
+                    type='button'
+                    title='Move Down'
                     onClick={() => handleMove(index, 1)}
                     disabled={index === subsheets.length - 1}
-                    className="p-1 border rounded hover:bg-gray-100"
+                    className='p-1 border rounded hover:bg-gray-100 disabled:opacity-50'
                   >
-                    <ChevronDownIcon className="h-4 w-4 text-gray-600" />
+                    <ChevronDownIcon className='h-4 w-4 text-gray-600' />
                   </button>
                   <button
-                    type="button"
-                    title="Delete Subsheet"
+                    type='button'
+                    title='Delete Subsheet'
                     onClick={() => handleDelete(index)}
-                    className="p-1 border rounded hover:bg-red-100"
+                    className='p-1 border rounded hover:bg-red-100'
                   >
-                    <TrashIcon className="h-4 w-4 text-red-500" />
+                    <TrashIcon className='h-4 w-4 text-red-500' />
                   </button>
                 </div>
               )}
@@ -134,24 +158,22 @@ export default function SubsheetBuilder(props: Readonly<Props>) {
               subsheet={subsheet}
               subsheetIndex={index}
               onFieldsChange={(fields) => handleFieldsChange(index, fields)}
-              isEditMode={isEditMode && !previewMode}
+              isEditMode={canEdit}
               formErrors={formErrors}
             />
           </div>
-        );
+        )
       })}
 
-      {isEditMode && !previewMode && (
-        <div className="text-right">
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            + Add Subsheet
-          </button>
-        </div>
+      {canEdit && (
+        <button
+          type='button'
+          className='px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700'
+          onClick={handleAdd}
+        >
+          Add Subsheet
+        </button>
       )}
     </div>
-  );
+  )
 }

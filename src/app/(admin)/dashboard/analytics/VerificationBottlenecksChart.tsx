@@ -37,7 +37,9 @@ export default function VerificationBottlenecksChart() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch("/api/backend/stats/verification-bottlenecks");
+        const res = await fetch("/api/backend/stats/verification-bottlenecks", {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error("Failed to fetch bottleneck data");
 
         const json: RawBottleneckData[] = await res.json();

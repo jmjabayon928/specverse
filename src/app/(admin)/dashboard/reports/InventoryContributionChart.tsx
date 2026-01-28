@@ -45,7 +45,9 @@ export default function InventoryContributionChart() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/backend/reports/inventory-contribution");
+        const res = await fetch("/api/backend/reports/inventory-contribution", {
+          credentials: "include",
+        });
         const raw: CategoryContribution[] = await res.json();
 
         const itemsSet = new Set<string>();
@@ -53,10 +55,10 @@ export default function InventoryContributionChart() {
           const entry: StackedDataEntry = {
             categoryName: category.categoryName,
           };
-          category.items.forEach((item) => {
-            entry[item.itemName] = item.quantity;
-            itemsSet.add(item.itemName);
-          });
+          for (const item of category.items) {
+            entry[item.itemName] = item.quantity
+            itemsSet.add(item.itemName)
+          }
           return entry;
         });
 

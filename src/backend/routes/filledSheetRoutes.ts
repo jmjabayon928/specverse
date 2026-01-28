@@ -1,5 +1,5 @@
 // src/backend/routes/filledSheetRoutes.ts
-import express from 'express'
+import { Router } from 'express'
 
 import { verifyToken, requirePermission } from '@/backend/middleware/authMiddleware'
 import { auditAction } from '@/backend/middleware/auditMiddleware'
@@ -35,14 +35,17 @@ import {
   exportFilledSheetPDF,
   exportFilledSheetExcel,
   checkEquipmentTag,
-} from "../controllers/filledSheetController";
+} from '../controllers/filledSheetController'
 
-const router = express.Router();
+const router = Router()
 
 /* ──────────────────────────────────────────────────────────────
    Health
    ────────────────────────────────────────────────────────────── */
-router.get("/health", (_req, res) => res.json({ ok: true }));
+
+router.get('/health', (_req, res) => {
+  res.json({ ok: true })
+})
 
 /* ──────────────────────────────────────────────────────────────
    Collection & reference (keep BEFORE any "/:id" routes)
@@ -50,19 +53,19 @@ router.get("/health", (_req, res) => res.json({ ok: true }));
 
 // List all filled sheets (non-templates)
 router.get(
-  "/",
+  '/',
   verifyToken,
-  requirePermission("DATASHEET_VIEW"),
+  requirePermission('DATASHEET_VIEW'),
   getAllFilled
-);
+)
 
 // Reference dropdown options (categories, users, etc.)
 router.get(
-  "/reference-options",
+  '/reference-options',
   verifyToken,
-  requirePermission("DATASHEET_VIEW"),
+  requirePermission('DATASHEET_VIEW'),
   getReferenceOptions
-);
+)
 
 /* ──────────────────────────────────────────────────────────────
    Utilities
@@ -70,29 +73,29 @@ router.get(
 
 // Check equipment-tag uniqueness (typically per project)
 router.get(
-  "/check-equipment-tag",
+  '/check-equipment-tag',
   verifyToken,
-  requirePermission("DATASHEET_EDIT"),
+  requirePermission('DATASHEET_EDIT'),
   checkEquipmentTag
-);
+)
 
 /* ──────────────────────────────────────────────────────────────
    Export
    ────────────────────────────────────────────────────────────── */
 
 router.get(
-  "/export/:id/pdf",
+  '/export/:id/pdf',
   verifyToken,
-  requirePermission("DATASHEET_VIEW"),
+  requirePermission('DATASHEET_VIEW'),
   exportFilledSheetPDF
-);
+)
 
 router.get(
-  "/export/:id/excel",
+  '/export/:id/excel',
   verifyToken,
-  requirePermission("DATASHEET_VIEW"),
+  requirePermission('DATASHEET_VIEW'),
   exportFilledSheetExcel
-);
+)
 
 /* ──────────────────────────────────────────────────────────────
    Create & Clone
@@ -100,21 +103,20 @@ router.get(
 
 // Create new filled sheet
 router.post(
-  "/",
+  '/',
   verifyToken,
-  requirePermission("DATASHEET_EDIT"),
-  auditAction("Create Filled Sheet"),
+  requirePermission('DATASHEET_EDIT'),
   createFilledSheetHandler
-);
+)
 
 // Clone existing sheet into a new filled sheet
 router.post(
-  "/:id/clone",
+  '/:id/clone',
   verifyToken,
-  requirePermission("DATASHEET_EDIT"),
-  auditAction("Clone Filled Sheet"),
+  requirePermission('DATASHEET_EDIT'),
+  auditAction('Clone Filled Sheet'),
   cloneFilledSheetHandler
-);
+)
 
 /* ──────────────────────────────────────────────────────────────
    Attachments (keep BEFORE generic "/:id")
@@ -122,30 +124,30 @@ router.post(
 
 // List attachments for a sheet
 router.get(
-  "/:id/attachments",
+  '/:id/attachments',
   verifyToken,
-  requirePermission("DATASHEET_VIEW"),
+  requirePermission('DATASHEET_VIEW'),
   listFilledSheetAttachmentsHandler
-);
+)
 
 // Upload one attachment (multipart/form-data; field name: "file")
 router.post(
-  "/:id/attachments",
+  '/:id/attachments',
   verifyToken,
-  requirePermission("DATASHEET_ATTACHMENT_UPLOAD"),
-  uploadAttachment.single("file"),
-  auditAction("Upload Filled Sheet Attachment"),
+  requirePermission('DATASHEET_ATTACHMENT_UPLOAD'),
+  uploadAttachment.single('file'),
+  auditAction('Upload Filled Sheet Attachment'),
   uploadFilledSheetAttachmentHandler
 )
 
 // Delete attachment by id
 router.delete(
-  "/:id/attachments/:attachmentId",
+  '/:id/attachments/:attachmentId',
   verifyToken,
-  requirePermission("DATASHEET_ATTACHMENT_DELETE"),
-  auditAction("Delete Filled Sheet Attachment"),
+  requirePermission('DATASHEET_ATTACHMENT_DELETE'),
+  auditAction('Delete Filled Sheet Attachment'),
   deleteFilledSheetAttachmentHandler
-);
+)
 
 /* ──────────────────────────────────────────────────────────────
    Notes (keep BEFORE generic "/:id")
@@ -153,72 +155,72 @@ router.delete(
 
 // List notes for a sheet
 router.get(
-  "/:id/notes",
+  '/:id/notes',
   verifyToken,
-  requirePermission("DATASHEET_VIEW"),
+  requirePermission('DATASHEET_VIEW'),
   listFilledSheetNotesHandler
-);
+)
 
 // Create note
 router.post(
-  "/:id/notes",
+  '/:id/notes',
   verifyToken,
-  requirePermission("DATASHEET_NOTE_EDIT"),
-  auditAction("Create Filled Sheet Note"),
+  requirePermission('DATASHEET_NOTE_EDIT'),
+  auditAction('Create Filled Sheet Note'),
   createFilledSheetNoteHandler
-);
+)
 
 // Update note
 router.put(
-  "/:id/notes/:noteId",
+  '/:id/notes/:noteId',
   verifyToken,
-  requirePermission("DATASHEET_NOTE_EDIT"),
-  auditAction("Update Filled Sheet Note"),
+  requirePermission('DATASHEET_NOTE_EDIT'),
+  auditAction('Update Filled Sheet Note'),
   updateFilledSheetNoteHandler
-);
+)
 
 // Delete note
 router.delete(
-  "/:id/notes/:noteId",
+  '/:id/notes/:noteId',
   verifyToken,
-  requirePermission("DATASHEET_NOTE_EDIT"),
-  auditAction("Delete Filled Sheet Note"),
+  requirePermission('DATASHEET_NOTE_EDIT'),
+  auditAction('Delete Filled Sheet Note'),
   deleteFilledSheetNoteHandler
-);
+)
 
 /* ──────────────────────────────────────────────────────────────
    ID-scoped CRUD (keep LAST so it doesn't swallow the above)
    ────────────────────────────────────────────────────────────── */
 
 router.get(
-  "/:id",
+  '/:id',
   verifyToken,
-  requirePermission("DATASHEET_VIEW"),
+  requirePermission('DATASHEET_VIEW'),
   getFilledSheetById
-);
+)
 
 router.put(
-  "/:id",
+  '/:id',
   verifyToken,
-  requirePermission("DATASHEET_EDIT"),
-  auditAction("Update Filled Sheet"),
+  requirePermission('DATASHEET_EDIT'),
+  auditAction('Update Filled Sheet', { tableName: 'Sheets', recordIdParam: 'id' }),
   updateFilledSheetHandler
-);
+)
 
 router.post(
-  "/:id/verify",
+  '/:id/verify',
   verifyToken,
-  requirePermission("DATASHEET_VERIFY"),
-  auditAction("Verify Filled Sheet"),
+  requirePermission('DATASHEET_VERIFY'),
+  auditAction('Verify Filled Sheet', { tableName: 'Sheets', recordIdParam: 'id' }),
   verifyFilledSheetHandler
-);
+)
 
 router.post(
-  "/:id/approve",
+  '/:id/approve',
   verifyToken,
-  requirePermission("DATASHEET_APPROVE"),
-  auditAction("Approve Filled Sheet"),
+  requirePermission('DATASHEET_APPROVE'),
+  auditAction('Approve Filled Sheet', { tableName: 'Sheets', recordIdParam: 'id' }),
   approveFilledSheetHandler
-);
+)
 
-export default router;
+export default router

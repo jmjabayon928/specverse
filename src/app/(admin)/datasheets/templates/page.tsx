@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import DatePicker from 'react-datepicker'
@@ -52,48 +52,139 @@ type ReferenceOptionsResponse = {
 type SelectState = SelectOption | null
 
 const isTemplateRow = (row: unknown): row is TemplateRow => {
-  if (!row || typeof row !== 'object') return false
+  if (row === null) {
+    return false
+  }
+
+  if (typeof row !== 'object') {
+    return false
+  }
+
   const candidate = row as Partial<TemplateRow>
 
-  return (
-    typeof candidate.sheetId === 'number' &&
-    typeof candidate.sheetName === 'string' &&
-    typeof candidate.categoryId === 'number' &&
-    typeof candidate.categoryName === 'string' &&
-    typeof candidate.preparedById === 'number' &&
-    typeof candidate.preparedByName === 'string' &&
-    typeof candidate.revisionDate === 'string' &&
-    typeof candidate.status === 'string'
-  )
+  if (typeof candidate.sheetId !== 'number') {
+    return false
+  }
+
+  if (typeof candidate.sheetName !== 'string') {
+    return false
+  }
+
+  if (typeof candidate.categoryId !== 'number') {
+    return false
+  }
+
+  if (typeof candidate.categoryName !== 'string') {
+    return false
+  }
+
+  if (typeof candidate.preparedById !== 'number') {
+    return false
+  }
+
+  if (typeof candidate.preparedByName !== 'string') {
+    return false
+  }
+
+  if (typeof candidate.revisionDate !== 'string') {
+    return false
+  }
+
+  if (typeof candidate.status !== 'string') {
+    return false
+  }
+
+  return true
 }
 
-const isTemplateRowArray = (value: unknown): value is TemplateRow[] =>
-  Array.isArray(value) && value.every(isTemplateRow)
+const isTemplateRowArray = (value: unknown): value is TemplateRow[] => {
+  if (!Array.isArray(value)) {
+    return false
+  }
+
+  for (const row of value) {
+    if (isTemplateRow(row) === false) {
+      return false
+    }
+  }
+
+  return true
+}
 
 const isReferenceOptionsResponse = (value: unknown): value is ReferenceOptionsResponse => {
-  if (!value || typeof value !== 'object') return false
+  if (value === null) {
+    return false
+  }
+
+  if (typeof value !== 'object') {
+    return false
+  }
+
   const candidate = value as Partial<ReferenceOptionsResponse>
 
-  return Array.isArray(candidate.categories) && Array.isArray(candidate.users)
+  if (!Array.isArray(candidate.categories)) {
+    return false
+  }
+
+  if (!Array.isArray(candidate.users)) {
+    return false
+  }
+
+  return true
 }
 
-const mapCategoriesToOptions = (categories: CategoryOption[]): SelectOption[] =>
-  categories.map((c) => ({
-    value: c.CategoryID,
-    label: c.CategoryName,
-  }))
+const isSelectOption = (value: unknown): value is SelectOption => {
+  if (value === null) {
+    return false
+  }
 
-const mapUsersToOptions = (users: UserOption[]): SelectOption[] =>
-  users.map((u) => ({
-    value: u.UserID,
-    label: `${u.FirstName} ${u.LastName}`,
-  }))
+  if (typeof value !== 'object') {
+    return false
+  }
+
+  const candidate = value as Partial<SelectOption>
+
+  if (typeof candidate.value !== 'number') {
+    return false
+  }
+
+  if (typeof candidate.label !== 'string') {
+    return false
+  }
+
+  return true
+}
+
+const mapCategoriesToOptions = (categories: CategoryOption[]): SelectOption[] => {
+  const options: SelectOption[] = []
+
+  for (const category of categories) {
+    options.push({
+      value: category.CategoryID,
+      label: category.CategoryName,
+    })
+  }
+
+  return options
+}
+
+const mapUsersToOptions = (users: UserOption[]): SelectOption[] => {
+  const options: SelectOption[] = []
+
+  for (const user of users) {
+    options.push({
+      value: user.UserID,
+      label: `${user.FirstName} ${user.LastName}`,
+    })
+  }
+
+  return options
+}
 
 const TemplateListPage = () => {
   const { user } = useSession()
 
   const [templates, setTemplates] = useState<TemplateRow[]>([])
-  const [filtered, setFiltered] = useState<TemplateRow[]>([])
   const [categories, setCategories] = useState<SelectOption[]>([])
   const [users, setUsers] = useState<SelectOption[]>([])
 
@@ -113,7 +204,7 @@ const TemplateListPage = () => {
 
         const data: unknown = await res.json()
 
-        if (!isReferenceOptionsResponse(data)) {
+        if (isReferenceOptionsResponse(data) === false) {
           console.warn('Unexpected reference-options payload:', data)
           setCategories([])
           setUsers([])
@@ -122,8 +213,8 @@ const TemplateListPage = () => {
 
         setCategories(mapCategoriesToOptions(data.categories))
         setUsers(mapUsersToOptions(data.users))
-      } catch (err) {
-        console.error('Failed to fetch reference options', err)
+      } catch (error: unknown) {
+        console.error('Failed to fetch reference options', error)
         setCategories([])
         setUsers([])
       }
@@ -139,19 +230,16 @@ const TemplateListPage = () => {
 
         const data: unknown = await res.json()
 
-        if (!isTemplateRowArray(data)) {
+        if (isTemplateRowArray(data) === false) {
           console.warn('Templates fetch returned unexpected payload:', data)
           setTemplates([])
-          setFiltered([])
           return
         }
 
         setTemplates(data)
-        setFiltered(data)
-      } catch (err) {
-        console.error('Failed to fetch templates', err)
+      } catch (error: unknown) {
+        console.error('Failed to fetch templates', error)
         setTemplates([])
-        setFiltered([])
       } finally {
         setLoading(false)
       }
@@ -162,33 +250,64 @@ const TemplateListPage = () => {
   }, [])
 
   const filteredTemplates = useMemo<TemplateRow[]>(() => {
-    let result = [...templates]
+    let result = templates
 
-    if (categoryFilter) {
-      result = result.filter((t) => t.categoryId === categoryFilter.value)
+    if (categoryFilter !== null) {
+      const selectedCategoryId = categoryFilter.value
+      result = result.filter((template) => template.categoryId === selectedCategoryId)
     }
 
-    if (userFilter) {
-      result = result.filter((t) => t.preparedById === userFilter.value)
+    if (userFilter !== null) {
+      const selectedUserId = userFilter.value
+      result = result.filter((template) => template.preparedById === selectedUserId)
     }
 
-    if (dateFrom) {
-      result = result.filter((t) => new Date(t.revisionDate) >= dateFrom)
+    if (dateFrom !== null) {
+      const fromStart = new Date(
+        dateFrom.getFullYear(),
+        dateFrom.getMonth(),
+        dateFrom.getDate(),
+        0,
+        0,
+        0,
+        0
+      ).getTime()
+
+      result = result.filter((template) => {
+        const timestamp = new Date(template.revisionDate).getTime()
+        if (Number.isNaN(timestamp)) {
+          return false
+        }
+        return timestamp >= fromStart
+      })
     }
 
-    if (dateTo) {
-      result = result.filter((t) => new Date(t.revisionDate) <= dateTo)
+    if (dateTo !== null) {
+      const toEnd = new Date(
+        dateTo.getFullYear(),
+        dateTo.getMonth(),
+        dateTo.getDate(),
+        23,
+        59,
+        59,
+        999
+      ).getTime()
+
+      result = result.filter((template) => {
+        const timestamp = new Date(template.revisionDate).getTime()
+        if (Number.isNaN(timestamp)) {
+          return false
+        }
+        return timestamp <= toEnd
+      })
     }
 
     return result
-  }, [categoryFilter, userFilter, dateFrom, dateTo, templates])
-
-  useEffect(() => {
-    setFiltered(filteredTemplates)
-  }, [filteredTemplates])
+  }, [templates, categoryFilter, userFilter, dateFrom, dateTo])
 
   if (process.env.NODE_ENV !== 'production') {
-    console.log('Loaded templates:', filtered)
+    // Helpful while wiring filters; safe to remove later
+    console.log('Loaded templates (filtered):', filteredTemplates)
   }
 
   return (
@@ -216,26 +335,38 @@ const TemplateListPage = () => {
             <Select
               options={categories}
               value={categoryFilter}
-              onChange={(newValue) => setCategoryFilter((newValue as SelectOption) ?? null)}
+              onChange={(newValue: unknown) => {
+                if (isSelectOption(newValue)) {
+                  setCategoryFilter(newValue)
+                  return
+                }
+                setCategoryFilter(null)
+              }}
               placeholder='Filter by Category'
               isClearable
             />
             <Select
               options={users}
               value={userFilter}
-              onChange={(newValue) => setUserFilter((newValue as SelectOption) ?? null)}
+              onChange={(newValue: unknown) => {
+                if (isSelectOption(newValue)) {
+                  setUserFilter(newValue)
+                  return
+                }
+                setUserFilter(null)
+              }}
               placeholder='Filter by Prepared By'
               isClearable
             />
             <DatePicker
               selected={dateFrom}
-              onChange={(date) => setDateFrom(date)}
+              onChange={(date: Date | null) => setDateFrom(date)}
               placeholderText='From Date'
               className='w-full border px-3 py-2 rounded'
             />
             <DatePicker
               selected={dateTo}
-              onChange={(date) => setDateTo(date)}
+              onChange={(date: Date | null) => setDateTo(date)}
               placeholderText='To Date'
               className='w-full border px-3 py-2 rounded'
             />
@@ -256,51 +387,51 @@ const TemplateListPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((t) => (
-                  <tr key={t.sheetId} className='border-t'>
+                {filteredTemplates.map((template) => (
+                  <tr key={template.sheetId} className='border-t'>
                     <td className='px-4 py-2 text-blue-600 hover:underline'>
-                      <Link href={`/datasheets/templates/${t.sheetId}`}>
-                        {t.sheetName}
+                      <Link href={`/datasheets/templates/${template.sheetId}`}>
+                        {template.sheetName}
                       </Link>
                     </td>
                     <td className='px-4 py-2'>
-                      {t.sheetDesc ?? '-'}
+                      {template.sheetDesc ?? '-'}
                     </td>
                     <td className='px-4 py-2'>
-                      {t.categoryName ?? '-'}
+                      {template.categoryName ?? '-'}
                     </td>
                     <td className='px-4 py-2'>
-                      {t.preparedByName ?? '-'}
+                      {template.preparedByName ?? '-'}
                     </td>
                     <td className='px-4 py-2'>
-                      {t.revisionDate
-                        ? format(new Date(t.revisionDate), 'MMM dd, yyyy')
+                      {template.revisionDate
+                        ? format(new Date(template.revisionDate), 'MMM dd, yyyy')
                         : '-'}
                     </td>
                     <td className='px-4 py-2 capitalize'>
-                      {t.status}
+                      {template.status}
                     </td>
                     <td className='px-4 py-2 space-x-2'>
                       {user ? (
                         <TemplateActions
                           sheet={{
-                            sheetId: t.sheetId,
-                            preparedBy: t.preparedById,
-                            status: t.status,
+                            sheetId: template.sheetId,
+                            preparedBy: template.preparedById,
+                            status: template.status,
                             isTemplate: true,
                           }}
                           user={user}
                           unitSystem='SI'
                           language='eng'
                           clientName='Internal'
-                          sheetName={t.sheetName}
+                          sheetName={template.sheetName}
                           revisionNum={1}
                         />
                       ) : null}
                     </td>
                   </tr>
                 ))}
-                {filtered.length === 0 && (
+                {filteredTemplates.length === 0 && (
                   <tr>
                     <td
                       colSpan={7}

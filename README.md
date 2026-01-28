@@ -87,6 +87,7 @@ This enables **true no-code datasheet configuration** — a huge time and cost s
   * Rejected Datasheets Over Time
   * Workflow Stream for Templates and Datasheets
   * Supplier Comparison by Item
+  * AI Findings & Quality Signals (planned; surfaced alongside audit logs)
 
 * ✅ View data behind charts via modal tables
 
@@ -117,6 +118,13 @@ This enables **true no-code datasheet configuration** — a huge time and cost s
 * Smart dashboards based on user role and behavior
 * Auto-flag incomplete or high-risk datasheets
 
+### 🧩 Human-in-the-Loop Intelligence
+
+AI-driven insights in SpecVerse are designed to operate in a
+**propose → review → apply** workflow. Automated findings and suggestions
+are always reviewable, auditable, and require explicit user approval
+before changes are applied.
+
 ---
 
 ## 🧪 In Progress / Experimental Features
@@ -145,6 +153,57 @@ A new module to support structured labor cost estimation per role, package, or t
 * Integration with Estimation exports and dashboards
 
 This module will support both manual entry and auto-suggestion based on scope and productivity metrics, with full reporting and approval support.
+
+---
+
+## 🧭 Strategic Roadmap (Vision)
+
+This section outlines **long-term platform directions** under consideration for SpecVerse.  
+The capabilities described here are **not yet implemented** and are presented to illustrate the architectural direction and future potential of the platform.
+These initiatives are intended to complement—not replace—human engineering judgment and approval workflows.
+
+---
+
+### 🏭 SpecVerse PlantSync — EPC CAD Integration *(Vision)*
+
+SpecVerse PlantSync is a strategic integration layer designed to bridge **Autodesk Plant 3D** with SpecVerse’s datasheet, estimation, and inventory core.
+
+**Conceptual capabilities include:**
+- Ingesting P&ID and piping databases from Plant 3D into a unified SpecVerse model
+- Tracking additions, deletions, and modifications via staging and synchronization logs
+- Enforcing tag uniqueness, category constraints, and cross-table consistency
+- Surfacing coverage gaps, sync errors, and unrouted objects via visual dashboards
+
+**Business value:**
+- Enables Plant3D-integrated datasheet management — a rare, high-value EPC differentiator
+- Reduces manual data entry and accelerates engineering handover
+- Opens future licensing and SaaS revenue opportunities for CAD-integrated workflows
+
+This direction positions SpecVerse as a **system-of-record layer between design tools and downstream engineering, procurement, and estimation processes**.
+
+---
+
+### 🧠 AI Foundation & Continuous Intelligence *(Vision)*
+
+SpecVerse is designed to evolve into a **telemetry-driven, self-learning engineering platform** that continuously monitors data quality, predicts needs, and surfaces actionable insights.
+
+**Foundation concepts:**
+- Key system events (e.g., datasheet lifecycle changes, inventory transactions, estimation updates) emitted into structured AI telemetry stores
+- Background services continuously analyzing data for anomalies, trends, and forecast signals
+- AI findings persisted alongside audit logs for traceability and review
+
+**Intelligence layers under consideration:**
+- Semantic search and embeddings for cross-sheet and cross-project analysis
+- Switchable LLM gateway for development vs. production deployments
+- Scalable ML pipeline evolving from lightweight services to managed forecasting and ML platforms
+
+**AI feature blueprints:**
+- Datasheet quality audits with auto-suggested corrections
+- Inventory forecasting and proactive restock alerts
+- Estimation variance analysis with cost-driver explanations
+- An AI assistant for natural-language queries and role-aware dashboards
+
+This roadmap transforms SpecVerse from a transactional system into a **continuous intelligence platform** — one that learns from operational data and actively supports engineering and management decisions.
 
 ---
 
@@ -182,6 +241,8 @@ Includes:
 * ✅ `UserLogs` table for all major actions (VIEW, CREATE, UPDATE, EXPORT, DELETE)
 * ✅ `InformationChangeLogs` for field-level updates
 * ✅ Approval and verification history per sheet and estimation
+* Planned: AI-generated findings and recommendations recorded alongside
+  human actions for traceability and review
 
 ---
 

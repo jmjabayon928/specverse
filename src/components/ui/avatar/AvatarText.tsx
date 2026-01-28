@@ -1,47 +1,66 @@
-import React from "react";
+// src/components/ui/avatar/AvatarText.tsx
 
 interface AvatarTextProps {
-  name: string;
-  className?: string;
+  name: string
+  className?: string
 }
 
-const AvatarText: React.FC<AvatarTextProps> = ({ name, className = "" }) => {
-  // Generate initials from name
-  const initials = name
-    .split(" ")
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+const colorClasses = [
+  'bg-blue-100 text-blue-700',
+  'bg-green-100 text-green-700',
+  'bg-purple-100 text-purple-700',
+  'bg-amber-100 text-amber-800',
+  'bg-rose-100 text-rose-700',
+  'bg-sky-100 text-sky-700',
+  'bg-emerald-100 text-emerald-700',
+]
 
-  // Generate a consistent pastel color based on the name
-  const getColorClass = (name: string) => {
-    const colors = [
-      "bg-brand-100 text-brand-600",
-      "bg-pink-100 text-pink-600",
-      "bg-cyan-100 text-cyan-600",
-      "bg-orange-100 text-orange-600",
-      "bg-green-100 text-green-600",
-      "bg-purple-100 text-purple-600",
-      "bg-yellow-100 text-yellow-600",
-      "bg-error-100 text-error-600",
-    ];
+const getInitials = (name: string): string => {
+  if (!name.trim()) {
+    return '?'
+  }
 
-    const index = name
-      .split("")
-      .reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[index % colors.length];
-  };
+  const parts = name.trim().split(/\s+/)
+  const letters = parts.map((part) => part[0] ?? '').join('')
+
+  return letters.toUpperCase().slice(0, 2)
+}
+
+const getColorClass = (name: string): string => {
+  if (!name.trim()) {
+    return colorClasses[0]
+  }
+
+  let total = 0
+
+  for (const char of name) {
+    const codePoint = char.codePointAt(0)
+    if (typeof codePoint === 'number') {
+      total += codePoint
+    }
+  }
+
+  const index = Math.trunc(Math.abs(total)) % colorClasses.length
+  return colorClasses[index]
+}
+
+const AvatarText = (props: Readonly<AvatarTextProps>) => {
+  const { name, className = '' } = props
+
+  const initials = getInitials(name)
+  const colorClass = getColorClass(name)
 
   return (
     <div
-      className={`flex h-10 w-10 ${className} items-center justify-center rounded-full ${getColorClass(
-        name
-      )}`}
+      className={`flex h-10 w-10 items-center justify-center rounded-full ${colorClass} ${className}`}
+      aria-label={name}
+      title={name}
     >
-      <span className="text-sm font-medium">{initials}</span>
+      <span className='text-sm font-medium'>
+        {initials}
+      </span>
     </div>
-  );
-};
+  )
+}
 
-export default AvatarText;
+export default AvatarText

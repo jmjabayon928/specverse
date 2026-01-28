@@ -1,235 +1,338 @@
-import { poolPromise, sql } from "../config/db";
+// src/backend/services/rolesService.ts
+import { poolPromise, sql } from '../config/db'
 
-/** SQL row shape */
 interface RoleRowSQL {
-  RoleID: number;
-  RoleName: string | null;
-  CreatedAt: Date | string;
-  UpdatedAt: Date | string;
-  PermissionsCount?: number;
+  RoleID: number
+  RoleName: string | null
+  CreatedAt: Date | string
+  UpdatedAt: Date | string
+  PermissionsCount?: number
 }
 
 export interface PermissionDTO {
-  PermissionID: number;
-  PermissionKey: string | null;
-  Description: string | null;
+  PermissionID: number
+  PermissionKey: string | null
+  Description: string | null
 }
 
-interface CountRow { Total: number; }
+interface CountRow {
+  Total: number
+}
 
-/** Public DTOs */
 export interface RoleDTO {
-  RoleID: number;
-  RoleName: string | null;
-  CreatedAt: string;
-  UpdatedAt: string;
-  PermissionsCount?: number;
+  RoleID: number
+  RoleName: string | null
+  CreatedAt: string
+  UpdatedAt: string
+  PermissionsCount?: number
 }
 
 export interface ListRolesParams {
-  page: number;
-  pageSize: number;
-  search?: string;
+  page: number
+  pageSize: number
+  search?: string
 }
 
 export interface ListRolesResult {
-  page: number;
-  pageSize: number;
-  total: number;
-  rows: RoleDTO[];
+  page: number
+  pageSize: number
+  total: number
+  rows: RoleDTO[]
 }
 
-export interface CreateRoleInput { RoleName: string; }
-export interface UpdateRoleInput { RoleName: string | null; }
-
-/** Helpers */
-function mapRow(row: RoleRowSQL): RoleDTO {
-  return {
-    RoleID: row.RoleID,
-    RoleName: row.RoleName ?? null,
-    CreatedAt: new Date(row.CreatedAt).toISOString(),
-    UpdatedAt: new Date(row.UpdatedAt).toISOString(),
-    PermissionsCount: typeof row.PermissionsCount === "number" ? row.PermissionsCount : undefined,
-  };
+export interface CreateRoleInput {
+  RoleName: string
 }
 
-function isUniqueViolation(err: unknown): boolean {
-  const e = err as { originalError?: { number?: number; message?: string } };
-  const code = e?.originalError?.number;
-  const msg = e?.originalError?.message ?? "";
-  // 2601/2627 = duplicate key, plus name of our unique index if you created it earlier
-  return code === 2601 || code === 2627 || msg.includes("UX_Roles_RoleName");
+export interface UpdateRoleInput {
+  RoleName: string | null
 }
 
-function bindSearch(request: sql.Request, search: string): { where: string } {
-  const q = (search ?? "").trim();
-  if (!q) return { where: "" };
-  request.input("q", sql.NVarChar(100), `%${q}%`);
-  return { where: "WHERE r.RoleName LIKE @q" };
+const mapRoleRowToDTO = (row: RoleRowSQL): RoleDTO => ({
+  RoleID: row.RoleID,
+  RoleName: row.RoleName ?? null,
+  CreatedAt: new Date(row.CreatedAt).toISOString(),
+  UpdatedAt: new Date(row.UpdatedAt).toISOString(),
+  PermissionsCount:
+    typeof row.PermissionsCount === 'number'
+      ? row.PermissionsCount
+      : undefined,
+})
+
+const isUniqueViolation = (err: unknown): boolean => {
+  const e = err as { originalError?: { number?: number; message?: string } }
+  const code = e?.originalError?.number
+  const msg = e?.originalError?.message ?? ''
+
+  // 2601/2627 = duplicate key
+  return code === 2601 || code === 2627 || msg.includes('UX_Roles_RoleName')
 }
 
-/** List roles with paging + optional search; includes PermissionsCount */
-export async function listRoles(params: ListRolesParams): Promise<ListRolesResult> {
-  const page = Math.max(1, params.page);
-  const pageSize = Math.min(Math.max(1, params.pageSize), 100);
-  const offset = (page - 1) * pageSize;
-  const search = params.search ?? "";
+const bindSearch = (
+  request: sql.Request,
+  search: string,
+): { where: string } => {
+  const trimmed = (search ?? '').trim()
 
-  const p = await poolPromise;
+  if (!trimmed) {
+    return { where: '' }
+  }
 
-  // 1) Data page
-  const reqData = p.request();
-  reqData.input("Offset", sql.Int, offset);
-  reqData.input("PageSize", sql.Int, pageSize);
-  const { where } = bindSearch(reqData, search);
+  request.input('q', sql.NVarChar(100), `%${trimmed}%`)
+  return { where: 'WHERE r.RoleName LIKE @q' }
+}
 
-  const dataResult = await reqData.query<RoleRowSQL>(`
-    SELECT r.RoleID,
-           r.RoleName,
-           r.CreatedAt,
-           r.UpdatedAt,
-           (SELECT COUNT(*) FROM dbo.RolePermissions rp WHERE rp.RoleID = r.RoleID) AS PermissionsCount
+/**
+ * List roles with paging and optional search.
+ * Includes PermissionsCount for each role.
+ */
+export const listRoles = async (
+  params: ListRolesParams,
+): Promise<ListRolesResult> => {
+  const page = Math.max(1, params.page)
+  const pageSize = Math.min(Math.max(1, params.pageSize), 100)
+  const offset = (page - 1) * pageSize
+  const search = params.search ?? ''
+
+  const pool = await poolPromise
+
+  const dataRequest = pool.request()
+  dataRequest.input('Offset', sql.Int, offset)
+  dataRequest.input('PageSize', sql.Int, pageSize)
+  const { where } = bindSearch(dataRequest, search)
+
+  const dataResult = await dataRequest.query<RoleRowSQL>(`
+    SELECT
+      r.RoleID,
+      r.RoleName,
+      r.CreatedAt,
+      r.UpdatedAt,
+      (
+        SELECT COUNT(*)
+        FROM dbo.RolePermissions rp
+        WHERE rp.RoleID = r.RoleID
+      ) AS PermissionsCount
     FROM dbo.Roles r
     ${where}
     ORDER BY r.RoleID DESC
     OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-  `);
+  `)
 
-  const rows = (dataResult.recordset ?? []).map(mapRow);
+  const rows = (dataResult.recordset ?? []).map(mapRoleRowToDTO)
 
-  // 2) Count
-  const reqCount = p.request();
-  bindSearch(reqCount, search);
-  const countResult = await reqCount.query<CountRow>(`
-    SELECT COUNT(1) AS Total FROM dbo.Roles r ${where};
-  `);
-  const total = countResult.recordset[0]?.Total ?? 0;
+  const countRequest = pool.request()
+  bindSearch(countRequest, search)
 
-  return { page, pageSize, total, rows };
+  const countResult = await countRequest.query<CountRow>(`
+    SELECT COUNT(1) AS Total
+    FROM dbo.Roles r
+    ${where};
+  `)
+
+  const total = countResult.recordset[0]?.Total ?? 0
+
+  return { page, pageSize, total, rows }
 }
 
-/** Get one role by id */
-export async function getRoleById(id: number): Promise<RoleDTO | null> {
-  const p = await poolPromise;
-  const r = await p.request()
-    .input("id", sql.Int, id)
+/**
+ * Fetch a single role by id, including PermissionsCount.
+ */
+export const getRoleById = async (id: number): Promise<RoleDTO | null> => {
+  const pool = await poolPromise
+
+  const result = await pool
+    .request()
+    .input('id', sql.Int, id)
     .query<RoleRowSQL>(`
-      SELECT r.RoleID, r.RoleName, r.CreatedAt, r.UpdatedAt,
-             (SELECT COUNT(*) FROM dbo.RolePermissions rp WHERE rp.RoleID = r.RoleID) AS PermissionsCount
+      SELECT
+        r.RoleID,
+        r.RoleName,
+        r.CreatedAt,
+        r.UpdatedAt,
+        (
+          SELECT COUNT(*)
+          FROM dbo.RolePermissions rp
+          WHERE rp.RoleID = r.RoleID
+        ) AS PermissionsCount
       FROM dbo.Roles r
       WHERE r.RoleID = @id;
-    `);
-  const row = r.recordset[0];
-  return row ? mapRow(row) : null;
+    `)
+
+  const row = result.recordset[0]
+  if (!row) {
+    return null
+  }
+
+  return mapRoleRowToDTO(row)
 }
 
-/** Create role — returns new RoleID */
-export async function createRole(input: CreateRoleInput): Promise<number> {
+/**
+ * Create a new role and return its RoleID.
+ */
+export const createRole = async (
+  input: CreateRoleInput,
+): Promise<number> => {
   try {
-    const p = await poolPromise;
-    const r = await p.request()
-      .input("RoleName", sql.NVarChar(50), input.RoleName)
+    const pool = await poolPromise
+
+    const result = await pool
+      .request()
+      .input('RoleName', sql.NVarChar(50), input.RoleName)
       .query<{ RoleID: number }>(`
         INSERT INTO dbo.Roles (RoleName)
         OUTPUT inserted.RoleID
         VALUES (@RoleName);
-      `);
-    return r.recordset[0].RoleID;
+      `)
+
+    return result.recordset[0].RoleID
   } catch (err: unknown) {
     if (isUniqueViolation(err)) {
-      const e = new Error("ROLENAME_CONFLICT");
-      e.name = "ROLENAME_CONFLICT";
-      throw e;
+      const conflictError = new Error('ROLENAME_CONFLICT')
+      conflictError.name = 'ROLENAME_CONFLICT'
+      throw conflictError
     }
-    throw err;
+
+    throw err
   }
 }
 
-/** Update role — returns true if updated */
-export async function updateRole(id: number, input: UpdateRoleInput): Promise<boolean> {
+/**
+ * Update role name. Returns true if a row was updated.
+ */
+export const updateRole = async (
+  id: number,
+  input: UpdateRoleInput,
+): Promise<boolean> => {
   try {
-    const p = await poolPromise;
-    const r = await p.request()
-      .input("id", sql.Int, id)
-      .input("RoleName", sql.NVarChar(50), input.RoleName)
+    const pool = await poolPromise
+
+    const result = await pool
+      .request()
+      .input('id', sql.Int, id)
+      .input('RoleName', sql.NVarChar(50), input.RoleName)
       .query<{ Affected: number }>(`
         UPDATE dbo.Roles
         SET RoleName = @RoleName
         WHERE RoleID = @id;
         SELECT @@ROWCOUNT AS Affected;
-      `);
-    return (r.recordset[0]?.Affected ?? 0) > 0;
+      `)
+
+    const affected = result.recordset[0]?.Affected ?? 0
+    return affected > 0
   } catch (err: unknown) {
     if (isUniqueViolation(err)) {
-      const e = new Error("ROLENAME_CONFLICT");
-      e.name = "ROLENAME_CONFLICT";
-      throw e;
+      const conflictError = new Error('ROLENAME_CONFLICT')
+      conflictError.name = 'ROLENAME_CONFLICT'
+      throw conflictError
     }
-    throw err;
+
+    throw err
   }
 }
 
-/** Delete role — returns true if a row was deleted */
-export async function deleteRole(id: number): Promise<boolean> {
-  const p = await poolPromise;
-  const r = await p.request()
-    .input("id", sql.Int, id)
+/**
+ * Delete role. Returns true if a row was deleted.
+ */
+export const deleteRole = async (id: number): Promise<boolean> => {
+  const pool = await poolPromise
+
+  const result = await pool
+    .request()
+    .input('id', sql.Int, id)
     .query<{ Affected: number }>(`
-      DELETE FROM dbo.Roles WHERE RoleID = @id;
+      DELETE FROM dbo.Roles
+      WHERE RoleID = @id;
       SELECT @@ROWCOUNT AS Affected;
-    `);
-  return (r.recordset[0]?.Affected ?? 0) > 0;
+    `)
+
+  const affected = result.recordset[0]?.Affected ?? 0
+  return affected > 0
 }
 
-export async function listRolePermissions(roleId: number): Promise<PermissionDTO[]> {
-  const p = await poolPromise;
-  const r = await p.request()
-    .input("id", sql.Int, roleId)
+/**
+ * List permissions currently assigned to a role.
+ */
+export const listRolePermissions = async (
+  roleId: number,
+): Promise<PermissionDTO[]> => {
+  const pool = await poolPromise
+
+  const result = await pool
+    .request()
+    .input('id', sql.Int, roleId)
     .query<PermissionDTO>(`
-      SELECT p.PermissionID, p.PermissionKey, p.Description
+      SELECT
+        p.PermissionID,
+        p.PermissionKey,
+        p.Description
       FROM dbo.RolePermissions rp
-      INNER JOIN dbo.Permissions p ON p.PermissionID = rp.PermissionID
+      INNER JOIN dbo.Permissions p
+        ON p.PermissionID = rp.PermissionID
       WHERE rp.RoleID = @id
       ORDER BY p.PermissionKey ASC, p.PermissionID ASC;
-    `);
+    `)
 
-  // normalize nulls
-  return (r.recordset ?? []).map(row => ({
+  return (result.recordset ?? []).map(row => ({
     PermissionID: row.PermissionID,
     PermissionKey: row.PermissionKey ?? null,
     Description: row.Description ?? null,
-  }));
+  }))
 }
 
-export async function listAvailablePermissionsForRole(roleId: number): Promise<PermissionDTO[]> {
-  const p = await poolPromise;
-  const r = await p.request()
-    .input("id", sql.Int, roleId)
+/**
+ * List permissions that are not yet assigned to the given role.
+ */
+export const listAvailablePermissionsForRole = async (
+  roleId: number,
+): Promise<PermissionDTO[]> => {
+  const pool = await poolPromise
+
+  const result = await pool
+    .request()
+    .input('id', sql.Int, roleId)
     .query<PermissionDTO>(`
-      SELECT p.PermissionID, p.PermissionKey, p.Description
+      SELECT
+        p.PermissionID,
+        p.PermissionKey,
+        p.Description
       FROM dbo.Permissions p
       WHERE NOT EXISTS (
-        SELECT 1 FROM dbo.RolePermissions rp
-        WHERE rp.RoleID = @id AND rp.PermissionID = p.PermissionID
+        SELECT 1
+        FROM dbo.RolePermissions rp
+        WHERE rp.RoleID = @id
+          AND rp.PermissionID = p.PermissionID
       )
       ORDER BY p.PermissionKey ASC, p.PermissionID ASC;
-    `);
-  return (r.recordset ?? []).map(x => ({
-    PermissionID: x.PermissionID,
-    PermissionKey: x.PermissionKey ?? null,
-    Description: x.Description ?? null,
-  }));
+    `)
+
+  return (result.recordset ?? []).map(row => ({
+    PermissionID: row.PermissionID,
+    PermissionKey: row.PermissionKey ?? null,
+    Description: row.Description ?? null,
+  }))
 }
 
-export async function addPermissionToRole(roleId: number, permissionId: number): Promise<boolean> {
-  const p = await poolPromise;
+/**
+ * Add a permission to a role.
+ * Returns true when inserted, false when already exists or invalid.
+ */
+export const addPermissionToRole = async (
+  roleId: number,
+  permissionId: number,
+): Promise<boolean> => {
+  const pool = await poolPromise
+
   try {
-    const r = await p.request()
-      .input("roleId", sql.Int, roleId)
-      .input("permissionId", sql.Int, permissionId)
+    const result = await pool
+      .request()
+      .input('roleId', sql.Int, roleId)
+      .input('permissionId', sql.Int, permissionId)
       .query<{ ok: number }>(`
         IF NOT EXISTS (
-          SELECT 1 FROM dbo.RolePermissions WHERE RoleID = @roleId AND PermissionID = @permissionId
+          SELECT 1
+          FROM dbo.RolePermissions
+          WHERE RoleID = @roleId
+            AND PermissionID = @permissionId
         )
         BEGIN
           INSERT INTO dbo.RolePermissions (RoleID, PermissionID)
@@ -240,22 +343,37 @@ export async function addPermissionToRole(roleId: number, permissionId: number):
         BEGIN
           SELECT 0 AS ok;
         END
-      `);
-    return (r.recordset[0]?.ok ?? 0) === 1;
+      `)
+
+    const ok = result.recordset[0]?.ok ?? 0
+    return ok === 1
   } catch {
-    return false;
+    // Keep original behavior: on error, treat as failure instead of throwing
+    return false
   }
 }
 
-export async function removePermissionFromRole(roleId: number, permissionId: number): Promise<boolean> {
-  const p = await poolPromise;
-  const r = await p.request()
-    .input("roleId", sql.Int, roleId)
-    .input("permissionId", sql.Int, permissionId)
+/**
+ * Remove a permission from a role.
+ * Returns true when a row was deleted.
+ */
+export const removePermissionFromRole = async (
+  roleId: number,
+  permissionId: number,
+): Promise<boolean> => {
+  const pool = await poolPromise
+
+  const result = await pool
+    .request()
+    .input('roleId', sql.Int, roleId)
+    .input('permissionId', sql.Int, permissionId)
     .query<{ Affected: number }>(`
       DELETE FROM dbo.RolePermissions
-      WHERE RoleID = @roleId AND PermissionID = @permissionId;
+      WHERE RoleID = @roleId
+        AND PermissionID = @permissionId;
       SELECT @@ROWCOUNT AS Affected;
-    `);
-  return (r.recordset[0]?.Affected ?? 0) > 0;
+    `)
+
+  const affected = result.recordset[0]?.Affected ?? 0
+  return affected > 0
 }

@@ -1,103 +1,265 @@
-import type { RequestHandler } from "express";
+// src/backend/controllers/manufacturersController.ts
+import type { RequestHandler } from 'express'
+import { z } from 'zod'
+import { AppError } from '../errors/AppError'
 import {
-  listManufacturers as svcList,
-  getManufacturerById as svcGet,
-  createManufacturer as svcCreate,
-  updateManufacturer as svcUpdate,
-  deleteManufacturer as svcDelete,
-  ListManufacturersResult,
-} from "../services/manufacturersService";
+  listManufacturers as listManufacturersService,
+  getManufacturerById as getManufacturerByIdService,
+  createManufacturer as createManufacturerService,
+  updateManufacturer as updateManufacturerService,
+  deleteManufacturer as deleteManufacturerService,
+  type ListManufacturersResult,
+  type ListManufacturersParams,
+  type CreateManufacturerInput,
+  type UpdateManufacturerInput,
+} from '../services/manufacturersService'
+
+// ----------------------------- Zod Schemas -----------------------------
+
+const manufacturerCreateSchema = z.object({
+  ManuName: z
+    .string()
+    .trim()
+    .min(1, 'ManuName and ManuAddress are required')
+    .max(150, 'ManuName too long (max 150)'),
+  ManuAddress: z
+    .string()
+    .trim()
+    .min(1, 'ManuName and ManuAddress are required')
+    .max(255, 'ManuAddress too long (max 255)'),
+})
+
+const manufacturerUpdateSchema = manufacturerCreateSchema.partial()
+
+type ManufacturerCreateBody = z.infer<typeof manufacturerCreateSchema>
+type ManufacturerUpdateBody = z.infer<typeof manufacturerUpdateSchema>
+
+// --------------------------- Helper functions --------------------------
+
+const qstr = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (Array.isArray(value) && typeof value[0] === 'string') {
+    return value[0]
+  }
+
+  return fallback
+}
+
+const qint = (value: unknown, fallback: number): number => {
+  const asString = qstr(value, String(fallback))
+  const parsed = Number.parseInt(asString, 10)
+
+  if (Number.isFinite(parsed)) {
+    return parsed
+  }
+
+  return fallback
+}
+
+const normalizeNullable = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+
+  if (trimmed.length === 0) {
+    return null
+  }
+
+  return trimmed
+}
+
+const buildUpdatePayload = (body: ManufacturerUpdateBody): UpdateManufacturerInput => {
+  const payload: UpdateManufacturerInput = {}
+
+  const keys = Object.keys(body) as (keyof ManufacturerUpdateBody)[]
+
+  for (const key of keys) {
+    const castKey = key as keyof UpdateManufacturerInput
+    const raw = body[castKey]
+    const normalized = normalizeNullable(raw)
+
+    if (normalized !== null) {
+      payload[castKey] = normalized
+      continue
+    }
+
+    payload[castKey] = null
+  }
+
+  return payload
+}
+
+const ensureHasUpdatableFields = (payload: UpdateManufacturerInput): void => {
+  if (Object.keys(payload).length > 0) {
+    return
+  }
+
+  throw new AppError('No updatable fields provided', 400)
+}
+
+const firstIssueMessage = (result: z.SafeParseError<unknown>): string => {
+  const firstIssue = result.error.issues[0]
+
+  if (firstIssue && firstIssue.message) {
+    return firstIssue.message
+  }
+
+  return 'Invalid manufacturer payload'
+}
+
+// ----------------------------- List / Get ------------------------------
 
 /** GET /api/backend/settings/manufacturers */
-export const listManufacturers: RequestHandler = async (req, res) => {
+export const listManufacturers: RequestHandler = async (req, res, next) => {
   try {
-    const page = Math.max(parseInt(String(req.query.page ?? "1"), 10), 1);
-    const pageSize = Math.min(Math.max(parseInt(String(req.query.pageSize ?? "20"), 10), 1), 100);
-    const search = String(req.query.search ?? "").trim();
+    const page = Math.max(qint(req.query.page, 1), 1)
+    const pageSize = Math.min(Math.max(qint(req.query.pageSize, 20), 1), 100)
+    const search = qstr(req.query.search, '').trim()
 
-    const out: ListManufacturersResult = await svcList({ page, pageSize, search });
-    res.json(out);
-  } catch (err) {
-    console.error("listManufacturers error:", err);
-    res.status(500).json({ error: "Failed to fetch manufacturers" });
+    const params: ListManufacturersParams = {
+      page,
+      pageSize,
+      search,
+    }
+
+    const result: ListManufacturersResult = await listManufacturersService(params)
+
+    res.status(200).json(result)
+  } catch (error) {
+    // Previous code logged and sent a 500 here
+    // We keep the logging but pass a controlled error to the global handler
+    // so the behavior from the client's point of view stays the same.
+    console.error('listManufacturers error:', error)
+    next(new AppError('Failed to fetch manufacturers', 500))
   }
-};
+}
 
 /** GET /api/backend/settings/manufacturers/:id */
-export const getManufacturer: RequestHandler = async (req, res) => {
+export const getManufacturer: RequestHandler = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+    const id = Number(req.params.id)
 
-    const row = await svcGet(id);
-    if (!row) return res.status(404).json({ error: "Not found" });
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new AppError('Invalid id', 400)
+    }
 
-    res.json(row);
-  } catch (err) {
-    console.error("getManufacturer error:", err);
-    res.status(500).json({ error: "Failed to fetch manufacturer" });
+    const row = await getManufacturerByIdService(id)
+
+    if (!row) {
+      throw new AppError('Not found', 404)
+    }
+
+    res.status(200).json(row)
+  } catch (error) {
+    console.error('getManufacturer error:', error)
+
+    if (error instanceof AppError) {
+      next(error)
+      return
+    }
+
+    next(new AppError('Failed to fetch manufacturer', 500))
   }
-};
+}
 
 /** POST /api/backend/settings/manufacturers */
-export const createManufacturer: RequestHandler = async (req, res) => {
+export const createManufacturer: RequestHandler = async (req, res, next) => {
   try {
-    const { ManuName, ManuAddress } = (req.body ?? {}) as { ManuName?: string; ManuAddress?: string };
+    const parsed = manufacturerCreateSchema.safeParse(req.body ?? {})
 
-    if (!ManuName || !ManuName.trim() || !ManuAddress || !ManuAddress.trim()) {
-      return res.status(400).json({ error: "ManuName and ManuAddress are required" });
+    if (!parsed.success) {
+      const message = firstIssueMessage(parsed)
+      throw new AppError(message, 400)
     }
-    if (ManuName.length > 150) return res.status(400).json({ error: "ManuName too long (max 150)" });
-    if (ManuAddress.length > 255) return res.status(400).json({ error: "ManuAddress too long (max 255)" });
 
-    const newId = await svcCreate({ ManuName: ManuName.trim(), ManuAddress: ManuAddress.trim() });
-    res.status(201).json({ ManuID: newId });
-  } catch (err: unknown) {
-    const e = err as Error;
-    if (e.name === "MANUNAME_CONFLICT") {
-      return res.status(409).json({ error: "ManuName already exists" });
+    const body: ManufacturerCreateBody = parsed.data
+
+    const input: CreateManufacturerInput = {
+      ManuName: body.ManuName.trim(),
+      ManuAddress: body.ManuAddress.trim(),
     }
-    console.error("createManufacturer error:", err);
-    res.status(500).json({ error: "Failed to create manufacturer" });
+
+    const newId = await createManufacturerService(input)
+
+    res.status(201).json({ ManuID: newId })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'MANUNAME_CONFLICT') {
+      next(new AppError('ManuName already exists', 409))
+      return
+    }
+
+    console.error('createManufacturer error:', error)
+    next(new AppError('Failed to create manufacturer', 500))
   }
-};
+}
 
 /** PATCH /api/backend/settings/manufacturers/:id */
-export const updateManufacturer: RequestHandler = async (req, res) => {
+export const updateManufacturer: RequestHandler = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+    const id = Number(req.params.id)
 
-    const { ManuName, ManuAddress } = (req.body ?? {}) as { ManuName?: string | null; ManuAddress?: string | null };
-
-    if (ManuName && ManuName.length > 150) return res.status(400).json({ error: "ManuName too long (max 150)" });
-    if (ManuAddress && ManuAddress.length > 255) return res.status(400).json({ error: "ManuAddress too long (max 255)" });
-
-    const ok = await svcUpdate(id, { ManuName: ManuName ?? undefined, ManuAddress: ManuAddress ?? undefined });
-
-    if (!ok) return res.status(404).json({ error: "Not found" });
-    res.json({ ok: true });
-  } catch (err: unknown) {
-    const e = err as Error;
-    if (e.name === "MANUNAME_CONFLICT") {
-      return res.status(409).json({ error: "ManuName already exists" });
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new AppError('Invalid id', 400)
     }
-    console.error("updateManufacturer error:", err);
-    res.status(500).json({ error: "Failed to update manufacturer" });
+
+    const parsed = manufacturerUpdateSchema.safeParse(req.body ?? {})
+
+    if (!parsed.success) {
+      const message = firstIssueMessage(parsed)
+      throw new AppError(message, 400)
+    }
+
+    const payload = buildUpdatePayload(parsed.data)
+    ensureHasUpdatableFields(payload)
+
+    const updated = await updateManufacturerService(id, payload)
+
+    if (!updated) {
+      throw new AppError('Not found', 404)
+    }
+
+    res.status(200).json({ ok: true })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'MANUNAME_CONFLICT') {
+      next(new AppError('ManuName already exists', 409))
+      return
+    }
+
+    console.error('updateManufacturer error:', error)
+    next(new AppError('Failed to update manufacturer', 500))
   }
-};
+}
 
 /** DELETE /api/backend/settings/manufacturers/:id */
-export const deleteManufacturer: RequestHandler = async (req, res) => {
+export const deleteManufacturer: RequestHandler = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+    const id = Number(req.params.id)
 
-    const ok = await svcDelete(id);
-    if (!ok) return res.status(404).json({ error: "Not found" });
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("deleteManufacturer error:", err);
-    res.status(500).json({ error: "Failed to delete manufacturer" });
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new AppError('Invalid id', 400)
+    }
+
+    const ok = await deleteManufacturerService(id)
+
+    if (!ok) {
+      throw new AppError('Not found', 404)
+    }
+
+    // Keep original shape: { ok: true }
+    res.status(200).json({ ok: true })
+  } catch (error) {
+    console.error('deleteManufacturer error:', error)
+
+    if (error instanceof AppError) {
+      next(error)
+      return
+    }
+
+    next(new AppError('Failed to delete manufacturer', 500))
   }
-};
+}

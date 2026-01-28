@@ -1,19 +1,20 @@
-import { Router } from "express";
-import { verifyToken } from "../middleware/authMiddleware";
+// src/backend/routes/suppliersRoutes.ts
+import { Router } from 'express'
+import { verifyToken } from '../middleware/authMiddleware'
 import {
   listSuppliers,
   getSupplier,
   createSupplier,
   updateSupplier,
   deleteSupplier,
-} from "../controllers/suppliersController";
+} from '../controllers/suppliersController'
 
-const router = Router();
+const router = Router()
 
-router.get("/", verifyToken, listSuppliers);
-router.get("/:id", verifyToken, getSupplier);
-router.post("/", verifyToken, createSupplier);
-router.patch("/:id", verifyToken, updateSupplier);
-router.delete("/:id", verifyToken, deleteSupplier);
+router.get('/', verifyToken, listSuppliers)
+router.get('/:id', verifyToken, getSupplier)
+router.post('/', verifyToken, createSupplier)
+router.patch('/:id', verifyToken, updateSupplier)
+router.delete('/:id', verifyToken, deleteSupplier)
 
-export default router;
+export default router

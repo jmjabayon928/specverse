@@ -1,39 +1,49 @@
-// src/app/(admin)/datasheets/templates/[id]/approve/ApproveButton.tsx
-"use client";
+'use client'
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import toast from "react-hot-toast";
-import Button from "@/components/ui/button/Button";
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import toast from 'react-hot-toast'
+import Button from '@/components/ui/button/Button'
 
-interface Props {
-  sheetId: number;
+type ApproveButtonProps = {
+  sheetId: number
 }
 
-export default function ApproveButton(props: Readonly<Props>) {
-  const { sheetId } = props;
+const ApproveButton = (props: Readonly<ApproveButtonProps>) => {
+  const { sheetId } = props
 
-  const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const router = useRouter()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  async function handleApprove() {
-    const confirmed = window.confirm("Are you sure you want to approve this template?");
-    if (!confirmed) return;
+  const handleApprove = async () => {
+    const confirmed = globalThis.confirm('Are you sure you want to approve this template?')
 
-    setIsSubmitting(true);
+    if (!confirmed) {
+      return
+    }
+
+    setIsSubmitting(true)
+
     try {
-      const res = await fetch(`/api/backend/templates/${sheetId}/approve`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Approval failed");
+      const response = await fetch(`/api/backend/templates/${sheetId}/approve`, {
+        method: 'POST',
+      })
 
-      toast.success("Template approved successfully");
-      router.push(`/datasheets/templates/${sheetId}`);
-    } catch (err) {
-      console.error("Approval failed:", err);
-      toast.error("Error approving template");
+      if (response.ok) {
+        toast.success('Template approved successfully')
+        router.push(`/datasheets/templates/${sheetId}`)
+        return
+      }
+
+      const text = await response.text().catch(() => '')
+      const message = text || 'Approval failed'
+      throw new Error(message)
+    } catch (error: unknown) {
+      // Keep this log small and useful
+      console.error('Template approval failed', error)
+      toast.error('Error approving template')
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
   }
 
@@ -41,9 +51,11 @@ export default function ApproveButton(props: Readonly<Props>) {
     <Button
       onClick={handleApprove}
       disabled={isSubmitting}
-      className="mt-6 bg-green-600 hover:bg-green-700 text-white"
+      className='mt-6 bg-green-600 hover:bg-green-700 text-white'
     >
-      {isSubmitting ? "Approving..." : "Approve"}
+      {isSubmitting ? 'Approving...' : 'Approve'}
     </Button>
-  );
+  )
 }
+
+export default ApproveButton

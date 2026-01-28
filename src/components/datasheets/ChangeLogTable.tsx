@@ -1,59 +1,111 @@
-"use client";
+// src/components/datasheets/ChangeLogTable.tsx
+'use client'
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from 'react'
 
-type ChangeLog = {
-  LogID: number;
-  PerformedByName: string;
-  Action: string;
-  DatePerformed: string;
-};
+type LogEntry = {
+  id: number
+  kind: 'audit' | 'change'
+  sheetId: number
+  action: string
+  user: { id: number | null; name: string }
+  timestamp: string
+  details: Record<string, unknown>
+}
 
-type Props = {
-  sheetId: number;
-};
+type LogsResponse = {
+  limit: number
+  items: LogEntry[]
+}
 
-const ChangeLogTable: React.FC<Props> = ({ sheetId }) => {
-  const [logs, setLogs] = useState<ChangeLog[]>([]);
+interface ChangeLogTableProps {
+  sheetId: number
+}
+
+export default function ChangeLogTable(props: Readonly<ChangeLogTableProps>) {
+  const { sheetId } = props
+
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function fetchLogs() {
+    let cancelled = false
+
+    async function loadLogs() {
+      setIsLoading(true)
+      setError(null)
+
       try {
-        const res = await fetch(`/api/backend/changelog/sheet/${sheetId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setLogs(data);
+        const response = await fetch(`/api/backend/sheets/${sheetId}/logs?limit=50`, {
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          throw new Error(`Failed to load changelog (${response.status})`)
         }
-      } catch (error) {
-        console.error("Failed to load changelog:", error);
+
+        const data = (await response.json()) as LogsResponse
+
+        if (!cancelled) {
+          setLogs(Array.isArray(data?.items) ? data.items : [])
+        }
+      } catch (e) {
+        if (!cancelled) {
+          const message =
+            e instanceof Error ? e.message : 'Unable to load changelog entries'
+          setError(message)
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
-    fetchLogs();
-  }, [sheetId]);
+    loadLogs()
 
-  if (!logs.length) return <p className="text-sm text-gray-500">No change logs available.</p>;
+    return () => {
+      cancelled = true
+    }
+  }, [sheetId])
+
+  if (isLoading) {
+    return <p className='text-sm text-gray-500'>Loading change log…</p>
+  }
+
+  if (error) {
+    return (
+      <p className='text-sm text-red-600' aria-live='polite'>
+        {error}
+      </p>
+    )
+  }
+
+  if (logs.length === 0) {
+    return <p className='text-sm text-gray-500'>No change logs available.</p>
+  }
 
   return (
-    <table className="w-full text-sm border">
+    <table className='w-full text-sm border'>
       <thead>
-        <tr className="bg-gray-100 text-left">
-          <th className="px-4 py-2">Date</th>
-          <th className="px-4 py-2">Action</th>
-          <th className="px-4 py-2">Performed By</th>
+        <tr className='bg-gray-100 text-left'>
+          <th className='px-4 py-2'>Date</th>
+          <th className='px-4 py-2'>Action</th>
+          <th className='px-4 py-2'>Performed by</th>
         </tr>
       </thead>
       <tbody>
         {logs.map((log) => (
-          <tr key={log.LogID} className="border-t">
-            <td className="px-4 py-2">{new Date(log.DatePerformed).toLocaleString()}</td>
-            <td className="px-4 py-2">{log.Action}</td>
-            <td className="px-4 py-2">{log.PerformedByName}</td>
+          <tr key={`${log.kind}-${log.id}`} className='border-t'>
+            <td className='px-4 py-2'>
+              {new Date(log.timestamp).toLocaleString()}
+            </td>
+            <td className='px-4 py-2'>{log.action}</td>
+            <td className='px-4 py-2'>{log.user?.name ?? 'Unknown'}</td>
           </tr>
         ))}
       </tbody>
     </table>
-  );
-};
-
-export default ChangeLogTable;
+  )
+}

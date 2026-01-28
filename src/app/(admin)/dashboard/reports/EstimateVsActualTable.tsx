@@ -22,7 +22,9 @@ export default function EstimateVsActualTable({ estimationId }: Props) {
   useEffect(() => {
     async function fetchComparison() {
       try {
-        const res = await fetch(`/api/backend/reports/estimate-vs-actual?estimationId=${estimationId}`);
+        const res = await fetch(`/api/backend/reports/estimate-vs-actual?estimationId=${estimationId}`, {
+          credentials: "include",
+        })
         if (!res.ok) throw new Error("Failed to fetch comparison data");
         const json = await res.json();
         setData(json);

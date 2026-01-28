@@ -1,25 +1,20 @@
 // src/backend/routes/categoriesRoutes.ts
-import { Router } from "express";
-import { poolPromise } from "../config/db"; // ✅ Use shared connection
+import { Router } from 'express'
+import { verifyToken } from '../middleware/authMiddleware'
+import {
+  listCategories,
+  getCategory,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+} from '../controllers/categoriesController'
 
-const router = Router();
+const router = Router()
 
-// Get all categories
-router.get("/", async (req, res) => {
-  try {
-    const pool = await poolPromise; // ✅ This is already a connected pool
+router.get('/', verifyToken, listCategories)
+router.get('/:id', verifyToken, getCategory)
+router.post('/', verifyToken, createCategory)
+router.patch('/:id', verifyToken, updateCategory)
+router.delete('/:id', verifyToken, deleteCategory)
 
-    const result = await pool.request().query(
-      "SELECT CategoryID, CategoryCode, CategoryName, CategoryNameFr FROM Categories"
-    );
-
-    console.log("✅ Query Successful:", result.recordset);
-
-    res.json(result.recordset);
-  } catch (error) {
-    console.error("⛔ Database Error:", error);
-    res.status(500).json({ error: "Internal Server Error", details: error });
-  }
-});
-
-export default router;
+export default router

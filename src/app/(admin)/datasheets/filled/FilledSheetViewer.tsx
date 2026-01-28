@@ -5,6 +5,7 @@ import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 import { translations as labelTranslations } from "@/constants/translations";
 import { convertToUSC } from "@/utils/unitConversionTable";
 import OtherConversionsCell from "@/utils/OtherConversionsCell";
+import ChangeLogTable from "@/components/datasheets/ChangeLogTable";
 
 // ✅ Local fallback type (no need for types/unit.ts)
 type UnitSystem = "SI" | "USC";
@@ -143,6 +144,7 @@ const FilledSheetViewer: React.FC<Props> = ({
   // Handlers with proper type narrowing for sheetId
   const canAddNote = Boolean(onAddNote && typeof sheet.sheetId === "number");
   const canAddAttachment = Boolean(onAddAttachment && typeof sheet.sheetId === "number");
+  const sheetId = typeof sheet.sheetId === "number" ? sheet.sheetId : null;
 
   const handleAddNote = () => {
     if (onAddNote && typeof sheet.sheetId === "number") onAddNote(sheet.sheetId);
@@ -472,6 +474,16 @@ const FilledSheetViewer: React.FC<Props> = ({
           </div>
         )}
       </fieldset>
+
+      {sheetId != null && (
+        <fieldset className="border rounded p-4">
+          <div className="text-xl font-semibold mb-2">Audit &amp; Change Log</div>
+          <div className="text-sm text-gray-600 mb-4">
+            Latest activity and field-level changes (newest first).
+          </div>
+          <ChangeLogTable sheetId={sheetId} />
+        </fieldset>
+      )}
 
     </div>
   );

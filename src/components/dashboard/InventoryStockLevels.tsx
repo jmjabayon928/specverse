@@ -35,7 +35,9 @@ const InventoryStockLevels: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/backend/stats/inventory-stock");
+        const res = await fetch("/api/backend/stats/inventory-stock", {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error("Failed to fetch inventory stock levels");
 
         const json: RawInventoryStockData[] = await res.json();

@@ -1,258 +1,345 @@
 // src/app/(admin)/datasheets/templates/[id]/notes/new/page.tsx
-"use client";
+'use client'
 
-import React from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import type { FormEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 
-// If your NoteTypes endpoint lives elsewhere, tweak this:
-const NOTE_TYPES_ENDPOINT = "/api/backend/templates/note-types";
+const NOTE_TYPES_ENDPOINT = '/api/backend/templates/note-types'
 
-// Template endpoints
 const SHEET_DETAILS_ENDPOINT = (sheetId: number) =>
-  `/api/backend/templates/${sheetId}?lang=eng`;
+  `/api/backend/templates/${sheetId}?lang=eng`
 
 const CREATE_NOTE_ENDPOINT = (sheetId: number) =>
-  `/api/backend/templates/${sheetId}/notes`;
+  `/api/backend/templates/${sheetId}/notes`
 
 type NoteType = {
-  noteTypeId: number;
-  noteType: string;
-  description?: string | null;
-};
-
-type MinimalSheetHeader = {
-  sheetName?: string | null;
-  equipmentTagNum?: string | number | null;
-};
-
-function isPositiveInt(x: unknown): x is number {
-  return typeof x === "number" && Number.isInteger(x) && x > 0;
+  noteTypeId: number
+  noteType: string
+  description?: string | null
 }
 
-export default function NewTemplateNotePage() {
-  const router = useRouter();
-  const params = useParams<{ id: string }>();
-  const searchParams = useSearchParams();
+type MinimalSheetHeader = {
+  sheetName?: string | null
+  equipmentTagNum?: string | number | null
+}
 
-  const sheetId = React.useMemo(() => Number(params?.id), [params?.id]);
+const isPositiveInt = (value: unknown): value is number => {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+}
 
-  // header info
-  const [header, setHeader] = React.useState<MinimalSheetHeader | null>(null);
-  const [headerLoading, setHeaderLoading] = React.useState(false);
+const NewTemplateNotePage = () => {
+  const router = useRouter()
+  const params = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
 
-  // form data
-  const [noteTypes, setNoteTypes] = React.useState<NoteType[]>([]);
-  const [loadingTypes, setLoadingTypes] = React.useState(true);
-  const [noteTypeId, setNoteTypeId] = React.useState<number | "">("");
-  const [body, setBody] = React.useState("");
-  const [saving, setSaving] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const sheetId = useMemo(() => Number(params?.id), [params?.id])
+
+  const [header, setHeader] = useState<MinimalSheetHeader | null>(null)
+  const [headerLoading, setHeaderLoading] = useState(false)
+
+  const [noteTypes, setNoteTypes] = useState<NoteType[]>([])
+  const [loadingTypes, setLoadingTypes] = useState(true)
+  const [noteTypeId, setNoteTypeId] = useState<number | ''>('')
+  const [body, setBody] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const hasSheetId = isPositiveInt(sheetId)
 
   const returnTo =
-    searchParams?.get("returnTo") ||
-    (isPositiveInt(sheetId) ? `/datasheets/templates/${sheetId}` : "/datasheets/templates");
+    searchParams?.get('returnTo')
+    || (hasSheetId ? `/datasheets/templates/${sheetId}` : '/datasheets/templates')
 
-  const canSubmit =
-    isPositiveInt(sheetId) &&
-    typeof noteTypeId === "number" &&
-    noteTypeId > 0 &&
-    body.trim().length > 0 &&
-    !saving;
+  const hasNoteType = typeof noteTypeId === 'number' && noteTypeId > 0
+  const hasBody = body.trim().length > 0
+  const canSubmit = hasSheetId && hasNoteType && hasBody && !saving
 
-  // Load Note Types
-  React.useEffect(() => {
-    let cancel = false;
-    (async () => {
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchNoteTypes = async () => {
       try {
-        setLoadingTypes(true);
-        setError(null);
-        const res = await fetch(NOTE_TYPES_ENDPOINT, { credentials: "include" });
-        if (!res.ok) throw new Error(`Failed to load note types (${res.status})`);
-        const list: NoteType[] = await res.json();
-        if (!cancel) setNoteTypes(Array.isArray(list) ? list : []);
-      } catch (e) {
-        if (!cancel) setError(e instanceof Error ? e.message : "Failed to load note types");
+        setLoadingTypes(true)
+        setError(null)
+
+        const response = await fetch(NOTE_TYPES_ENDPOINT, {
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          const status = response.status
+          throw new Error(`Failed to load note types (${status})`)
+        }
+
+        const list: NoteType[] = await response.json()
+
+        if (!cancelled) {
+          setNoteTypes(Array.isArray(list) ? list : [])
+        }
+      } catch (fetchError: unknown) {
+        if (!cancelled) {
+          const message = fetchError instanceof Error
+            ? fetchError.message
+            : 'Failed to load note types'
+          setError(message)
+        }
       } finally {
-        if (!cancel) setLoadingTypes(false);
+        if (!cancelled) {
+          setLoadingTypes(false)
+        }
       }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, []);
+    }
 
-  // Load template header (name + tag)
-  React.useEffect(() => {
-    let cancel = false;
-    if (!isPositiveInt(sheetId)) return;
-    (async () => {
+    fetchNoteTypes()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!hasSheetId) {
+      return
+    }
+
+    let cancelled = false
+
+    const fetchHeader = async () => {
       try {
-        setHeaderLoading(true);
-        const res = await fetch(SHEET_DETAILS_ENDPOINT(sheetId), {
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error(`Failed to load template (${res.status})`);
-        const json = await res.json();
-        const ds = json?.datasheet ?? json; // support either shape
-        if (!cancel) {
+        setHeaderLoading(true)
+
+        const response = await fetch(SHEET_DETAILS_ENDPOINT(sheetId), {
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          const status = response.status
+          throw new Error(`Failed to load template (${status})`)
+        }
+
+        const json = await response.json()
+        const datasheet = json?.datasheet ?? json
+
+        if (!cancelled) {
           setHeader({
-            sheetName: ds?.sheetName ?? null,
-            equipmentTagNum: ds?.equipmentTagNum ?? null,
-          });
+            sheetName: datasheet?.sheetName ?? null,
+            equipmentTagNum: datasheet?.equipmentTagNum ?? null,
+          })
         }
       } catch {
-        if (!cancel) setHeader(null);
+        if (!cancelled) {
+          setHeader(null)
+        }
       } finally {
-        if (!cancel) setHeaderLoading(false);
+        if (!cancelled) {
+          setHeaderLoading(false)
+        }
       }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [sheetId]);
+    }
 
-  function getHeaderTitle(): string {
-    if (headerLoading) return "Loading…";
-    if (header?.sheetName?.trim()) return header.sheetName;
-    if (isPositiveInt(sheetId)) return `Template #${sheetId}`;
-    return "Create Note";
+    fetchHeader()
+
+    return () => {
+      cancelled = true
+    }
+  }, [hasSheetId, sheetId])
+
+  const getHeaderTitle = (): string => {
+    if (headerLoading) {
+      return 'Loading…'
+    }
+
+    if (header?.sheetName?.trim()) {
+      return header.sheetName
+    }
+
+    if (hasSheetId) {
+      return `Template #${sheetId}`
+    }
+
+    return 'Create Note'
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!canSubmit) return;
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault()
 
-    // Narrow to remove the unnecessary assertion
-    if (typeof noteTypeId !== "number" || noteTypeId <= 0) return;
+    if (!canSubmit) {
+      return
+    }
+
+    if (typeof noteTypeId !== 'number' || noteTypeId <= 0) {
+      return
+    }
 
     try {
-      setSaving(true);
-      setError(null);
+      setSaving(true)
+      setError(null)
 
       const payload = {
-        noteTypeId,                 // already narrowed above
-        text: body.trim(),          // orderIndex handled server-side (MAX+1 per noteType)
-      };
-
-      const res = await fetch(CREATE_NOTE_ENDPOINT(sheetId), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Failed to create note (${res.status})`);
+        noteTypeId,
+        text: body.trim(),
       }
 
-      router.push(returnTo);
-      router.refresh();
-    } catch (err) {
-      setSaving(false);
-      setError(err instanceof Error ? err.message : "Failed to create note");
+      const response = await fetch(CREATE_NOTE_ENDPOINT(sheetId), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      })
+
+      if (response.ok) {
+        router.push(returnTo)
+        router.refresh()
+        return
+      }
+
+      const text = await response.text().catch(() => '')
+      const message = text || `Failed to create note (${response.status})`
+      throw new Error(message)
+    } catch (submitError: unknown) {
+      setSaving(false)
+      const message = submitError instanceof Error
+        ? submitError.message
+        : 'Failed to create note'
+      setError(message)
     }
   }
 
-  function handleCancel() {
-    router.push(returnTo);
+  const handleCancel = () => {
+    router.push(returnTo)
   }
 
+  const handleNoteTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const rawValue = event.target.value
+    const nextValue = rawValue.length > 0 ? Number(rawValue) : ''
+    setNoteTypeId(nextValue)
+  }
+
+  const handleBodyChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setBody(event.target.value)
+  }
+
+  const hasNoteTypes = !loadingTypes && noteTypes.length > 0
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {/* Big Header */}
-      <div className="space-y-1">
-        <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">
+    <div className='mx-auto max-w-3xl space-y-6'>
+      <div className='space-y-1'>
+        <h1 className='text-2xl font-semibold text-gray-900 md:text-3xl'>
           {getHeaderTitle()}
         </h1>
-        <p className="text-base md:text-lg text-gray-700">
+        <p className='text-base text-gray-700 md:text-lg'>
           {header?.equipmentTagNum ? `Equipment Tag: ${header.equipmentTagNum}` : null}
         </p>
-        <p className="text-sm text-gray-600">
-          {isPositiveInt(sheetId) && !header?.sheetName ? (
-            <>Template ID: <span className="font-mono">{sheetId}</span></>
+        <p className='text-sm text-gray-600'>
+          {hasSheetId && !header?.sheetName ? (
+            <>
+              Template ID:{' '}
+              <span className='font-mono'>
+                {sheetId}
+              </span>
+            </>
           ) : (
-            "Create Note"
+            'Create Note'
           )}
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Note Type */}
+      <form
+        onSubmit={handleSubmit}
+        className='space-y-5'
+      >
         <div>
-          <label htmlFor="noteTypeSelect" className="block text-sm font-medium text-gray-700 mb-1">
-            Note Type <span className="text-red-500">*</span>
+          <label
+            htmlFor='noteTypeSelect'
+            className='mb-1 block text-sm font-medium text-gray-700'
+          >
+            Note Type <span className='text-red-500'>*</span>
           </label>
           {loadingTypes ? (
-            <div className="text-sm text-gray-500">Loading note types…</div>
+            <div className='text-sm text-gray-500'>
+              Loading note types…
+            </div>
           ) : (
             <select
-              id="noteTypeSelect"
-              className="w-full rounded border px-3 py-2 text-sm"
-              title="Select a note type"
+              id='noteTypeSelect'
+              className='w-full rounded border px-3 py-2 text-sm'
+              title='Select a note type'
               value={noteTypeId}
-              onChange={(e) => {
-                const v = e.target.value;
-                setNoteTypeId(v ? Number(v) : "");
-              }}
+              onChange={handleNoteTypeChange}
               required
             >
-              <option value="">Select a note type…</option>
-              {noteTypes.map((nt) => (
-                <option key={nt.noteTypeId} value={nt.noteTypeId}>
-                  {nt.noteType}
+              <option value=''>
+                Select a note type…
+              </option>
+              {noteTypes.map((noteType) => (
+                <option
+                  key={noteType.noteTypeId}
+                  value={noteType.noteTypeId}
+                >
+                  {noteType.noteType}
                 </option>
               ))}
             </select>
           )}
-          {!loadingTypes && noteTypes.length === 0 && (
-            <div className="text-xs text-amber-600 mt-1">
+          {hasNoteTypes === false && (
+            <div className='mt-1 text-xs text-amber-600'>
               No note types available. Please add NoteTypes first.
             </div>
           )}
         </div>
 
-        {/* Note Body */}
         <div>
-          <label htmlFor="noteBody" className="block text-sm font-medium text-gray-700 mb-1">
-            Note Text <span className="text-red-500">*</span>
+          <label
+            htmlFor='noteBody'
+            className='mb-1 block text-sm font-medium text-gray-700'
+          >
+            Note Text <span className='text-red-500'>*</span>
           </label>
           <textarea
-            id="noteBody"
-            className="w-full min-h-[160px] rounded border px-3 py-2 text-sm"
+            id='noteBody'
+            className='min-h-[160px] w-full rounded border px-3 py-2 text-sm'
             value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Enter the note body…"
+            onChange={handleBodyChange}
+            placeholder='Enter the note body…'
             required
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className='mt-1 text-xs text-gray-500'>
             This note will be added at the end of its note-type group automatically.
           </p>
         </div>
 
-        {error && (
-          <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        {error !== null && (
+          <div className='rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700'>
             {error}
           </div>
         )}
 
-        <div className="flex items-center gap-3">
+        <div className='flex items-center gap-3'>
           <button
-            type="submit"
+            type='submit'
             disabled={!canSubmit}
-            className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className='inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50'
           >
-            {saving ? "Saving…" : "Save Note"}
+            {saving ? 'Saving…' : 'Save Note'}
           </button>
           <button
-            type="button"
+            type='button'
             onClick={handleCancel}
-            className="inline-flex items-center rounded border px-4 py-2 text-sm font-medium"
+            className='inline-flex items-center rounded border px-4 py-2 text-sm font-medium'
           >
             Cancel
           </button>
         </div>
       </form>
     </div>
-  );
+  )
 }
+
+export default NewTemplateNotePage

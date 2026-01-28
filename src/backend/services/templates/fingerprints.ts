@@ -1,5 +1,5 @@
 // src/backend/services/templates/fingerprints.ts
-import { LearnOut } from "./excelExtractor";
+import { ExcelTemplateAnalysis } from "./excelExtractor";
 import { SheetDefinitionJSON } from "@/domain/i18n/mirrorTypes";
 
 type Fingerprint = SheetDefinitionJSON["fingerprint"];
@@ -7,7 +7,7 @@ type Fingerprint = SheetDefinitionJSON["fingerprint"];
 const MAX_ANCHORS = 12;
 const MAX_LABELS = 40;
 
-export function computeFingerprint(learn: LearnOut): Fingerprint {
+export function computeFingerprint(learn: ExcelTemplateAnalysis): Fingerprint {
   const {
     workbookMeta: { pageSize, rowCount, columnCount },
     boldTitles,
@@ -33,7 +33,7 @@ function buildAnchors(
   limit: number
 ): Array<{ text: string; bbox: [number, number, number, number] }> {
   // Normalize, de-dup by normalized text, keep top-most first, and cap.
-  const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const norm = (s: string) => s.replaceAll(/\s+/g, " ").trim().toLowerCase();
 
   const seen = new Set<string>();
   const out: Array<{ text: string; bbox: [number, number, number, number] }> = [];
@@ -59,7 +59,7 @@ function buildAnchors(
 }
 
 function buildLabelSet(
-  pairs: LearnOut["labelValuePairs"],
+  pairs: ExcelTemplateAnalysis["labelValuePairs"],
   limit: number
 ): string[] {
   const seen = new Set<string>();
@@ -82,6 +82,6 @@ function buildLabelSet(
 
 function sanitizeTitle(s: string): string {
   // Collapse whitespace and trim; keep short and readable
-  const v = s.replace(/\s+/g, " ").trim();
+  const v = s.replaceAll(/\s+/g, " ").trim();
   return v.slice(0, 80);
 }

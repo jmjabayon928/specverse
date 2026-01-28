@@ -1,52 +1,89 @@
 // src/app/(admin)/datasheets/templates/[id]/edit/page.tsx
 
-import React from "react";
-import { notFound } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies } from 'next/headers'
+import { notFound } from 'next/navigation'
 
-import SecurePage from "@/components/security/SecurePage";
-import TemplateEditorForm from "./TemplateEditorForm";
-import { mapToUnifiedSheet } from "@/utils/templateViewMapper";
-import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
-import { getTemplateDetailsById } from "@/backend/services/templateService";
+import SecurePage from '@/components/security/SecurePage'
+import TemplateEditorForm from './TemplateEditorForm'
+import { fetchReferenceOptions } from '@/backend/database/ReferenceQueries'
+import { getTemplateDetailsById } from '@/backend/services/templateService'
+import { mapToUnifiedSheet } from '@/utils/templateViewMapper'
 
-interface PageProps {
-  params: { id: string };
+type TemplateEditPageParams = Readonly<{
+  id: string
+}>
+
+type TemplateEditPageProps = Readonly<{
+  params: TemplateEditPageParams
+}>
+
+const parseTemplateId = (rawId: string | undefined): number => {
+  const value = Number.parseInt(rawId ?? '', 10)
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return Number.NaN
+  }
+
+  return value
 }
 
-export default async function TemplateEditPage(props: Readonly<PageProps>) {
-  // ✅ Ensure `params.id` is safely parsed and used
-  const { params } = props;
-  const templateId = Number(params?.id ?? "0");
-  if (!templateId || isNaN(templateId)) return notFound();
+const TemplateEditPage = async (props: TemplateEditPageProps) => {
+  const templateId = parseTemplateId(props.params?.id)
 
-  const [sessionCookie, referenceData, templateData] = await Promise.all([
+  if (Number.isNaN(templateId)) {
+    notFound()
+  }
+
+  const [sessionCookies, referenceData, templateData] = await Promise.all([
     cookies(),
     fetchReferenceOptions(),
     getTemplateDetailsById(templateId),
-  ]);
+  ])
 
-  const token = sessionCookie.get("token")?.value;
-  if (!token || !templateData) return notFound();
+  if (templateData == null) {
+    notFound()
+  }
+
+  const token = sessionCookies.get('token')?.value ?? ''
+  if (token.length === 0) {
+    notFound()
+  }
 
   const defaultValues = mapToUnifiedSheet({
     datasheet: templateData.datasheet,
     subsheets: templateData.datasheet.subsheets,
     isTemplate: true,
-  });
+  })
 
   return (
-    <SecurePage requiredPermission="TEMPLATE_EDIT">
+    <SecurePage requiredPermission='TEMPLATE_EDIT'>
       <TemplateEditorForm
         defaultValues={defaultValues}
-        areas={referenceData.areas.map((a) => ({ label: a.name, value: a.id }))}
-        manufacturers={referenceData.manufacturers.map((m) => ({ label: m.name, value: m.id }))}
-        suppliers={referenceData.suppliers.map((s) => ({ label: s.name, value: s.id }))}
-        categories={referenceData.categories.map((c) => ({ label: c.name, value: c.id }))}
-        clients={referenceData.clients.map((c) => ({ label: c.name, value: c.id }))}
-        projects={referenceData.projects.map((p) => ({ label: p.name, value: p.id }))}
+        areas={referenceData.areas.map((area) => ({ label: area.name, value: area.id }))}
+        manufacturers={referenceData.manufacturers.map((manufacturer) => ({
+          label: manufacturer.name,
+          value: manufacturer.id,
+        }))}
+        suppliers={referenceData.suppliers.map((supplier) => ({
+          label: supplier.name,
+          value: supplier.id,
+        }))}
+        categories={referenceData.categories.map((category) => ({
+          label: category.name,
+          value: category.id,
+        }))}
+        clients={referenceData.clients.map((client) => ({
+          label: client.name,
+          value: client.id,
+        }))}
+        projects={referenceData.projects.map((project) => ({
+          label: project.name,
+          value: project.id,
+        }))}
         session={token}
       />
     </SecurePage>
-  );
+  )
 }
+
+export default TemplateEditPage

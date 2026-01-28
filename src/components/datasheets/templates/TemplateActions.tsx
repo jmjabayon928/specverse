@@ -1,91 +1,184 @@
 // src/components/datasheets/templates/TemplateActions.tsx
-"use client";
+'use client'
 
-import React from "react";
-import Image from "next/image";
-import { useRouter, usePathname } from "next/navigation";
-import type { UserSession } from "@/domain/auth/sessionTypes";
-import type { MinimalSheetForActions } from "@/domain/datasheets/sheetTypes";
-import IconTooltip from "@/components/ui/tooltip/IconTooltip";
-import ExportSheetButtons from "@/components/datasheets/ExportSheetButtons";
+import React from 'react'
+import Image from 'next/image'
+import { useRouter, usePathname } from 'next/navigation'
+import type { UserSession } from '@/domain/auth/sessionTypes'
+import type { MinimalSheetForActions } from '@/domain/datasheets/sheetTypes'
+import IconTooltip from '@/components/ui/tooltip/IconTooltip'
+import ExportSheetButtons from '@/components/datasheets/ExportSheetButtons'
 
-interface TemplateActionsProps {
-  sheet: MinimalSheetForActions;
-  user: UserSession;
-  unitSystem: "SI" | "USC";
-  language: string;
-  clientName: string;
-  sheetName: string;
-  revisionNum: number;
+type TemplateActionsProps = {
+  sheet: MinimalSheetForActions
+  user: UserSession
+  unitSystem: 'SI' | 'USC'
+  language: string
+  clientName: string
+  sheetName: string
+  revisionNum: number
 }
 
-export default function TemplateActions({
-  sheet,
-  user,
-  unitSystem,
-  language,
-  clientName,
-  sheetName,
-  revisionNum,
-}: TemplateActionsProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-
-  if (!user || !user.permissions) {
-    return null;
+const hasPermissions = (user: UserSession | null | undefined) => {
+  if (user === null || user === undefined) {
+    return false
   }
 
-  if (!sheet || !sheet.status || !sheet.sheetId) {
-    return null;
+  if (!Array.isArray(user.permissions)) {
+    return false
   }
 
-  const status = sheet.status;
-  const isCreator = user?.userId && sheet.preparedBy === user.userId;
-  const isDetailPage =
-    pathname.includes("/datasheets/templates/") &&
-    !pathname.includes("/create");
+  return user.permissions.length > 0
+}
 
-  const iconSize = isDetailPage ? 32 : 20;
-  const gap = isDetailPage ? "gap-4" : "gap-2";
+const userHasPermission = (user: UserSession, permission: string) => {
+  return user.permissions.includes(permission)
+}
 
-  const canEdit =
-    isCreator &&
-    (status === "Draft" || status === "Modified Draft" || status === "Rejected") &&
-    user?.permissions.includes("TEMPLATE_EDIT");
+const canEditTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
+  const isCreator = user.userId === sheet.preparedBy
 
-  const canVerify =
-    user?.permissions.includes("TEMPLATE_VERIFY") &&
-    (status === "Draft" || status === "Modified Draft");
+  const isEditableStatus =
+    sheet.status === 'Draft' ||
+    sheet.status === 'Modified Draft' ||
+    sheet.status === 'Rejected'
 
-  const canApprove =
-    user?.permissions.includes("TEMPLATE_APPROVE") && status === "Verified";
+  if (!isCreator) {
+    return false
+  }
 
-  const canDuplicate =
-    user?.permissions.includes("TEMPLATE_CREATE") && status === "Approved";
+  return isEditableStatus && userHasPermission(user, 'TEMPLATE_EDIT')
+}
 
-  const canExport =
-    user?.permissions.includes("TEMPLATE_EXPORT") && status === "Approved";
+const canVerifyTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
+  const isVerifiableStatus =
+    sheet.status === 'Draft' ||
+    sheet.status === 'Modified Draft'
 
-  // NEW: Allow creating a FILLED sheet from an APPROVED template
-  // Accept any of these permission names (adjust to match your auth):
-  //  - "FILLED_CREATE" or "DATASHEET_CREATE" or "SHEET_CREATE"
-  const canCreateFilled =
-    status === "Approved" &&
-    user.permissions.some((p) =>
-      ["FILLED_CREATE", "DATASHEET_CREATE", "SHEET_CREATE"].includes(p)
-    );
+  if (!isVerifiableStatus) {
+    return false
+  }
+
+  return userHasPermission(user, 'TEMPLATE_VERIFY')
+}
+
+const canApproveTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
+  const isVerified = sheet.status === 'Verified'
+  if (!isVerified) {
+    return false
+  }
+
+  return userHasPermission(user, 'TEMPLATE_APPROVE')
+}
+
+const canCloneTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
+  const isApproved = sheet.status === 'Approved'
+  if (!isApproved) {
+    return false
+  }
+
+  return userHasPermission(user, 'TEMPLATE_CREATE')
+}
+
+const canExportTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
+  const isApproved = sheet.status === 'Approved'
+  if (!isApproved) {
+    return false
+  }
+
+  return userHasPermission(user, 'TEMPLATE_EXPORT')
+}
+
+const canCreateFilledFromTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
+  const isApproved = sheet.status === 'Approved'
+  if (!isApproved) {
+    return false
+  }
+
+  const allowedPermissions = ['FILLED_CREATE', 'DATASHEET_CREATE', 'SHEET_CREATE']
+
+  for (const permission of allowedPermissions) {
+    if (userHasPermission(user, permission)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+const TemplateActions = (props: Readonly<TemplateActionsProps>) => {
+  const {
+    sheet,
+    user,
+    unitSystem,
+    language,
+    clientName,
+    sheetName,
+    revisionNum,
+  } = props
+
+  const router = useRouter()
+  const pathname = usePathname()
+
+  const isUserReady = hasPermissions(user)
+  const hasSheetDetails =
+    typeof sheet?.sheetId === 'number' &&
+    typeof sheet?.status === 'string'
+
+  if (!isUserReady) {
+    return null
+  }
+
+  if (!hasSheetDetails) {
+    return null
+  }
+
+  const isTemplatesPath = pathname.includes('/datasheets/templates/')
+  const isCreateRoute = pathname.includes('/create')
+  const isDetailPage = isTemplatesPath && isCreateRoute === false
+
+  const iconSize = isDetailPage ? 32 : 20
+  const gapClass = isDetailPage ? 'gap-4' : 'gap-2'
+
+  const canEdit = canEditTemplate(user, sheet)
+  const canVerify = canVerifyTemplate(user, sheet)
+  const canApprove = canApproveTemplate(user, sheet)
+  const canDuplicate = canCloneTemplate(user, sheet)
+  const canExport = canExportTemplate(user, sheet)
+  const canCreateFilled = canCreateFilledFromTemplate(user, sheet)
+
+  const goToEdit = () => {
+    router.push(`/datasheets/templates/${sheet.sheetId}/edit`)
+  }
+
+  const goToVerify = () => {
+    router.push(`/datasheets/templates/${sheet.sheetId}/verify`)
+  }
+
+  const goToApprove = () => {
+    router.push(`/datasheets/templates/${sheet.sheetId}/approve`)
+  }
+
+  const goToClone = () => {
+    router.push(`/datasheets/templates/${sheet.sheetId}/clone`)
+  }
+
+  const goToCreateFilled = () => {
+    router.push(`/datasheets/filled/create?templateId=${sheet.sheetId}`)
+  }
 
   return (
-    <div className={`flex flex-wrap items-center ${gap}`}>
+    <div className={`flex flex-wrap items-center ${gapClass}`}>
       {canEdit && (
-        <IconTooltip label="Edit Template">
+        <IconTooltip label='Edit Template'>
           <button
-            onClick={() => router.push(`/datasheets/templates/${sheet.sheetId}/edit`)}
-            title="Edit Template"
+            type='button'
+            onClick={goToEdit}
+            title='Edit Template'
           >
             <Image
-              src="/images/edit.png"
-              alt="Edit"
+              src='/images/edit.png'
+              alt='Edit'
               width={iconSize}
               height={iconSize}
             />
@@ -94,14 +187,15 @@ export default function TemplateActions({
       )}
 
       {canVerify && (
-        <IconTooltip label="Verify or Reject">
+        <IconTooltip label='Verify or Reject'>
           <button
-            onClick={() => router.push(`/datasheets/templates/${sheet.sheetId}/verify`)}
-            title="Verify or Reject Template"
+            type='button'
+            onClick={goToVerify}
+            title='Verify or Reject Template'
           >
             <Image
-              src="/images/verify.png"
-              alt="Verify"
+              src='/images/verify.png'
+              alt='Verify'
               width={iconSize}
               height={iconSize}
             />
@@ -110,14 +204,15 @@ export default function TemplateActions({
       )}
 
       {canApprove && (
-        <IconTooltip label="Approve Template">
+        <IconTooltip label='Approve Template'>
           <button
-            onClick={() => router.push(`/datasheets/templates/${sheet.sheetId}/approve`)}
-            title="Approve Template"
+            type='button'
+            onClick={goToApprove}
+            title='Approve Template'
           >
             <Image
-              src="/images/approve.png"
-              alt="Approve"
+              src='/images/approve.png'
+              alt='Approve'
               width={iconSize}
               height={iconSize}
             />
@@ -126,16 +221,15 @@ export default function TemplateActions({
       )}
 
       {canDuplicate && (
-        <IconTooltip label="Clone Template">
+        <IconTooltip label='Clone Template'>
           <button
-            onClick={() =>
-              router.push(`/datasheets/templates/${sheet.sheetId}/clone`)
-            }
-            title="Clone Template"
+            type='button'
+            onClick={goToClone}
+            title='Clone Template'
           >
             <Image
-              src="/images/duplicate.png"
-              alt="Clone"
+              src='/images/duplicate.png'
+              alt='Clone'
               width={iconSize}
               height={iconSize}
             />
@@ -143,19 +237,16 @@ export default function TemplateActions({
         </IconTooltip>
       )}
 
-      {/* NEW: Create Filled Sheet from this Approved template */}
       {canCreateFilled && (
-        <IconTooltip label="Create Filled Sheet">
+        <IconTooltip label='Create Filled Sheet'>
           <button
-            onClick={() =>
-              router.push(`/datasheets/filled/create?templateId=${sheet.sheetId}`)
-            }
-            title="Create Filled Sheet"
+            type='button'
+            onClick={goToCreateFilled}
+            title='Create Filled Sheet'
           >
-            {/* Use an icon you have; update the path if needed */}
             <Image
-              src="/images/fill-up.png"
-              alt="Create Filled Sheet"
+              src='/images/fill-up.png'
+              alt='Create Filled Sheet'
               width={iconSize}
               height={iconSize}
             />
@@ -170,11 +261,13 @@ export default function TemplateActions({
           revisionNum={revisionNum}
           unitSystem={unitSystem}
           language={language}
-          isTemplate={true}
+          isTemplate
           clientName={clientName}
           iconSize={iconSize}
         />
       )}
     </div>
-  );
+  )
 }
+
+export default TemplateActions

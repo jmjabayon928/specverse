@@ -1,109 +1,159 @@
 // src/app/(admin)/datasheets/templates/[id]/verify/VerifyForm.tsx
-"use client";
+'use client'
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import type { FormEvent } from 'react'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
-export default function VerifyForm(props: Readonly<{ sheetId: number }>) {
-  const { sheetId } = props;
+type VerifyFormProps = {
+  sheetId: number
+}
 
-  const [action, setAction] = useState<"verify" | "reject" | "">("");
-  const [comment, setComment] = useState("");
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+type VerifyAction = 'verify' | 'reject' | ''
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+const VerifyForm = (props: Readonly<VerifyFormProps>) => {
+  const { sheetId } = props
 
-    if (action === "reject" && comment.trim() === "") {
-      alert("Rejection Comment is required.");
-      return;
+  const [action, setAction] = useState<VerifyAction>('')
+  const [comment, setComment] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const router = useRouter()
+
+  const requiresComment = action === 'reject'
+  const hasComment = comment.trim().length > 0
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+
+    if (action === '') {
+      globalThis.alert('Please select Verify or Reject.')
+      return
     }
 
-    setLoading(true);
+    if (requiresComment && !hasComment) {
+      globalThis.alert('Rejection comment is required.')
+      return
+    }
+
+    setLoading(true)
 
     try {
-      const res = await fetch(`/api/backend/templates/${sheetId}/verify`, {
-        method: "POST",
+      const response = await fetch(`/api/backend/templates/${sheetId}/verify`, {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           sheetId,
           action,
           rejectionComment: comment,
         }),
-      });
+      })
 
-      const result = await res.json();
+      const result = await response.json().catch(() => ({}))
 
-      if (res.ok) {
-        router.push(`/datasheets/templates/${sheetId}`);
-      } else {
-        alert(result.error || "Verification failed");
+      if (response.ok) {
+        router.push(`/datasheets/templates/${sheetId}`)
+        return
       }
-    } catch (err) {
-      console.error("❌ Error during form submission:", err);
-      alert("Something went wrong.");
+
+      const message =
+        typeof result?.error === 'string'
+          ? result.error
+          : 'Verification failed'
+      globalThis.alert(message)
+    } catch (submitError: unknown) {
+      console.error('Error during template verification', submitError)
+      globalThis.alert('Something went wrong.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
+
+  const handleActionChange = (value: VerifyAction) => {
+    setAction(value)
+
+    if (value !== 'reject') {
+      setComment('')
+    }
+  }
+
+  const handleCommentChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setComment(event.target.value)
+  }
+
+  const isVerifySelected = action === 'verify'
+  const isRejectSelected = action === 'reject'
 
   return (
-    <form onSubmit={handleSubmit} className="mt-8 border-t pt-6">
-      <fieldset className="mb-4">
-        <legend className="block font-medium mb-2">Decision</legend>
-        <div className="flex items-center gap-6">
-          <label className="inline-flex items-center">
+    <form
+      onSubmit={handleSubmit}
+      className='mt-8 border-t pt-6'
+    >
+      <fieldset className='mb-4'>
+        <legend className='mb-2 block font-medium'>
+          Decision
+        </legend>
+        <div className='flex items-center gap-6'>
+          <label className='inline-flex items-center'>
             <input
-              type="radio"
-              name="action"
-              value="verify"
-              checked={action === "verify"}
-              onChange={() => setAction("verify")}
+              type='radio'
+              name='action'
+              value='verify'
+              checked={isVerifySelected}
+              onChange={() => handleActionChange('verify')}
               required
             />
-            <span className="ml-2">Verify</span>
+            <span className='ml-2'>
+              Verify
+            </span>
           </label>
-          <label className="inline-flex items-center">
+          <label className='inline-flex items-center'>
             <input
-              type="radio"
-              name="action"
-              value="reject"
-              checked={action === "reject"}
-              onChange={() => setAction("reject")}
+              type='radio'
+              name='action'
+              value='reject'
+              checked={isRejectSelected}
+              onChange={() => handleActionChange('reject')}
               required
             />
-            <span className="ml-2">Reject</span>
+            <span className='ml-2'>
+              Reject
+            </span>
           </label>
         </div>
       </fieldset>
 
-      {action === "reject" && (
-        <div className="mb-4">
-          <label htmlFor="rejectionComment" className="block font-medium mb-1">
+      {isRejectSelected && (
+        <div className='mb-4'>
+          <label
+            htmlFor='rejectionComment'
+            className='mb-1 block font-medium'
+          >
             Rejection Comment
           </label>
           <textarea
-            id="rejectionComment"
-            name="rejectionComment"
+            id='rejectionComment'
+            name='rejectionComment'
             rows={3}
-            className="w-full border border-gray-300 rounded px-3 py-2"
-            placeholder="Please provide the reason for rejection"
+            className='w-full rounded border border-gray-300 px-3 py-2'
+            placeholder='Please provide the reason for rejection'
             value={comment}
-            onChange={(e) => setComment(e.target.value)}
+            onChange={handleCommentChange}
           />
         </div>
       )}
 
       <button
-        type="submit"
+        type='submit'
         disabled={loading}
-        className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+        className='mt-4 rounded bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:opacity-50'
       >
-        {loading ? "Processing..." : "Submit"}
+        {loading ? 'Processing...' : 'Submit'}
       </button>
     </form>
-  );
+  )
 }
+
+export default VerifyForm

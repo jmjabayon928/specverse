@@ -1,0 +1,4 @@
+.submenuWrapper {
+  overflow: hidden;
+  transition: height 300ms ease;
+}

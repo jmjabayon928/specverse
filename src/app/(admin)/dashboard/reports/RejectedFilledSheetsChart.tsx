@@ -25,7 +25,9 @@ export default function RejectedFilledSheetsChart() {
   useEffect(() => {
     const fetchRejectedFilledSheets = async () => {
       try {
-        const res = await fetch("/api/backend/reports/rejected-filledsheets");
+        const res = await fetch("/api/backend/reports/rejected-filledsheets", {
+          credentials: "include",
+        });
         if (!res.ok) {
           throw new Error(`HTTP error! Status: ${res.status}`);
         }

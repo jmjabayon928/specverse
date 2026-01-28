@@ -1,194 +1,263 @@
 // src/components/datasheets/templates/create/InfoTemplateBuilder.tsx
-"use client";
 
-import React from "react";
-import { TrashIcon, ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
-import { groupedSIUnits } from "@/utils/units";
-import type { InfoField } from "@/domain/datasheets/sheetTypes";
+'use client'
 
-interface Props {
+import React, { useEffect, useMemo, useState } from 'react'
+import { TrashIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
+import { groupedSIUnits } from '@/utils/units'
+import type { InfoField } from '@/domain/datasheets/sheetTypes'
+
+type InfoTemplateBuilderProps = {
   subsheet: {
-    id?: number;
-    name: string;
-    fields: InfoField[];
-  };
-  subsheetIndex: number;
-  onFieldsChange: (fields: InfoField[]) => void;
-  isEditMode: boolean;
-  formErrors?: Record<string, string[]>;
+    id?: number
+    name: string
+    fields: InfoField[]
+  }
+  subsheetIndex: number
+  onFieldsChange: (fields: InfoField[]) => void
+  isEditMode: boolean
+  formErrors?: Record<string, string[]>
 }
 
-export default function InfoTemplateBuilder(props: Readonly<Props>) {
-  const { subsheet, subsheetIndex, onFieldsChange, isEditMode, formErrors = {} } = props;
+const buildFieldError = (
+  formErrors: Record<string, string[]>,
+  subsheetIndex: number,
+  fieldIndex: number,
+  key: keyof InfoField
+): string | undefined => {
+  const base = `subsheets.${subsheetIndex}.fields.${fieldIndex}`
+  const messages = formErrors[`${base}.${key}`]
+  if (messages === undefined || messages.length === 0) {
+    return undefined
+  }
 
-  const safeFields = React.useMemo(() => subsheet.fields ?? [], [subsheet.fields]);
+  return messages[0]
+}
 
-  const [localOptionValues, setLocalOptionValues] = React.useState<string[]>(
-    safeFields.map((t) => t.options?.join(", ") || "")
-  );
+const createEmptyField = (currentCount: number): InfoField => ({
+  label: '',
+  infoType: 'varchar',
+  uom: '',
+  required: false,
+  sortOrder: currentCount + 1,
+  options: [],
+})
 
-  React.useEffect(() => {
-    setLocalOptionValues(safeFields.map((t) => t.options?.join(", ") || ""));
-  }, [safeFields]);
+const updateFieldAt = (
+  fields: InfoField[],
+  index: number,
+  update: Partial<InfoField>
+): InfoField[] => {
+  const updated = [...fields]
+  updated[index] = {
+    ...updated[index],
+    ...update,
+  }
+  return updated
+}
 
-  const handleLocalChange = (index: number, value: string) => {
-    const updated = [...localOptionValues];
-    updated[index] = value;
-    setLocalOptionValues(updated);
-  };
+const removeFieldAt = (fields: InfoField[], index: number) =>
+  fields.filter((_, currentIndex) => currentIndex !== index)
+
+const moveField = (fields: InfoField[], index: number, direction: number): InfoField[] => {
+  const nextIndex = index + direction
+  const lastIndex = fields.length - 1
+
+  const isOutOfRange = nextIndex < 0 || nextIndex > lastIndex
+  if (isOutOfRange) {
+    return fields
+  }
+
+  const updated = [...fields]
+  const [moved] = updated.splice(index, 1)
+  updated.splice(nextIndex, 0, moved)
+
+  return updated
+}
+
+export default function InfoTemplateBuilder(props: Readonly<InfoTemplateBuilderProps>) {
+  const { subsheet, subsheetIndex, onFieldsChange, isEditMode, formErrors = {} } = props
+
+  const fields = useMemo(() => subsheet.fields ?? [], [subsheet.fields])
+
+  const [localOptionValues, setLocalOptionValues] = useState<string[]>(
+    fields.map((field) => (field.options ?? []).join(', '))
+  )
+
+  useEffect(() => {
+    setLocalOptionValues(fields.map((field) => (field.options ?? []).join(', ')))
+  }, [fields])
+
+  // groupedSIUnits is a Record<string, string[]>
+  // We treat it as [groupLabel, string[]]
+  const unitGroups = useMemo(() => Object.entries(groupedSIUnits), [])
+
+  const handleOptionInputChange = (index: number, value: string) => {
+    const updated = [...localOptionValues]
+    updated[index] = value
+    setLocalOptionValues(updated)
+  }
 
   const handleOptionBlur = (index: number) => {
-    const raw = localOptionValues[index];
-    const parsed = raw
-      .split(",")
-      .map((v) => v.trim())
-      .filter((v) => v.length > 0);
+    const raw = localOptionValues[index] ?? ''
+    const segments = raw.split(',')
+    const parsed: string[] = []
 
-    const updatedFields = [...subsheet.fields];
-    updatedFields[index] = {
-      ...updatedFields[index],
+    for (const segment of segments) {
+      const trimmed = segment.trim()
+      if (trimmed.length > 0) {
+        parsed.push(trimmed)
+      }
+    }
+
+    const updatedFields = updateFieldAt(fields, index, {
       options: parsed,
-    };
+    })
 
-    onFieldsChange(updatedFields);
-  };
+    onFieldsChange(updatedFields)
+  }
 
-  const handleChange = <K extends keyof InfoField>(
+  const handleFieldChange = <K extends keyof InfoField>(
     index: number,
-    field: K,
+    key: K,
     value: InfoField[K]
   ) => {
-    const updated = [...subsheet.fields];
-    updated[index] = { ...updated[index], [field]: value };
-    onFieldsChange(updated);
-  };
+    const updatedFields = updateFieldAt(fields, index, {
+      [key]: value,
+    })
+    onFieldsChange(updatedFields)
+  }
 
-  const handleAdd = () => {
-    const newField: InfoField = {
-      label: "",
-      infoType: "varchar",
-      uom: "",
-      required: false,
-      sortOrder: subsheet.fields.length + 1,
-      options: [],
-    };
+  const handleAddField = () => {
+    const newField = createEmptyField(fields.length)
+    onFieldsChange([...fields, newField])
+  }
 
-    const updated = [...subsheet.fields, newField];
-    onFieldsChange(updated);
-  };
+  const handleDeleteField = (index: number) => {
+    onFieldsChange(removeFieldAt(fields, index))
+  }
 
-  const handleDelete = (index: number) => {
-    const updated = subsheet.fields.filter((_, i) => i !== index);
-    onFieldsChange(updated);
-  };
-
-  const handleMove = (index: number, direction: number) => {
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= subsheet.fields.length) return;
-    const updated = [...subsheet.fields];
-    const [moved] = updated.splice(index, 1);
-    updated.splice(newIndex, 0, moved);
-    onFieldsChange(updated);
-  };
+  const handleMoveField = (index: number, direction: number) => {
+    onFieldsChange(moveField(fields, index, direction))
+  }
 
   return (
-    <div className="space-y-4">
-      {subsheet.fields.map((field, index) => {
-        const base = `subsheets.${subsheetIndex}.fields.${index}`;
-        const getError = (key: keyof InfoField) => formErrors?.[`${base}.${key}`]?.[0];
+    <div className='space-y-4'>
+      {fields.map((field, index) => {
+        const labelError = buildFieldError(formErrors, subsheetIndex, index, 'label')
+        const typeError = buildFieldError(formErrors, subsheetIndex, index, 'infoType')
+        const uomError = buildFieldError(formErrors, subsheetIndex, index, 'uom')
 
-        // Stable input ids for a11y labels
-        const idLabel = `fld-${subsheetIndex}-${index}-label`;
-        const idType = `fld-${subsheetIndex}-${index}-type`;
-        const idUom = `fld-${subsheetIndex}-${index}-uom`;
-        const idAllowed = `fld-${subsheetIndex}-${index}-allowed`;
-        const idRequired = `fld-${subsheetIndex}-${index}-required`;
+        const idPrefix = `fld-${subsheetIndex}-${index}`
+        const idLabel = `${idPrefix}-label`
+        const idType = `${idPrefix}-type`
+        const idUom = `${idPrefix}-uom`
+        const idAllowed = `${idPrefix}-allowed`
+        const idRequired = `${idPrefix}-required`
+
+        const key = `so:${field.sortOrder}-${index}`
 
         return (
           <div
-            key={`so:${field.sortOrder}`} // ✅ stable key (no array index)
-            className="border p-3 rounded bg-gray-50 shadow-md space-y-2"
+            key={key}
+            className='border p-3 rounded bg-gray-50 shadow-md space-y-2'
           >
             {isEditMode && (
-              <div className="flex justify-end gap-2">
+              <div className='flex justify-end gap-2'>
                 <button
-                  type="button"
-                  title="Move Up"
-                  onClick={() => handleMove(index, -1)}
+                  type='button'
+                  title='Move Up'
+                  onClick={() => handleMoveField(index, -1)}
                   disabled={index === 0}
-                  className="p-1 hover:bg-gray-100 border rounded"
+                  className='p-1 hover:bg-gray-100 border rounded disabled:opacity-50'
                 >
-                  <ChevronUpIcon className="h-4 w-4 text-gray-600" />
+                  <ChevronUpIcon className='h-4 w-4 text-gray-600' />
                 </button>
                 <button
-                  type="button"
-                  title="Move Down"
-                  onClick={() => handleMove(index, 1)}
-                  disabled={index === subsheet.fields.length - 1}
-                  className="p-1 hover:bg-gray-100 border rounded"
+                  type='button'
+                  title='Move Down'
+                  onClick={() => handleMoveField(index, 1)}
+                  disabled={index === fields.length - 1}
+                  className='p-1 hover:bg-gray-100 border rounded disabled:opacity-50'
                 >
-                  <ChevronDownIcon className="h-4 w-4 text-gray-600" />
+                  <ChevronDownIcon className='h-4 w-4 text-gray-600' />
                 </button>
                 <button
-                  type="button"
-                  title="Delete"
-                  onClick={() => handleDelete(index)}
-                  className="p-1 hover:bg-red-100 border rounded"
+                  type='button'
+                  title='Delete'
+                  onClick={() => handleDeleteField(index)}
+                  className='p-1 hover:bg-red-100 border rounded'
                 >
-                  <TrashIcon className="h-4 w-4 text-red-500" />
+                  <TrashIcon className='h-4 w-4 text-red-500' />
                 </button>
               </div>
             )}
 
-            <div className="grid grid-cols-5 gap-4">
+            <div className='grid grid-cols-5 gap-4'>
               <div>
-                <label htmlFor={idLabel} className="text-sm font-medium">Label</label>
+                <label htmlFor={idLabel} className='text-sm font-medium'>
+                  Label
+                </label>
                 <input
                   id={idLabel}
-                  type="text"
+                  type='text'
                   value={field.label}
-                  onChange={(e) => handleChange(index, "label", e.target.value)}
-                  className={`w-full px-2 py-1 border rounded ${getError("label") ? "border-red-500" : ""}`}
-                  placeholder="Field Label"
+                  onChange={(event) => handleFieldChange(index, 'label', event.target.value)}
+                  className={`w-full px-2 py-1 border rounded ${
+                    labelError ? 'border-red-500' : ''
+                  }`}
+                  placeholder='Field Label'
                   disabled={!isEditMode}
                 />
-                {getError("label") && (
-                  <p className="text-xs text-red-500 mt-1">{getError("label")}</p>
+                {labelError && (
+                  <p className='text-xs text-red-500 mt-1'>
+                    {labelError}
+                  </p>
                 )}
               </div>
 
               <div>
-                <label htmlFor={idType} className="text-sm font-medium">Type</label>
+                <label htmlFor={idType} className='text-sm font-medium'>
+                  Type
+                </label>
                 <select
                   id={idType}
                   value={field.infoType}
-                  onChange={(e) => handleChange(index, "infoType", e.target.value as InfoField["infoType"])}
-                  className={`w-full px-2 py-1 border rounded ${getError("infoType") ? "border-red-500" : ""}`}
-                  title="Select Field Type"
+                  onChange={(event) =>
+                    handleFieldChange(index, 'infoType', event.target.value as InfoField['infoType'])
+                  }
+                  className={`w-full px-2 py-1 border rounded ${
+                    typeError ? 'border-red-500' : ''
+                  }`}
                   disabled={!isEditMode}
                 >
-                  <option value="varchar">Text</option>
-                  <option value="int">Integer</option>
-                  <option value="decimal">Decimal</option>
+                  <option value='varchar'>Text</option>
+                  <option value='int'>Integer</option>
+                  <option value='decimal'>Decimal</option>
                 </select>
-                {getError("infoType") && (
-                  <p className="text-xs text-red-500 mt-1">{getError("infoType")}</p>
+                {typeError && (
+                  <p className='text-xs text-red-500 mt-1'>
+                    {typeError}
+                  </p>
                 )}
               </div>
 
               <div>
-                <label htmlFor={idUom} className="text-sm font-medium">UOM</label>
+                <label htmlFor={idUom} className='text-sm font-medium'>
+                  UOM
+                </label>
                 <select
                   id={idUom}
-                  value={field.uom ?? ""}
-                  onChange={(e) => handleChange(index, "uom", e.target.value)}
-                  className={`w-full px-2 py-1 border rounded ${getError("uom") ? "border-red-500" : ""}`}
-                  title="Select Unit of Measure"
+                  value={field.uom}
+                  onChange={(event) => handleFieldChange(index, 'uom', event.target.value)}
+                  className={`w-full px-2 py-1 border rounded ${
+                    uomError ? 'border-red-500' : ''
+                  }`}
                   disabled={!isEditMode}
                 >
-                  <option value="">Select UOM</option>
-                  {Object.entries(groupedSIUnits).map(([group, units]) => (
-                    <optgroup key={group} label={group}>
+                  <option value=''>None</option>
+                  {unitGroups.map(([groupKey, units]) => (
+                    <optgroup key={groupKey} label={groupKey}>
                       {units.map((unit) => (
                         <option key={unit} value={unit}>
                           {unit}
@@ -197,52 +266,57 @@ export default function InfoTemplateBuilder(props: Readonly<Props>) {
                     </optgroup>
                   ))}
                 </select>
-                {getError("uom") && (
-                  <p className="text-xs text-red-500 mt-1">{getError("uom")}</p>
+                {uomError && (
+                  <p className='text-xs text-red-500 mt-1'>
+                    {uomError}
+                  </p>
                 )}
               </div>
 
               <div>
-                <label htmlFor={idAllowed} className="text-sm font-medium">Allowed Values</label>
+                <label htmlFor={idAllowed} className='text-sm font-medium'>
+                  Allowed Values
+                </label>
                 <input
                   id={idAllowed}
-                  type="text"
-                  value={localOptionValues[index] || ""}
-                  onChange={(e) => handleLocalChange(index, e.target.value)}
+                  type='text'
+                  value={localOptionValues[index] ?? ''}
+                  onChange={(event) => handleOptionInputChange(index, event.target.value)}
                   onBlur={() => handleOptionBlur(index)}
-                  placeholder="e.g. Option1, Option2"
-                  className="w-full px-2 py-1 border rounded"
+                  className='w-full px-2 py-1 border rounded'
+                  placeholder='Comma-separated list'
                   disabled={!isEditMode}
                 />
               </div>
 
-              <div className="flex items-center pt-6">
-                <label htmlFor={idRequired} className="text-sm font-medium mr-2">Required</label>
-                <input
-                  id={idRequired}
-                  type="checkbox"
-                  title="Required Field"
-                  checked={field.required}
-                  onChange={(e) => handleChange(index, "required", e.target.checked)}
-                  disabled={!isEditMode}
-                />
+              <div className='flex items-center'>
+                <div className='space-x-2'>
+                  <input
+                    id={idRequired}
+                    type='checkbox'
+                    checked={field.required}
+                    onChange={(event) => handleFieldChange(index, 'required', event.target.checked)}
+                    disabled={!isEditMode}
+                  />
+                  <label htmlFor={idRequired} className='text-sm font-medium'>
+                    Required
+                  </label>
+                </div>
               </div>
             </div>
           </div>
-        );
+        )
       })}
 
       {isEditMode && (
-        <div className="text-right">
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            + Add Info Template
-          </button>
-        </div>
+        <button
+          type='button'
+          className='px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700'
+          onClick={handleAddField}
+        >
+          Add Field
+        </button>
       )}
     </div>
-  );
+  )
 }

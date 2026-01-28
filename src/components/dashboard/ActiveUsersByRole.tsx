@@ -29,7 +29,9 @@ const ActiveUsersByRole: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/backend/stats/active-users-by-role");
+        const res = await fetch("/api/backend/stats/active-users-by-role", {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error("Failed to fetch active users by role");
 
         const json: RawUserRoleData[] = await res.json();

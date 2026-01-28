@@ -1,6 +1,6 @@
 // src/backend/services/templates/classifier.ts
 import crypto from "node:crypto";
-import { LearnOut } from "./excelExtractor";
+import { ExcelTemplateAnalysis } from "./excelExtractor";
 import { SheetDefinitionJSON, FieldDef } from "@/domain/i18n/mirrorTypes";
 
 /**
@@ -10,7 +10,7 @@ import { SheetDefinitionJSON, FieldDef } from "@/domain/i18n/mirrorTypes";
  * - Subsheet regions: bold titles below the header become section anchors.
  * - Fields: from label:value pairs. Type inferred from value hint.
  */
-export function classifyDraft(learn: LearnOut): SheetDefinitionJSON {
+export function classifyDraft(learn: ExcelTemplateAnalysis): SheetDefinitionJSON {
   const {
     workbookMeta: { sheetName, rowCount, columnCount, pageSize },
     boldTitles,
@@ -30,7 +30,7 @@ export function classifyDraft(learn: LearnOut): SheetDefinitionJSON {
   const firstSubsheetRow = subsheets.length > 0 ? subsheets[0].bbox[1] : rowCount;
   const equipmentTop = headerRows + 1;
   const equipmentBottom = Math.min(equipmentTop + 7, firstSubsheetRow - 1);
-  const equipmentRegionBottom = equipmentBottom >= equipmentTop ? equipmentBottom : equipmentTop;
+  const equipmentRegionBottom = Math.max(equipmentBottom, equipmentTop);
 
   // Build fields: map label/value hints to FieldDefs with simple type inference
   const fields: FieldDef[] = labelValuePairs.map((p, idx) => ({
@@ -106,7 +106,7 @@ function computeSubsheetRegions(
 
 function sanitizeTitle(s: string): string {
   // Keep it readable and short for region names
-  return s.replace(/\s+/g, " ").trim().slice(0, 80);
+  return s.replaceAll(/\s+/g, " ").trim().slice(0, 80);
 }
 
 /**

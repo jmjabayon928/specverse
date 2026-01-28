@@ -3,7 +3,7 @@ import type { RequestHandler } from "express";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { SheetDefinitionJSON, LangTag } from "@/domain/i18n/mirrorTypes";
-import { excelLearn } from "@/backend/services/templates/excelExtractor";
+import { analyzeExcelTemplate } from "@/backend/services/templates/excelExtractor";
 import { classifyDraft } from "@/backend/services/templates/classifier";
 import { computeFingerprint } from "@/backend/services/templates/fingerprints";
 import { upsertMirrorTemplate, getMirrorTemplate } from "@/backend/services/mirror/mirrorRepo";
@@ -21,7 +21,7 @@ export const learnExcel: RequestHandler = async (req, res) => {
   if (!file) return res.status(400).json({ error: "file required" });
 
   try {
-    const learnOut = await excelLearn(file.path);
+    const learnOut = await analyzeExcelTemplate(file.path);
     const draft = classifyDraft(learnOut);
     draft.fingerprint = computeFingerprint(learnOut);
     await fs.unlink(file.path).catch(() => void 0);

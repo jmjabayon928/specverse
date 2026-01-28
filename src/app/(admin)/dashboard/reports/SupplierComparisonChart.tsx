@@ -45,20 +45,20 @@ export default function InventoryContributionChart() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/backend/reports/inventory-contribution");
+        const res = await fetch("/api/backend/reports/supplier-comparison", {
+          credentials: "include",
+        });
         const raw: CategoryContribution[] = await res.json();
 
         const categories = raw.map((c) => c.categoryName);
         const itemMap: Record<string, GroupedBarDataEntry> = {};
 
-        raw.forEach((category) => {
-          category.items.forEach((item) => {
-            if (!itemMap[item.itemName]) {
-              itemMap[item.itemName] = { itemName: item.itemName };
-            }
-            itemMap[item.itemName][category.categoryName] = item.quantity;
-          });
-        });
+        for (const category of raw) {
+          for (const item of category.items) {
+            itemMap[item.itemName] ??= { itemName: item.itemName }
+            itemMap[item.itemName][category.categoryName] = item.quantity
+          }
+        }
 
         setData(Object.values(itemMap));
         setCategoryNames(categories);

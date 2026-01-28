@@ -17,7 +17,9 @@ export default function FieldCompletionHeatmap() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch("/api/backend/stats/field-completion");
+        const res = await fetch("/api/backend/stats/field-completion", {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error("Failed to fetch field completion data");
         const json = await res.json();
         console.log("Field completion data:", json);

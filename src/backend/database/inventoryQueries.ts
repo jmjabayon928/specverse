@@ -1,6 +1,10 @@
 // src/backend/database/inventoryQueries.ts
 import { poolPromise, sql } from "../config/db";
-import type { InventoryItem, InventoryItemDB } from "@/domain/inventory/inventoryTypes";
+import type {
+  InventoryItemDB,
+  InventoryItemWrite,
+  InventoryListItem,
+} from "@/domain/inventory/inventoryTypes";
 
 // ✅ Add safe comparison helper
 function isDifferent(a: unknown, b: unknown): boolean {
@@ -68,7 +72,7 @@ export async function getInventoryItemById(inventoryId: number): Promise<Invento
   return result.recordset[0] ?? null;
 }
 
-export async function createInventoryItem(data: InventoryItem): Promise<number> {
+export async function createInventoryItem(data: InventoryItemWrite): Promise<number> {
   const pool = await poolPromise;
   const result = await pool.request()
     .input("ItemCode", sql.NVarChar(100), data.itemCode)
@@ -107,7 +111,7 @@ export async function createInventoryItem(data: InventoryItem): Promise<number> 
   return newId;
 }
 
-export async function updateInventoryItem(inventoryId: number, data: InventoryItem) {
+export async function updateInventoryItem(inventoryId: number, data: InventoryItemWrite) {
   const pool = await poolPromise;
 
   // ✅ Get current values
@@ -124,14 +128,21 @@ export async function updateInventoryItem(inventoryId: number, data: InventoryIt
   if (!original) return;
 
   // ✅ Detect changes
-  const changes: Array<{ field: keyof InventoryItem; oldValue: unknown; newValue: unknown }> = [];
+  const changes: Array<{ field: keyof InventoryItemWrite; oldValue: unknown; newValue: unknown }> = [];
 
-  const fields: Array<keyof InventoryItem> = [
-    "itemCode", "itemName", "description", "categoryId",
-    "supplierId", "manufacturerId", "location", "reorderLevel", "uom"
+  const fields: Array<keyof InventoryItemWrite> = [
+    "itemCode",
+    "itemName",
+    "description",
+    "categoryId",
+    "supplierId",
+    "manufacturerId",
+    "location",
+    "reorderLevel",
+    "uom",
   ];
 
-  const mapping: Record<keyof InventoryItem, string> = {
+  const mapping: Record<keyof InventoryItemWrite, string> = {
     itemCode: "ItemCode",
     itemName: "ItemName",
     description: "Description",
@@ -208,21 +219,15 @@ export async function softDeleteInventoryItem(inventoryId: number) {
     .query(`UPDATE InventoryItems SET IsActive = 0 WHERE InventoryID = @InventoryID`);
 }
 
-export async function getInventoryList(): Promise<{
-  InventoryID: number;
-  SheetName: string;
-  Quantity: number;
-  WarehouseName: string;
-  LastUpdated: string;
-}[]> {
+export async function getInventoryList(): Promise<InventoryListItem[]> {
   const pool = await poolPromise;
   const result = await pool.request().query(`
     SELECT 
-      i.InventoryID,
-      ii.ItemName AS SheetName,
-      i.Quantity AS Quantity,
-      w.WarehouseName AS WarehouseName,
-      i.LastUpdated AS LastUpdated
+      i.InventoryID AS inventoryId,
+      ii.ItemName AS sheetName,
+      i.Quantity AS quantity,
+      w.WarehouseName AS warehouseName,
+      i.LastUpdated AS lastUpdated
     FROM Inventory i
 	  JOIN InventoryItems ii ON i.InventoryID = ii.InventoryID
     JOIN Warehouses w ON i.WarehouseID = w.WarehouseID

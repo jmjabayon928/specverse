@@ -1,21 +1,24 @@
 // src/backend/middleware/errorHandler.ts
-
 import type { ErrorRequestHandler } from 'express'
 import { AppError } from '../errors/AppError'
 
 export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
+  // keep the next parameter to satisfy Express' error signature
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _unused = next
 
-  const statusCode =
-    err instanceof AppError && typeof err.statusCode === 'number'
-      ? err.statusCode
-      : 500
+  let statusCode = 500
+  let message = 'Internal server error'
 
-  const message =
-    err instanceof AppError && typeof err.message === 'string'
-      ? err.message
-      : 'Internal server error'
+  if (err instanceof AppError) {
+    if (typeof err.statusCode === 'number') {
+      statusCode = err.statusCode
+    }
+
+    if (typeof err.message === 'string') {
+      message = err.message
+    }
+  }
 
   if (process.env.NODE_ENV !== 'production') {
     console.error(err)
@@ -23,4 +26,3 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
 
   res.status(statusCode).json({ error: message })
 }
-

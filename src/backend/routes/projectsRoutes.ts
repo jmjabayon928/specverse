@@ -1,5 +1,6 @@
-import { Router } from "express";
-import { verifyToken } from "../middleware/authMiddleware";
+// src/backend/routes/projectsRoutes.ts
+import { Router } from 'express'
+import { verifyToken } from '../middleware/authMiddleware'
 import {
   listProjects,
   getProject,
@@ -7,15 +8,15 @@ import {
   updateProject,
   deleteProject,
   getProjectOptions,
-} from "../controllers/projectsController";
+} from '../controllers/projectsController'
 
-const router = Router();
+const router = Router()
 
-router.get("/", verifyToken, listProjects);
-router.get("/options", verifyToken, getProjectOptions); // clients + managers for form
-router.get("/:id", verifyToken, getProject);
-router.post("/", verifyToken, createProject);
-router.patch("/:id", verifyToken, updateProject);
-router.delete("/:id", verifyToken, deleteProject);
+router.get('/', verifyToken, listProjects)
+router.get('/options', verifyToken, getProjectOptions)
+router.get('/:id', verifyToken, getProject)
+router.post('/', verifyToken, createProject)
+router.patch('/:id', verifyToken, updateProject)
+router.delete('/:id', verifyToken, deleteProject)
 
-export default router;
+export default router

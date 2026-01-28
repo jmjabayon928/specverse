@@ -24,7 +24,9 @@ export default function WorkflowSankeyChartFilledSheets() {
   useEffect(() => {
     const fetchSankeyData = async () => {
       try {
-        const res = await fetch("/api/backend/reports/filledsheet-workflow-sankey");
+        const res = await fetch("/api/backend/reports/filledsheet-workflow-sankey", {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
 
         const json = await res.json();

@@ -37,3 +37,35 @@ export async function insertAuditLog(entry: AuditLogInput): Promise<void> {
         (@TableName, @RecordID, @Action, @PerformedBy, GETDATE(), @Route, @Method, @StatusCode, @Changes)
     `);
 }
+
+export interface GetAuditLogsForRecordInput {
+  tableName: "Sheets";
+  recordId: number;
+  limit: number;
+}
+
+export async function getAuditLogsForRecord(
+  input: GetAuditLogsForRecordInput
+): Promise<unknown[]> {
+  const pool = await poolPromise;
+
+  const result = await pool
+    .request()
+    .input("TableName", sql.NVarChar(255), input.tableName)
+    .input("RecordID", sql.Int, input.recordId)
+    .input("Limit", sql.Int, input.limit)
+    .query(`
+      SELECT TOP (@Limit)
+        a.*,
+        u.UserID AS PerformedByUserID,
+        u.FirstName + ' ' + u.LastName AS PerformedByName,
+        CONVERT(varchar, a.PerformedAt, 126) AS PerformedAtISO
+      FROM AuditLogs a
+        LEFT JOIN Users u ON u.UserID = a.PerformedBy
+      WHERE a.TableName = @TableName
+        AND a.RecordID = @RecordID
+      ORDER BY a.PerformedAt DESC
+    `);
+
+  return result.recordset as unknown[];
+}

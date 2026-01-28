@@ -34,7 +34,9 @@ const PendingVerifications: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/backend/stats/pending-verifications");
+        const res = await fetch("/api/backend/stats/pending-verifications", {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error("Failed to fetch pending verifications");
 
         const json: RawPendingVerification[] = await res.json();

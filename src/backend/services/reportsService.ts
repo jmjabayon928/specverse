@@ -39,7 +39,7 @@ export const getVendorQuotesFromDB = async (estimationId: number) => {
       JOIN InventoryItems i ON ei.ItemID = i.InventoryID
       JOIN EstimationItemSupplierQuotes qis ON ei.ItemID = qis.ItemID
       JOIN Suppliers s ON qis.SupplierID = s.SuppID
-      WHERE ei.EstimationID = 1
+      WHERE ei.EstimationID = @EstimationID
       ORDER BY i.ItemName, s.SuppName
     `);
 
@@ -133,14 +133,16 @@ export async function getInventoryContributionFromDB() {
   const rows = result.recordset;
   const grouped: Record<string, { itemName: string; quantity: number }[]> = {};
 
-  rows.forEach(row => {
-    const category = row.CategoryName || "Uncategorized";
-    if (!grouped[category]) grouped[category] = [];
+  for (const row of rows) {
+    const category = row.CategoryName ?? 'Uncategorized'
+
+    grouped[category] ??= []
+
     grouped[category].push({
       itemName: row.ItemName,
-      quantity: Number(row.QuantityOnHand) || 0,
-    });
-  });
+      quantity: Number(row.QuantityOnHand) || 0
+    })
+  }
 
   return Object.entries(grouped).map(([categoryName, items]) => ({
     categoryName,
@@ -211,10 +213,10 @@ export async function getTemplateWorkflowSankeyData() {
 
   const links: { source: number; target: number; value: number }[] = [];
 
-  const statusCount: Record<string, number> = {};
-  rows.forEach((row) => {
-    statusCount[row.Status] = row.Count;
-  });
+  const statusCount: Record<string, number> = {}
+  for (const row of rows) {
+    statusCount[row.Status] = row.Count
+  }
 
   // Construct hypothetical transitions based on counts
   if (statusCount.Verified) {
@@ -250,10 +252,13 @@ export async function getFilledSheetWorkflowSankeyFromDB() {
   const nodeIndexMap: Record<string, number> = {};
   const nodes: { name: string; id: string }[] = [];
 
-  statusOrder.forEach((status, index) => {
-    nodeIndexMap[status] = index;
-    nodes.push({ name: status, id: `${status}-${index}` }); // ✅ Include id for frontend
-  });
+  for (const [index, status] of statusOrder.entries()) {
+    nodeIndexMap[status] = index
+    nodes.push({
+      name: status,
+      id: `${status}-${index}`
+    })
+  }
 
   const links: { source: number; target: number; value: number }[] = [];
 

@@ -1,317 +1,481 @@
 // src/backend/controllers/layoutController.ts
-import type { RequestHandler } from "express";
-import { poolPromise } from "../config/db";
-import * as svc from "@/backend/services/layoutService";
-import type { PaperSize, Orientation, LayoutBundle, UomSystem, LangCode } from "@/domain/layouts/layoutTypes";
+import type { RequestHandler } from 'express'
+import { z } from 'zod'
+import { poolPromise } from '../config/db'
+import * as svc from '@/backend/services/layoutService'
+import type {
+  PaperSize,
+  Orientation,
+  LayoutBundle,
+  UomSystem,
+  LangCode,
+} from '@/domain/layouts/layoutTypes'
 
 type BodySlotRow = Readonly<{
-  slotIndex: number;
-  subsheetId: number;
-  columnNumber: 1 | 2;
-  rowNumber: number; 
-  width: 1 | 2;
-}>;
+  slotIndex: number
+  subsheetId: number
+  columnNumber: 1 | 2
+  rowNumber: number
+  width: 1 | 2
+}>
 
-function toInt(v: unknown): number | null {
-  const n = Number(v);
-  return Number.isInteger(n) ? n : null;
-}
+// ───────────────────────── Zod schemas ─────────────────────────
 
-function toOneTwo(v: unknown): 1 | 2 | null {
-  const n = Number(v);
-  if (n === 1) return 1;
-  if (n === 2) return 2;
-  return null;
-}
+const listLayoutsQuerySchema = z.object({
+  templateId: z.coerce.number().int().positive().optional(),
+  clientId: z.coerce.number().int().positive().optional(),
+})
+
+const createLayoutBodySchema = z
+  .object({
+    templateId: z.coerce.number().int().positive().nullable().optional(),
+    clientId: z.coerce.number().int().positive().nullable().optional(),
+    paperSize: z.string().optional(), // keep loose to avoid changing behavior
+    orientation: z.string().optional(), // same here
+  })
+  .passthrough()
+
+const subsheetSlotsBodySchema = z
+  .object({
+    merged: z.boolean().optional(),
+    left: z
+      .array(
+        z
+          .object({
+            index: z.coerce.number().int().nonnegative(),
+            infoTemplateId: z.coerce.number().int().positive(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+    right: z
+      .array(
+        z
+          .object({
+            index: z.coerce.number().int().nonnegative(),
+            infoTemplateId: z.coerce.number().int().positive(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough()
+
+const bodySlotSchema = z.object({
+  slotIndex: z.coerce.number().int().nonnegative(),
+  subsheetId: z.coerce.number().int().positive(),
+  columnNumber: z
+    .coerce
+    .number()
+    .pipe(z.union([z.literal(1), z.literal(2)])),
+  rowNumber: z.coerce.number().int().positive(),
+  width: z
+    .coerce
+    .number()
+    .pipe(z.union([z.literal(1), z.literal(2)])),
+})
+
+const saveLayoutBodySlotsBodySchema = z.object({
+  slots: z.array(bodySlotSchema).default([]),
+})
+
+// ───────────────────────── small helpers ─────────────────────────
 
 function parseStringParam(input: unknown): string | undefined {
-  if (typeof input === "string") return input;
-  if (Array.isArray(input) && input.length > 0 && typeof input[0] === "string") return input[0];
-  return undefined;
+  if (typeof input === 'string') {
+    return input
+  }
+
+  if (Array.isArray(input) && input.length > 0 && typeof input[0] === 'string') {
+    return input[0]
+  }
+
+  return undefined
 }
+
 function parseNumberParam(input: unknown): number | undefined {
-  const s = parseStringParam(input);
-  if (s === undefined) return undefined;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : undefined;
+  const asString = parseStringParam(input)
+  if (asString === undefined) {
+    return undefined
+  }
+
+  const numeric = Number(asString)
+  if (!Number.isFinite(numeric)) {
+    return undefined
+  }
+
+  return numeric
 }
+
 function parseUomParam(input: unknown): UomSystem | undefined {
-  const s = parseStringParam(input);
-  if (!s) return undefined;
-  const up = s.toUpperCase();
-  return up === "SI" || up === "USC" ? (up as UomSystem) : undefined;
+  const asString = parseStringParam(input)
+  if (!asString) {
+    return undefined
+  }
+
+  const upper = asString.toUpperCase()
+  if (upper === 'SI' || upper === 'USC') {
+    return upper as UomSystem
+  }
+
+  return undefined
 }
+
 function parseLangParam(input: unknown): LangCode | undefined {
-  const s = parseStringParam(input);
-  return s === "en" ? "en" : undefined; // extend later if you add locales
+  const asString = parseStringParam(input)
+  if (asString === 'en') {
+    return 'en'
+  }
+
+  // extend when you add more locales
+  return undefined
 }
 
-function parseSlotRow(o: Record<string, unknown>): BodySlotRow | { error: string } {
-  const slotIndex = toInt(o.slotIndex);
-  if (slotIndex === null || slotIndex < 0) return { error: "Invalid slotIndex" };
-
-  const subsheetId = toInt(o.subsheetId);
-  if (subsheetId === null || subsheetId <= 0) return { error: "Invalid subsheetId" };
-
-  const columnNumber = toOneTwo(o.columnNumber);
-  if (columnNumber === null) return { error: "Invalid columnNumber" };
-
-  const rowNumber = toInt(o.rowNumber);
-  if (rowNumber === null || rowNumber <= 0) return { error: "Invalid rowNumber" };
-
-  const width = toOneTwo(o.width);
-  if (width === null) return { error: "Invalid width" };
-
-  return { slotIndex, subsheetId, columnNumber, rowNumber, width };
+function buildZodErrorPayload(error: z.ZodError) {
+  return {
+    error: 'Invalid request payload',
+    details: error.errors.map(err => ({
+      path: err.path.join('.'),
+      message: err.message,
+    })),
+  }
 }
+
+function toBodySlotRow(raw: unknown): BodySlotRow | { error: string } {
+  const result = bodySlotSchema.safeParse(raw)
+
+  if (!result.success) {
+    const first = result.error.errors[0]
+    const message = first ? `${first.path.join('.')}: ${first.message}` : 'Invalid slot payload'
+    return { error: message }
+  }
+
+  const data = result.data
+
+  return {
+    slotIndex: data.slotIndex,
+    subsheetId: data.subsheetId,
+    columnNumber: data.columnNumber,
+    rowNumber: data.rowNumber,
+    width: data.width,
+  }
+}
+
+// ───────────────────────── controllers ─────────────────────────
 
 export const listLayouts: RequestHandler = async (req, res) => {
-  const templateId = req.query.templateId ? Number(req.query.templateId) : null;
-  const clientId = req.query.clientId ? Number(req.query.clientId) : null;
-  const rows = await svc.listLayouts({ templateId, clientId });
-  res.json(rows);
-};
+  const parsed = listLayoutsQuerySchema.safeParse(req.query)
+
+  if (!parsed.success) {
+    return res.status(400).json(buildZodErrorPayload(parsed.error))
+  }
+
+  const { templateId = null, clientId = null } = parsed.data
+
+  const rows = await svc.listLayouts({ templateId, clientId })
+  res.json(rows)
+}
 
 export const getSubsheetInfoTemplates: RequestHandler = async (req, res) => {
-  const subId = Number(req.params.subId);
-  if (!Number.isFinite(subId) || subId <= 0) {
-    return res.status(400).json({ error: "Invalid subId" });
+  const subIdNumeric = Number(req.params.subId)
+  const hasValidSubId = Number.isFinite(subIdNumeric) && subIdNumeric > 0
+
+  if (!hasValidSubId) {
+    return res.status(400).json({ error: 'Invalid subId' })
   }
 
   try {
-    const db = await poolPromise; 
-    const templates = await svc.listInfoTemplatesBySubId(db, subId);
-    return res.json({ templates });
+    const db = await poolPromise
+    const templates = await svc.listInfoTemplatesBySubId(db, subIdNumeric)
+    return res.json({ templates })
   } catch (error) {
-    let message = "Unknown error";
-    if (error instanceof Error) message = error.message;
-    else if (typeof error === "string") message = error;
+    let message = 'Unknown error'
 
-    console.error(`[getSubsheetInfoTemplates] subId=${subId} failed: ${message}`, error);
-    return res.status(500).json({ error: "Failed to load info templates" });
+    if (error instanceof Error) {
+      message = error.message
+    } else if (typeof error === 'string') {
+      message = error
+    }
+
+    console.error(`[getSubsheetInfoTemplates] subId=${subIdNumeric} failed: ${message}`, error)
+    return res.status(500).json({ error: 'Failed to load info templates' })
   }
-};
+}
 
 export const createLayout: RequestHandler = async (req, res) => {
-  const {
-    templateId = null,
-    clientId = null,
-    paperSize = "A4",
-    orientation = "portrait",
-  }: { templateId?: number | null; clientId?: number | null; paperSize?: PaperSize; orientation?: Orientation } = req.body ?? {};
-  const id = await svc.createLayout({ templateId, clientId, paperSize, orientation });
-  res.status(201).json({ layoutId: id });
-};
+  const parsed = createLayoutBodySchema.safeParse(req.body ?? {})
+
+  if (!parsed.success) {
+    return res.status(400).json(buildZodErrorPayload(parsed.error))
+  }
+
+  const body = parsed.data
+
+  const args: {
+    templateId: number | null
+    clientId: number | null
+    paperSize: PaperSize
+    orientation: Orientation
+  } = {
+    templateId: body.templateId ?? null,
+    clientId: body.clientId ?? null,
+    paperSize: (body.paperSize ?? 'A4') as PaperSize,
+    orientation: (body.orientation ?? 'portrait') as Orientation,
+  }
+
+  const id = await svc.createLayout(args)
+  res.status(201).json({ layoutId: id })
+}
 
 export const getLayout: RequestHandler = async (req, res) => {
-  const layoutId = Number(req.params.layoutId);
-  const bundle: LayoutBundle | null = await svc.getLayoutBundle(layoutId);
-  if (!bundle) return res.status(404).json({ error: "Layout not found" });
-  res.json(bundle);
-};
+  const layoutIdNumeric = Number(req.params.layoutId)
+
+  const bundle: LayoutBundle | null = await svc.getLayoutBundle(layoutIdNumeric)
+  if (!bundle) {
+    return res.status(404).json({ error: 'Layout not found' })
+  }
+
+  res.json(bundle)
+}
 
 export const getLayoutStructure: RequestHandler = async (req, res) => {
-  const layoutIdNum = Number(req.params.layoutId);
-  if (!Number.isFinite(layoutIdNum) || layoutIdNum <= 0) {
-    return res.status(400).json({ error: "Invalid layoutId" });
+  const layoutIdNumeric = Number(req.params.layoutId)
+  const hasValidId = Number.isFinite(layoutIdNumeric) && layoutIdNumeric > 0
+
+  if (!hasValidId) {
+    return res.status(400).json({ error: 'Invalid layoutId' })
   }
+
   try {
-    const data = await svc.getLayoutTemplateStructure(layoutIdNum);
-    return res.json(data);
-  } catch (err) {
-    console.error("Failed to load layout template structure:", err);
-    return res.status(500).json({ error: "Failed to load layout template structure" });
+    const data = await svc.getLayoutTemplateStructure(layoutIdNumeric)
+    return res.json(data)
+  } catch (error) {
+    console.error('Failed to load layout template structure:', error)
+    return res.status(500).json({ error: 'Failed to load layout template structure' })
   }
-};
+}
 
 export const updateLayoutMeta: RequestHandler = async (req, res) => {
-  const layoutId = Number(req.params.layoutId);
-  await svc.updateLayoutMeta(layoutId, req.body);
-  res.json({ ok: true });
-};
+  const layoutIdNumeric = Number(req.params.layoutId)
+  await svc.updateLayoutMeta(layoutIdNumeric, req.body)
+  res.json({ ok: true })
+}
 
 export const addRegion: RequestHandler = async (req, res) => {
-  const layoutId = Number(req.params.layoutId);
-  const regionId = await svc.addRegion(layoutId, req.body);
-  res.status(201).json({ regionId });
-};
+  const layoutIdNumeric = Number(req.params.layoutId)
+  const regionId = await svc.addRegion(layoutIdNumeric, req.body)
+  res.status(201).json({ regionId })
+}
 
 export const updateRegion: RequestHandler = async (req, res) => {
-  const regionId = Number(req.params.regionId);
-  await svc.updateRegion(regionId, req.body);
-  res.json({ ok: true });
-};
+  const regionIdNumeric = Number(req.params.regionId)
+  await svc.updateRegion(regionIdNumeric, req.body)
+  res.json({ ok: true })
+}
 
 export const addBlock: RequestHandler = async (req, res) => {
-  const regionId = Number(req.params.regionId);
-  const blockId = await svc.addBlock(regionId, req.body);
-  res.status(201).json({ blockId });
-};
+  const regionIdNumeric = Number(req.params.regionId)
+  const blockId = await svc.addBlock(regionIdNumeric, req.body)
+  res.status(201).json({ blockId })
+}
 
 export const updateBlock: RequestHandler = async (req, res) => {
-  const blockId = Number(req.params.blockId);
-  await svc.updateBlock(blockId, req.body);
-  res.json({ ok: true });
-};
+  const blockIdNumeric = Number(req.params.blockId)
+  await svc.updateBlock(blockIdNumeric, req.body)
+  res.json({ ok: true })
+}
 
 export const saveSubsheetSlots: RequestHandler = async (req, res) => {
-  const layoutId = Number(req.params.layoutId);
-  const subId = Number(req.params.subId);
-  if (!Number.isFinite(layoutId) || !Number.isFinite(subId)) {
-    return res.status(400).json({ error: "Invalid layoutId or subId" });
+  const layoutIdNumeric = Number(req.params.layoutId)
+  const subIdNumeric = Number(req.params.subId)
+
+  const hasValidLayoutId = Number.isFinite(layoutIdNumeric)
+  const hasValidSubId = Number.isFinite(subIdNumeric)
+
+  if (!hasValidLayoutId || !hasValidSubId) {
+    return res.status(400).json({ error: 'Invalid layoutId or subId' })
   }
 
-  const body = req.body as {
-    merged?: boolean;
-    left?: Array<{ column: "left"; index: number; infoTemplateId: number }>;
-    right?: Array<{ column: "right"; index: number; infoTemplateId: number }>;
-  };
+  const parsed = subsheetSlotsBodySchema.safeParse(req.body ?? {})
+
+  if (!parsed.success) {
+    return res.status(400).json(buildZodErrorPayload(parsed.error))
+  }
+
+  const payload = parsed.data
 
   try {
-    const db = await poolPromise;
-    await svc.saveSubsheetSlots(db, layoutId, subId, body);
-    return res.json({ ok: true });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    return res.status(500).json({ error: msg });
+    const db = await poolPromise
+    await svc.saveSubsheetSlots(db, layoutIdNumeric, subIdNumeric, payload)
+    return res.json({ ok: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return res.status(500).json({ error: message })
   }
-};
+}
 
 export const saveLayoutBodySlots: RequestHandler = async (req, res) => {
-  const layoutId = Number(req.params.layoutId);
-  if (!Number.isFinite(layoutId) || layoutId <= 0) {
-    return res.status(400).json({ error: "Invalid layoutId" });
+  const layoutIdNumeric = Number(req.params.layoutId)
+  const hasValidId = Number.isFinite(layoutIdNumeric) && layoutIdNumeric > 0
+
+  if (!hasValidId) {
+    return res.status(400).json({ error: 'Invalid layoutId' })
   }
 
-  const slotsUnknown = (req.body?.slots ?? []) as unknown;
-  if (!Array.isArray(slotsUnknown)) {
-    return res.status(400).json({ error: "Payload must include slots: []" });
+  const parsed = saveLayoutBodySlotsBodySchema.safeParse(req.body ?? {})
+
+  if (!parsed.success) {
+    return res.status(400).json(buildZodErrorPayload(parsed.error))
   }
 
-  const normalized: BodySlotRow[] = [];
-  for (const raw of slotsUnknown) {
-    if (!raw || typeof raw !== "object") {
-      return res.status(400).json({ error: "Each slot must be an object" });
+  const { slots } = parsed.data
+
+  const normalized: BodySlotRow[] = []
+  for (const raw of slots) {
+    const result = toBodySlotRow(raw)
+    if ('error' in result) {
+      return res.status(400).json({ error: result.error })
     }
-    const parsed = parseSlotRow(raw as Record<string, unknown>); // your helper
-    if ("error" in parsed) {
-      return res.status(400).json({ error: parsed.error });
-    }
-    normalized.push(parsed);
+    normalized.push(result)
   }
 
-  // ✅ Pre-validate: unique slotIndex
-  {
-    const seen = new Set<number>();
-    for (const s of normalized) {
-      if (seen.has(s.slotIndex)) {
-        return res.status(400).json({ error: `Duplicate slotIndex ${s.slotIndex}` });
-      }
-      seen.add(s.slotIndex);
+  const seen = new Set<number>()
+  for (const slot of normalized) {
+    const alreadySeen = seen.has(slot.slotIndex)
+    if (alreadySeen) {
+      return res.status(400).json({ error: `Duplicate slotIndex ${slot.slotIndex}` })
     }
+    seen.add(slot.slotIndex)
   }
 
   try {
-    // Helpful trace (feel free to remove later)
-    if (process.env.NODE_ENV !== "production") {
-      console.debug("[saveLayoutBodySlots] layoutId:", layoutId, "rows:", normalized.length);
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug(
+        '[saveLayoutBodySlots] layoutId:',
+        layoutIdNumeric,
+        'rows:',
+        normalized.length,
+      )
     }
 
-    await svc.saveLayoutBodySlots(layoutId, normalized);
-    return res.json({ ok: true, count: normalized.length });
-  } catch (e: unknown) {
-    // ⛑️ Log useful SQL error info to server logs
-    const err = e as { message?: string; stack?: string; originalError?: { info?: unknown } };
-    console.error("saveLayoutBodySlots failed:", {
+    await svc.saveLayoutBodySlots(layoutIdNumeric, normalized)
+    return res.json({ ok: true, count: normalized.length })
+  } catch (error) {
+    const err = error as {
+      message?: string
+      stack?: string
+      originalError?: { info?: unknown }
+    }
+
+    console.error('saveLayoutBodySlots failed:', {
       message: err?.message,
       info: err?.originalError?.info,
       stack: err?.stack,
-      layoutId,
+      layoutId: layoutIdNumeric,
       rows: normalized,
-    });
-    return res.status(500).json({ error: "Failed to save layout body slots" });
+    })
+
+    return res.status(500).json({ error: 'Failed to save layout body slots' })
   }
-};
+}
 
 export const getLayoutBodySlots: RequestHandler = async (req, res) => {
-  const layoutId = Number(req.params.layoutId);
-  if (!Number.isFinite(layoutId) || layoutId <= 0) {
-    return res.status(400).json({ error: "Invalid layoutId" });
+  const layoutIdNumeric = Number(req.params.layoutId)
+  const hasValidId = Number.isFinite(layoutIdNumeric) && layoutIdNumeric > 0
+
+  if (!hasValidId) {
+    return res.status(400).json({ error: 'Invalid layoutId' })
   }
+
   try {
-    const rows = await svc.listLayoutBodySlots(layoutId);
-    return res.json({ slots: rows });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    return res.status(500).json({ error: msg });
+    const rows = await svc.listLayoutBodySlots(layoutIdNumeric)
+    return res.json({ slots: rows })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return res.status(500).json({ error: message })
   }
-};
+}
 
 export const renderLayout: RequestHandler = async (req, res) => {
-  // params (narrow to number or return early)
-  const layoutIdMaybe = parseNumberParam(req.params?.layoutId);
+  const layoutIdMaybe = parseNumberParam(req.params?.layoutId)
   if (layoutIdMaybe === undefined) {
-    return res.status(400).json({ error: "layoutId (param) is required and must be a number" });
+    return res
+      .status(400)
+      .json({ error: 'layoutId (param) is required and must be a number' })
   }
-  const layoutId: number = layoutIdMaybe; // now narrowed
+  const layoutId = layoutIdMaybe
 
-  // query (narrow to number or return early)
-  const sheetIdMaybe = parseNumberParam(req.query?.sheetId);
+  const sheetIdMaybe = parseNumberParam(req.query?.sheetId)
   if (sheetIdMaybe === undefined) {
-    return res.status(400).json({ error: "sheetId (query) is required and must be a number" });
+    return res
+      .status(400)
+      .json({ error: 'sheetId (query) is required and must be a number' })
   }
-  const sheetId: number = sheetIdMaybe; // now narrowed
+  const sheetId = sheetIdMaybe
 
-  // enums with safe defaults (no String(...) on unknowns)
-  const uom: UomSystem = parseUomParam(req.query?.uom) ?? "SI";
-  const lang: LangCode = parseLangParam(req.query?.lang) ?? "en";
+  const uom: UomSystem = parseUomParam(req.query?.uom) ?? 'SI'
+  const lang: LangCode = parseLangParam(req.query?.lang) ?? 'en'
 
-  if (uom !== "SI" && uom !== "USC") {
-    return res.status(400).json({ error: "uom must be SI or USC" });
+  if (uom !== 'SI' && uom !== 'USC') {
+    return res.status(400).json({ error: 'uom must be SI or USC' })
   }
-  if (lang !== "en") {
-    return res.status(400).json({ error: "lang currently supports 'en' only" });
+
+  if (lang !== 'en') {
+    return res.status(400).json({ error: "lang currently supports 'en' only" })
   }
 
   try {
-    const payload = await svc.renderLayout({ layoutId, sheetId, uom, lang });
-    return res.json(payload);
-  } catch (err) {
-    console.error("renderLayout failed:", err);
-    const isDev = process.env.NODE_ENV !== "production";
-    const payload = isDev && err instanceof Error
-      ? { error: "Failed to render layout", message: err.message }
-      : { error: "Failed to render layout" };
-    return res.status(500).json(payload);
+    const payload = await svc.renderLayout({ layoutId, sheetId, uom, lang })
+    return res.json(payload)
+  } catch (error) {
+    console.error('renderLayout failed:', error)
+
+    const isDev = process.env.NODE_ENV !== 'production'
+    const base = { error: 'Failed to render layout' }
+
+    if (isDev && error instanceof Error) {
+      return res.status(500).json({ ...base, message: error.message })
+    }
+
+    return res.status(500).json(base)
   }
-};
+}
 
 export const getStructure: RequestHandler = async (req, res) => {
-  const layoutId = Number(req.params.layoutId);
-  if (!Number.isFinite(layoutId) || layoutId <= 0) {
-    res.status(400).json({ error: "Invalid layoutId" });
-    return;
+  const layoutIdNumeric = Number(req.params.layoutId)
+  const hasValidId = Number.isFinite(layoutIdNumeric) && layoutIdNumeric > 0
+
+  if (!hasValidId) {
+    res.status(400).json({ error: 'Invalid layoutId' })
+    return
   }
+
   try {
-    const data = await svc.getLayoutStructureData(layoutId); // <-- renamed service
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to load structure" });
+    const data = await svc.getLayoutStructureData(layoutIdNumeric)
+    res.json(data)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load structure'
+    res.status(500).json({ error: message })
   }
-};
+}
 
 export const getSubsheetSlots: RequestHandler = async (req, res) => {
-  const layoutId = Number(req.params.layoutId);
-  const subId = Number(req.params.subId);
-  if (!Number.isFinite(layoutId) || !Number.isFinite(subId)) {
-    res.status(400).json({ error: "Invalid layoutId or subId" });
-    return;
+  const layoutIdNumeric = Number(req.params.layoutId)
+  const subIdNumeric = Number(req.params.subId)
+
+  const hasValidLayoutId = Number.isFinite(layoutIdNumeric)
+  const hasValidSubId = Number.isFinite(subIdNumeric)
+
+  if (!hasValidLayoutId || !hasValidSubId) {
+    res.status(400).json({ error: 'Invalid layoutId or subId' })
+    return
   }
+
   try {
-    const cfg = await svc.getSubsheetSlotsConfig(layoutId, subId);
-    res.json(cfg);
-  } catch (err) {
-    console.error("Failed to load subsheet slots:", err);
-    res.status(500).json({ error: "Failed to load subsheet slots" });
+    const config = await svc.getSubsheetSlots(layoutIdNumeric, subIdNumeric)
+    res.json(config)
+  } catch (error) {
+    console.error('Failed to load subsheet slots:', error)
+    res.status(500).json({ error: 'Failed to load subsheet slots' })
   }
-};
+}

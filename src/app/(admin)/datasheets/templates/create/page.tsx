@@ -1,15 +1,14 @@
 // src/app/(admin)/datasheets/templates/create/page.tsx
 
-"use client";
+import SecurePage from '@/components/security/SecurePage'
+import TemplateCreatorForm from './TemplateCreatorForm'
 
-import React from "react";
-import SecurePage from "@/components/security/SecurePage";
-import TemplateCreatorForm from "./TemplateCreatorForm";
-
-export default function CreateTemplatePage() {
+const CreateTemplatePage = () => {
   return (
-    <SecurePage requiredPermission="TEMPLATE_CREATE">
-      <TemplateCreatorForm mode="create" />
+    <SecurePage requiredPermission='TEMPLATE_CREATE'>
+      <TemplateCreatorForm />
     </SecurePage>
-  );
+  )
 }
+
+export default CreateTemplatePage

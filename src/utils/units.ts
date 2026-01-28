@@ -1,7 +1,8 @@
 // src/utils/units.ts
 
 /**
- * SI Units grouped by category for select dropdowns (sorted alphabetically)
+ * SI units grouped by category for select dropdowns.
+ * Values are kept as display strings and are not normalized here.
  */
 export const groupedSIUnits: Record<string, string[]> = {
   Acceleration: ['m/s²'],
@@ -24,5 +25,5 @@ export const groupedSIUnits: Record<string, string[]> = {
   Viscosity: ['Pa·s', 'mPa.s', 'cP'],
   Volume: ['m³', 'L', 'm³/min'],
   VolumeFlowRate: ['m³/h', 'L/min', 'Nm³/h'],
-  Weight: ['kg', 'g']
-};
+  Weight: ['kg', 'g'],
+}

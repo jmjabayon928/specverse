@@ -150,16 +150,31 @@ function collectParams(spec: MergeSpec): InputParam[] {
   for (const [k, v] of Object.entries(spec.updateCols)) merged.set(k, v);
   for (const [k, v] of Object.entries(spec.insertCols)) merged.set(k, v);
 
-  const params: InputParam[] = [];
-  merged.forEach((value, name) => {
-    if (typeof value === "string") {
-      params.push({ name, value, type: sql.NVarChar(sql.MAX) });
-    } else if (typeof value === "number") {
-      params.push({ name, value });
-    } else {
-      params.push({ name, value });
+  const params: InputParam[] = []
+
+  for (const [name, value] of merged.entries()) {
+    if (typeof value === 'string') {
+      params.push({
+        name,
+        value,
+        type: sql.NVarChar(sql.MAX)
+      })
+      continue
     }
-  });
+
+    if (typeof value === 'number') {
+      params.push({
+        name,
+        value
+      })
+      continue
+    }
+
+    params.push({
+      name,
+      value
+    })
+  }
 
   return params;
 }

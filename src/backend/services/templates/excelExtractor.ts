@@ -1,8 +1,10 @@
 // src/backend/services/templates/excelExtractor.ts
+// Helpers for reading “starter” Excel datasheets and inferring labels,
+// value regions, and layout hints for the template import flow.
 import ExcelJS, { Worksheet, CellValue } from "exceljs";
 
 /** ----- Types ----- */
-export interface LearnOut {
+export interface ExcelTemplateAnalysis {
   workbookMeta: {
     sheetName: string;
     rowCount: number;
@@ -16,7 +18,7 @@ export interface LearnOut {
 }
 
 /** ----- Public API ----- */
-export async function excelLearn(filePath: string): Promise<LearnOut> {
+export async function analyzeExcelTemplate(filePath: string): Promise<ExcelTemplateAnalysis> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(filePath);
 
@@ -27,7 +29,7 @@ export async function excelLearn(filePath: string): Promise<LearnOut> {
   const rowCount = ws.actualRowCount || ws.rowCount || 0;
   const columnCount = ws.actualColumnCount || ws.columnCount || 0;
 
-  const mergedCells = safeMergedRanges(ws);
+  const mergedCells = getMergedRanges(ws);
   const boldTitles = extractBoldTitles(ws);
   const { labelValuePairs, detectedLabels } = extractLabelValuePairs(ws);
 
@@ -67,7 +69,7 @@ function hasResult(v: unknown): v is { result: unknown } {
 }
 
 // ---- Object-only parser (keeps cellText simple) ----
-function objectCellText(obj: object): string | null {
+function extractTextFromExcelObject(obj: object): string | null {
   if (obj instanceof Date) return obj.toISOString();
   if (isTextObj(obj)) return obj.text;
   if (isRichTextObj(obj)) return obj.richText.map(p => p.text).join("");
@@ -89,7 +91,7 @@ function cellText(cellValue: CellValue): string {
   if (typeof cellValue === "boolean") return cellValue ? "true" : "false";
 
   if (typeof cellValue === "object") {
-    const s = objectCellText(cellValue as object);
+    const s = extractTextFromExcelObject(cellValue as object);
     return s ?? "";
   }
 
@@ -143,7 +145,7 @@ function tryCollectPair(
   r: number,
   c: number,
   maxCol: number,
-  pairs: LearnOut["labelValuePairs"],
+  pairs: ExcelTemplateAnalysis["labelValuePairs"],
   dedup: Map<string, { label: string; address: string }>
 ): void {
   const leftRaw = cellText(ws.getCell(r, c).value).trim();
@@ -165,10 +167,10 @@ function tryCollectPair(
 
 // ---- Refactored function ----
 function extractLabelValuePairs(ws: Worksheet): {
-  labelValuePairs: LearnOut["labelValuePairs"];
-  detectedLabels: LearnOut["detectedLabels"];
+  labelValuePairs: ExcelTemplateAnalysis["labelValuePairs"];
+  detectedLabels: ExcelTemplateAnalysis["detectedLabels"];
 } {
-  const pairs: LearnOut["labelValuePairs"] = [];
+  const pairs: ExcelTemplateAnalysis["labelValuePairs"] = [];
   const dedup = new Map<string, { label: string; address: string }>();
 
   const maxRow = ws.actualRowCount || ws.rowCount || 0;
@@ -192,7 +194,7 @@ function extractLabelValuePairs(ws: Worksheet): {
 type MergedRange = { range: string; top: number; left: number; bottom: number; right: number };
 type MergeRect = { top: number; left: number; bottom: number; right: number };
 
-function safeMergedRanges(ws: Worksheet): MergedRange[] {
+function getMergedRanges(ws: Worksheet): MergedRange[] {
   const byModel = readModelMerges(ws);
   if (byModel.length) return byModel;
 
@@ -218,13 +220,25 @@ function readModelMerges(ws: Worksheet): MergedRange[] {
 }
 
 function readInternalMerges(ws: Worksheet): MergedRange[] {
-  const mm = (ws as unknown as { _merges?: Map<string, MergeRect> })._merges;
-  if (!mm || typeof mm.forEach !== "function") return [];
-  const out: MergedRange[] = [];
-  mm.forEach((rect, key) => {
-    out.push({ range: key, top: rect.top, left: rect.left, bottom: rect.bottom, right: rect.right });
-  });
-  return out;
+  const internalMerges = (ws as unknown as { _merges?: Map<string, MergeRect> })._merges
+
+  if (internalMerges instanceof Map) {
+    const ranges: MergedRange[] = []
+
+    for (const [range, rect] of internalMerges.entries()) {
+      ranges.push({
+        range,
+        top: rect.top,
+        left: rect.left,
+        bottom: rect.bottom,
+        right: rect.right
+      })
+    }
+
+    return ranges
+  }
+
+  return []
 }
 
 function inferMergedRanges(ws: Worksheet): MergedRange[] {
@@ -297,7 +311,7 @@ function toA1Col(n: number): string {
   let out = "";
   while (x > 0) {
     const rem = (x - 1) % 26;
-    out = String.fromCharCode(65 + rem) + out;
+    out = String.fromCodePoint(65 + rem) + out;
     x = Math.floor((x - 1) / 26);
   }
   return out;

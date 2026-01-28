@@ -34,7 +34,9 @@ export default function EstimationCostChart() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/backend/reports/estimation-cost");
+        const res = await fetch("/api/backend/reports/estimation-cost", {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error(`Error: ${res.status}`);
         const result: RawEstimationCostEntry[] = await res.json();
 

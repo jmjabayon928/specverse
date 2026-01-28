@@ -1,162 +1,96 @@
 // src/backend/services/filledSheetService.ts
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { poolPromise, sql } from "../config/db";
-import { insertAuditLog } from "../database/auditQueries";
-import { notifyUsers } from "../utils/notifyUsers";
-import type { 
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
+import { poolPromise, sql } from '../config/db'
+import { insertAuditLog } from '../database/auditQueries'
+import { notifyUsers } from '../utils/notifyUsers'
+import type {
   InfoField,
-  SheetStatus, 
-  UnifiedSheet, 
+  SheetStatus,
+  UnifiedSheet,
   UnifiedSubsheet,
   AttachmentMeta,
   NoteCreatePayload,
   NoteUpdatePayload,
-} from "@/domain/datasheets/sheetTypes";
-import type { AuditContext } from "@/domain/audit/auditTypes";
-import { convertToUSC } from "@/utils/unitConversionTable";
-import { getSheetTranslations } from "@/backend/services/translationService";
-import { applySheetTranslations } from "@/utils/applySheetTranslations";
-import { generateDatasheetPDF } from "@/utils/generateDatasheetPDF";
-import { generateDatasheetExcel } from "@/utils/generateDatasheetExcel";
+  NoteType,
+  SheetNoteDTO,
+  SheetAttachmentDTO,
+  RequiredTemplateField,
+} from '@/domain/datasheets/sheetTypes'
+import type { AuditContext } from '@/domain/audit/auditTypes'
+import { convertToUSC } from '@/utils/unitConversionTable'
+import { getSheetTranslations } from '@/backend/services/translationService'
+import { applySheetTranslations } from '@/utils/applySheetTranslations'
+import { generateDatasheetPDF } from '@/utils/generateDatasheetPDF'
+import { generateDatasheetExcel } from '@/utils/generateDatasheetExcel'
 
-type UOM = "SI" | "USC";
+type UOM = 'SI' | 'USC'
 
 async function ensureDir(dir: string): Promise<void> {
-  try { await fs.mkdir(dir, { recursive: true }); } catch { /* noop */ }
+  try {
+    await fs.mkdir(dir, { recursive: true })
+  } catch {
+    // directory already exists or cannot be created, nothing else to do here
+  }
 }
-async function exists(p: string): Promise<boolean> {
-  try { await fs.stat(p); return true; } catch { return false; }
-}
-
-/** Accept Buffer | {buffer: Buffer} | string | void and ensure outPath exists. */
-async function normalizeToPath(res: unknown, outPath: string): Promise<string> {
-  if (
-    res != null &&
-    typeof res === "object" &&
-    "buffer" in (res as Record<string, unknown>) &&
-    Buffer.isBuffer((res as { buffer?: unknown }).buffer)
-  ) {
-    const buf = (res as { buffer: Buffer }).buffer;
-    await fs.writeFile(outPath, buf);
-    return outPath;
-  }
-  if (Buffer.isBuffer(res)) {
-    await fs.writeFile(outPath, res);
-    return outPath;
-  }
-  if (typeof res === "string") {
-    const abs = path.isAbsolute(res) ? res : path.resolve(process.cwd(), res);
-    if (await exists(abs)) return abs;
-    await fs.writeFile(outPath, Buffer.alloc(0));
-    return outPath;
-  }
-  if (!(await exists(outPath))) {
-    throw new Error(`Export generator did not create file: ${outPath}`);
-  }
-  return outPath;
-}
-
-export type NoteType = {
-  noteTypeId: number;
-  noteType: string;
-  description: string | null;
-};
-
-export type SheetNoteDTO = {
-  id: number;
-  noteTypeId: number | null;
-  noteTypeName?: string | null;   // ← add this
-  orderIndex: number | null;
-  body: string;
-  createdAt: string;
-  createdBy?: number | null;
-  createdByName?: string | null;
-};
 
 export type CreateFilledNoteInput = {
-  sheetId: number;
-  noteTypeId: number;
-  body: string;
-  createdBy?: number | null;
-};
+  sheetId: number
+  noteTypeId: number
+  body: string
+  createdBy?: number | null
+}
 
-export type SheetAttachmentDTO = {
-  // link table props
-  sheetAttachmentId: number;
-  orderIndex: number;
-  isFromTemplate: boolean;
-  linkedFromSheetId?: number | null;
-  cloneOnCreate: boolean;
-
-  // file props
-  id: number;
-  originalName: string;
-  storedName: string;
-  contentType: string;
-  fileSizeBytes: number;
-  storageProvider: string;
-  storagePath: string;
-  sha256?: string | null;
-  uploadedBy?: number | null;
-  uploadedByName?: string | null;
-  uploadedAt: string;             // ISO
-  isViewable: boolean;
-  fileUrl?: string;
-};
-
-// Build a URL for an attachment (adapt to your backend routes/providers)
 function buildAttachmentUrl(
-  a: Pick<SheetAttachmentDTO, "storageProvider" | "storedName" | "storagePath">
+  a: Pick<SheetAttachmentDTO, 'storageProvider' | 'storedName' | 'storagePath'>
 ): string {
-  switch (a.storageProvider?.toLowerCase?.()) {
-    case "local":
-      return `/api/backend/files/${encodeURIComponent(a.storedName)}`;
-    case "s3":
-      return `/api/backend/files/s3/${encodeURIComponent(a.storagePath)}`;
-    default:
-      return a.storagePath || "";
+  const provider = a.storageProvider?.toLowerCase?.()
+
+  if (provider === 'local') {
+    return `/api/backend/files/${encodeURIComponent(a.storedName)}`
   }
+
+  if (provider === 's3') {
+    return `/api/backend/files/s3/${encodeURIComponent(a.storagePath)}`
+  }
+
+  return a.storagePath || ''
 }
 
 export type CreatedAttachmentDTO = {
-  attachmentId: number;
-  sheetAttachmentId: number;
-  orderIndex: number;
-  originalName: string;
-  storedName: string;
-  contentType: string;
-  fileSizeBytes: number;
-  storageProvider: string;
-  storagePath: string;
-  sha256: string | null;
-  uploadedBy: number | null;
-  uploadedAt: string;   // ISO
-  fileUrl: string;      // convenient for UI (same as storagePath for 'public')
-};
+  attachmentId: number
+  sheetAttachmentId: number
+  orderIndex: number
+  originalName: string
+  storedName: string
+  contentType: string
+  fileSizeBytes: number
+  storageProvider: string
+  storagePath: string
+  sha256: string | null
+  uploadedBy: number | null
+  uploadedAt: string // ISO
+  fileUrl: string // convenient for UI (same as storagePath for 'public')
+}
 
 export type CreateAttachmentInput = {
-  sheetId: number;
-  originalName: string;
-  storedName: string;
-  contentType: string;
-  fileSizeBytes: number;
-  storageProvider: string; // "public" | "local" | "s3" | ...
-  storagePath: string;     // e.g. "/attachments/abc.png" for 'public'
-  sha256?: string | null;
-  uploadedBy?: number | null;
-};
+  sheetId: number
+  originalName: string
+  storedName: string
+  contentType: string
+  fileSizeBytes: number
+  storageProvider: string
+  storagePath: string
+  sha256?: string | null
+  uploadedBy?: number | null
+}
 
-export type RequiredTemplateField = {
-  infoTemplateId: number;
-  required: boolean;
-  infoType: string; 
-  label: string | null;
-};
-// === END types & helper ===
+/* ──────────────────────────────────────────────────────────────
+   Queries for filled sheet listing and template metadata
+   ────────────────────────────────────────────────────────────── */
 
 export const fetchAllFilled = async () => {
-  const pool = await poolPromise;
+  const pool = await poolPromise
 
   const result = await pool.query(`
     SELECT 
@@ -174,115 +108,134 @@ export const fetchAllFilled = async () => {
     LEFT JOIN Users u ON s.PreparedByID = u.UserID
     WHERE s.IsTemplate = 0
     ORDER BY s.SheetID DESC
-  `);
+  `)
 
-  return result.recordset;
-};
+  return result.recordset
+}
 
 export async function getRequiredTemplateFields(templateId: number): Promise<RequiredTemplateField[]> {
-  const pool = await poolPromise;
-  const req = pool.request();
-  req.input("TemplateID", sql.Int, templateId);
+  const pool = await poolPromise
+  const req = pool.request()
+  req.input('TemplateID', sql.Int, templateId)
 
   const rs = await req.query<{
-    InfoTemplateID: number;
-    Required: boolean | number;
-    InfoType: string | null;
-    Label: string | null;
+    InfoTemplateID: number
+    Required: boolean | number
+    InfoType: string | null
+    Label: string | null
   }>(`
     SELECT t.InfoTemplateID, t.Required, t.InfoType, t.Label
     FROM dbo.SubSheets s
     JOIN dbo.InformationTemplates t ON t.SubID = s.SubID
     WHERE s.SheetID = @TemplateID
     ORDER BY s.OrderIndex, t.OrderIndex;
-  `);
+  `)
 
-  return rs.recordset.map((r) => ({
+  return rs.recordset.map(r => ({
     infoTemplateId: r.InfoTemplateID,
     required: r.Required === true || r.Required === 1,
-    infoType: r.InfoType ?? "varchar",   // ← no 'as any'
+    infoType: r.InfoType ?? 'varchar',
     label: r.Label ?? null,
-  }));
+  }))
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Creation flow for filled sheets
+   ────────────────────────────────────────────────────────────── */
 
 export async function createFilledSheet(
   data: UnifiedSheet & { fieldValues: Record<string, string> },
   context: AuditContext
 ): Promise<{ sheetId: number }> {
-  return runInTransaction(async (tx) => {
-    // 0) Validation
-    const templateIdNum = validateTopLevel(data);
+  return runInTransaction(async tx => {
+    const templateIdNum = validateTopLevel(data)
 
-    // 0b) Pull template fields
-    const templateRows = await fetchTemplateFields(tx, templateIdNum);
+    const templateRows = await fetchTemplateFields(tx, templateIdNum)
+    const fieldMap = buildTemplateFieldMap(templateRows)
 
-    // 0c) Check required template values
-    const fieldMap = buildTemplateFieldMap(templateRows);
-    validateRequiredTemplateValues(fieldMap, data.fieldValues);
+    validateRequiredTemplateValues(fieldMap, data.fieldValues)
 
-    // 1) Insert parent Sheet
-    const sheetId = await insertSheet(tx, data, context.userId, templateIdNum);
+    const sheetId = await insertSheet(tx, data, context.userId, templateIdNum)
+    await cloneSubsheetsAndFields(tx, sheetId, data, fieldMap)
 
-    // 2) Clone subsheets + templates + options + values
-    await cloneSubsheetsAndFields(tx, sheetId, data, fieldMap);
+    await writeAuditAndNotify(sheetId, data, context)
 
-    // 3) Audit + notify
-    await writeAuditAndNotify(sheetId, data, context);
-
-    return { sheetId };
-  });
+    return { sheetId }
+  })
 }
 
-/* ───────────────── helpers: tx, guards, coercers ────────────── */
+/* ──────────────────────────────────────────────────────────────
+   Helpers: transactions, coercers, validation
+   ────────────────────────────────────────────────────────────── */
 
 async function runInTransaction<T>(fn: (tx: sql.Transaction) => Promise<T>): Promise<T> {
-  const pool = await poolPromise;
-  const tx = new sql.Transaction(pool);
+  const pool = await poolPromise
+  const tx = new sql.Transaction(pool)
+
   try {
-    await tx.begin();
-    const out = await fn(tx);
-    await tx.commit();
-    return out;
-  } catch (e) {
-    await tx.rollback();
-    throw e;
+    await tx.begin()
+    const out = await fn(tx)
+    await tx.commit()
+    return out
+  } catch (error) {
+    await tx.rollback()
+    throw error
   }
 }
 
 function isBlank(v: unknown): boolean {
-  return v === null || v === undefined || (typeof v === "string" && v.trim() === "");
+  if (v === null) return true
+  if (v === undefined) return true
+  if (typeof v === 'string' && v.trim() === '') return true
+  return false
 }
 
-// NVARCHAR/VARCHAR normalizer: return null for blanks
 function nv(v: unknown): string | null {
-  return isBlank(v) ? null : String(v);
+  if (isBlank(v)) return null
+  return String(v)
 }
 
-// INT normalizer: null for blanks; number if finite
 function iv(v: unknown): number | null {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
+  if (v === null || v === undefined || v === '') {
+    return null
+  }
 
-/* ────────────── helpers: validation / template meta ─────────── */
+  const n = Number(v)
+  if (!Number.isFinite(n)) {
+    return null
+  }
+
+  return n
+}
 
 function validateTopLevel(data: UnifiedSheet): number {
-  const errs: string[] = [];
-  const must = (val: unknown, label: string) => { if (isBlank(val)) errs.push(`Missing required field: ${label}`); };
+  const errors: string[] = []
 
-  must(data.sheetName, "Sheet Name");
-  must(data.equipmentName, "Equipment Name");
-  must(data.equipmentTagNum, "Equipment Tag Number");
-  must(data.categoryId, "Category");
-  must(data.clientId, "Client");
-  must(data.projectId, "Project");
+  const checkRequired = (value: unknown, label: string) => {
+    if (isBlank(value)) {
+      errors.push(`Missing required field: ${label}`)
+    }
+  }
 
-  const t = Number(data.templateId);
-  if (!Number.isInteger(t) || t <= 0) errs.push("Invalid templateId.");
+  checkRequired(data.sheetName, 'Sheet Name')
+  checkRequired(data.equipmentName, 'Equipment Name')
+  checkRequired(data.equipmentTagNum, 'Equipment Tag Number')
+  checkRequired(data.categoryId, 'Category')
+  checkRequired(data.clientId, 'Client')
+  checkRequired(data.projectId, 'Project')
 
-  if (errs.length) throw new Error(`VALIDATION: ${errs.join("; ")}`);
-  return t;
+  const templateIdNumber = Number(data.templateId)
+  const isValidTemplateId = Number.isInteger(templateIdNumber) && templateIdNumber > 0
+
+  if (!isValidTemplateId) {
+    errors.push('Invalid templateId.')
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`VALIDATION: ${errors.join('; ')}`)
+  }
+
+  return templateIdNumber
 }
 
 async function fetchTemplateFields(
@@ -290,68 +243,80 @@ async function fetchTemplateFields(
   templateId: number
 ) {
   const rs = await tx.request()
-    .input("TemplateID", sql.Int, templateId)
+    .input('TemplateID', sql.Int, templateId)
     .query(`
       SELECT t.InfoTemplateID, t.Required, t.UOM, t.OrderIndex, s.SubName, t.Label
       FROM InformationTemplates t
       JOIN Subsheets s ON t.SubID = s.SubID
       WHERE s.SheetID = @TemplateID
       ORDER BY s.OrderIndex, t.OrderIndex
-    `);
+    `)
 
-  return rs.recordset ?? [];
+  return rs.recordset ?? []
 }
 
 function buildTemplateFieldMap(
   rows: Array<{
-    InfoTemplateID: number;
-    Required: boolean | number;
-    UOM: string | null;
-    OrderIndex: number;
-    SubName: string;
-    Label?: string | null;
+    InfoTemplateID: number
+    Required: boolean | number
+    UOM: string | null
+    OrderIndex: number
+    SubName: string
+    Label?: string | null
   }>
 ): Record<string, Record<number, { required: boolean; uom: string | null; label?: string | null }>> {
-  const map: Record<string, Record<number, { required: boolean; uom: string | null; label?: string | null }>> = {};
-  for (const r of rows) {
-    if (!map[r.SubName]) map[r.SubName] = {};
-    map[r.SubName][r.OrderIndex] = {
-      required: r.Required === true || r.Required === 1,
-      uom: r.UOM,
-      label: r.Label ?? null,
-    };
+  const map: Record<string, Record<number, { required: boolean; uom: string | null; label?: string | null }>> = {}
+
+  for (const row of rows) {
+    if (!map[row.SubName]) {
+      map[row.SubName] = {}
+    }
+
+    map[row.SubName][row.OrderIndex] = {
+      required: row.Required === true || row.Required === 1,
+      uom: row.UOM,
+      label: row.Label ?? null,
+    }
   }
-  return map;
+
+  return map
 }
 
 function validateRequiredTemplateValues(
   fieldMap: Record<string, Record<number, { required: boolean; uom: string | null; label?: string | null }>>,
   values: Record<string, string>
 ): void {
-  const missing: string[] = [];
+  const missing: string[] = []
+
   for (const [subName, entries] of Object.entries(fieldMap)) {
     for (const [orderStr, meta] of Object.entries(entries)) {
-      if (!meta.required) continue;
-      const order = Number(orderStr);
-      const raw = values?.[String(getOriginalInfoTemplateIdKey(subName, order))] ?? values?.[orderStr]; // support either keying style
+      if (!meta.required) {
+        continue
+      }
+
+      const order = Number(orderStr)
+      const keyByOriginal = String(getOriginalInfoTemplateIdKey(subName, order))
+      const raw = values?.[keyByOriginal] ?? values?.[orderStr]
+
       if (isBlank(raw)) {
-        const label = meta.label || `${subName} / Field #${order}`;
-        missing.push(label);
+        const label = meta.label || `${subName} / Field #${order}`
+        missing.push(label)
       }
     }
   }
-  if (missing.length) {
-    throw new Error(`VALIDATION: Missing required values for: ${missing.join(", ")}`);
+
+  if (missing.length > 0) {
+    throw new Error(`VALIDATION: Missing required values for: ${missing.join(', ')}`)
   }
 }
 
-// If you key fieldValues by original InfoTemplateID directly, you can keep a passthrough.
-// This stub exists to keep the logic isolated if you later change the keying.
 function getOriginalInfoTemplateIdKey(_subName: string, orderIndex: number): number {
-  return orderIndex;
+  return orderIndex
 }
 
-/* ────────────── helpers: insert sheet + children ────────────── */
+/* ──────────────────────────────────────────────────────────────
+   Helpers: inserting sheet, subsheets, templates, values
+   ────────────────────────────────────────────────────────────── */
 
 async function insertSheet(
   tx: sql.Transaction,
@@ -360,42 +325,42 @@ async function insertSheet(
   templateIdNum: number
 ): Promise<number> {
   const rs = await tx.request()
-    .input("SheetName",       sql.VarChar(255), nv(data.sheetName))
-    .input("SheetDesc",       sql.VarChar(255), nv(data.sheetDesc))
-    .input("SheetDesc2",      sql.VarChar(255), nv(data.sheetDesc2))
-    .input("ClientDocNum",    sql.Int,          iv(data.clientDocNum))
-    .input("ClientProjNum",   sql.Int,          iv(data.clientProjectNum))
-    .input("CompanyDocNum",   sql.Int,          iv(data.companyDocNum))
-    .input("CompanyProjNum",  sql.Int,          iv(data.companyProjectNum))
-    .input("AreaID",          sql.Int,          iv(data.areaId))
-    .input("PackageName",     sql.VarChar(100), nv(data.packageName))
-    .input("RevisionNum",     sql.Int,          iv(data.revisionNum))
-    .input("RevisionDate",    sql.Date,         new Date())
-    .input("PreparedByID",    sql.Int,          iv(userId))
-    .input("PreparedByDate",  sql.DateTime,     new Date())
-    .input("EquipmentName",   sql.VarChar(150), nv(data.equipmentName))
-    .input("EquipmentTagNum", sql.VarChar(150), nv(data.equipmentTagNum))
-    .input("ServiceName",     sql.VarChar(150), nv(data.serviceName))
-    .input("RequiredQty",     sql.Int,          iv(data.requiredQty))
-    .input("ItemLocation",    sql.VarChar(255), nv(data.itemLocation))
-    .input("ManuID",          sql.Int,          iv(data.manuId))
-    .input("SuppID",          sql.Int,          iv(data.suppId))
-    .input("InstallPackNum",  sql.VarChar(100), nv(data.installPackNum))
-    .input("EquipSize",       sql.Int,          iv(data.equipSize))
-    .input("ModelNum",        sql.VarChar(50),  nv(data.modelNum))
-    .input("Driver",          sql.VarChar(150), nv(data.driver))
-    .input("LocationDwg",     sql.VarChar(255), nv(data.locationDwg))
-    .input("PID",             sql.Int,          iv(data.pid))
-    .input("InstallDwg",      sql.VarChar(255), nv(data.installDwg))
-    .input("CodeStd",         sql.VarChar(255), nv(data.codeStd))
-    .input("CategoryID",      sql.Int,          iv(data.categoryId))
-    .input("ClientID",        sql.Int,          iv(data.clientId))
-    .input("ProjectID",       sql.Int,          iv(data.projectId))
-    .input("Status",          sql.VarChar(50),  "Draft")
-    .input("IsLatest",        sql.Bit,          1)
-    .input("IsTemplate",      sql.Bit,          0)
-    .input("AutoCADImport",   sql.Bit,          0)
-    .input("TemplateID",      sql.Int,          templateIdNum)
+    .input('SheetName', sql.VarChar(255), nv(data.sheetName))
+    .input('SheetDesc', sql.VarChar(255), nv(data.sheetDesc))
+    .input('SheetDesc2', sql.VarChar(255), nv(data.sheetDesc2))
+    .input('ClientDocNum', sql.Int, iv(data.clientDocNum))
+    .input('ClientProjNum', sql.Int, iv(data.clientProjectNum))
+    .input('CompanyDocNum', sql.Int, iv(data.companyDocNum))
+    .input('CompanyProjNum', sql.Int, iv(data.companyProjectNum))
+    .input('AreaID', sql.Int, iv(data.areaId))
+    .input('PackageName', sql.VarChar(100), nv(data.packageName))
+    .input('RevisionNum', sql.Int, iv(data.revisionNum))
+    .input('RevisionDate', sql.Date, new Date())
+    .input('PreparedByID', sql.Int, iv(userId))
+    .input('PreparedByDate', sql.DateTime, new Date())
+    .input('EquipmentName', sql.VarChar(150), nv(data.equipmentName))
+    .input('EquipmentTagNum', sql.VarChar(150), nv(data.equipmentTagNum))
+    .input('ServiceName', sql.VarChar(150), nv(data.serviceName))
+    .input('RequiredQty', sql.Int, iv(data.requiredQty))
+    .input('ItemLocation', sql.VarChar(255), nv(data.itemLocation))
+    .input('ManuID', sql.Int, iv(data.manuId))
+    .input('SuppID', sql.Int, iv(data.suppId))
+    .input('InstallPackNum', sql.VarChar(100), nv(data.installPackNum))
+    .input('EquipSize', sql.Int, iv(data.equipSize))
+    .input('ModelNum', sql.VarChar(50), nv(data.modelNum))
+    .input('Driver', sql.VarChar(150), nv(data.driver))
+    .input('LocationDwg', sql.VarChar(255), nv(data.locationDwg))
+    .input('PID', sql.Int, iv(data.pid))
+    .input('InstallDwg', sql.VarChar(255), nv(data.installDwg))
+    .input('CodeStd', sql.VarChar(255), nv(data.codeStd))
+    .input('CategoryID', sql.Int, iv(data.categoryId))
+    .input('ClientID', sql.Int, iv(data.clientId))
+    .input('ProjectID', sql.Int, iv(data.projectId))
+    .input('Status', sql.VarChar(50), 'Draft')
+    .input('IsLatest', sql.Bit, 1)
+    .input('IsTemplate', sql.Bit, 0)
+    .input('AutoCADImport', sql.Bit, 0)
+    .input('TemplateID', sql.Int, templateIdNum)
     .query<{ SheetID: number }>(`
       INSERT INTO Sheets (
         SheetName, SheetDesc, SheetDesc2, ClientDocNum, ClientProjNum, CompanyDocNum, CompanyProjNum,
@@ -412,9 +377,9 @@ async function insertSheet(
         @ManuID, @SuppID, @InstallPackNum, @EquipSize, @ModelNum, @Driver, @LocationDwg, @PID, @InstallDwg, @CodeStd,
         @CategoryID, @ClientID, @ProjectID, @Status, @IsLatest, @IsTemplate, @AutoCADImport, @TemplateID
       );
-    `);
+    `)
 
-  return rs.recordset[0].SheetID;
+  return rs.recordset[0].SheetID
 }
 
 async function cloneSubsheetsAndFields(
@@ -423,40 +388,42 @@ async function cloneSubsheetsAndFields(
   data: UnifiedSheet & { fieldValues: Record<string, string> },
   fieldMap: Record<string, Record<number, { required: boolean; uom: string | null; label?: string | null }>>
 ): Promise<void> {
-  for (let i = 0; i < data.subsheets.length; i++) {
-    const subsheet = data.subsheets[i];
-    const newSubId = await insertSubsheet(tx, sheetId, subsheet.name, subsheet.id, i);
+  for (let i = 0; i < data.subsheets.length; i += 1) {
+    const subsheet = data.subsheets[i]
+    const newSubId = await insertSubsheet(tx, sheetId, subsheet.name, subsheet.id, i)
 
-    for (let j = 0; j < subsheet.fields.length; j++) {
-  const field = subsheet.fields[j];
-  const meta = fieldMap[subsheet.name]?.[field.sortOrder ?? j];
+    for (let j = 0; j < subsheet.fields.length; j += 1) {
+      const field = subsheet.fields[j]
+      const sortIndex = field.sortOrder ?? j
+      const meta = fieldMap[subsheet.name]?.[sortIndex]
 
-  // apply template overrides into a new object
-  const enrichedField: InfoField = {
-    ...field,
-    uom: meta?.uom ?? field.uom,
-    required: meta?.required ?? Boolean(field.required),
-  };
+      const enrichedField: InfoField = {
+        ...field,
+        uom: meta?.uom ?? field.uom,
+        required: meta?.required ?? Boolean(field.required),
+      }
 
-  const newInfoId = await insertInfoTemplate(
-    tx,
-    newSubId,
-    enrichedField,
-    enrichedField.sortOrder ?? j
-  );
+      const newInfoId = await insertInfoTemplate(
+        tx,
+        newSubId,
+        enrichedField,
+        enrichedField.sortOrder ?? j
+      )
 
-  if (Array.isArray(enrichedField.options) && enrichedField.options.length) {
-    await insertInfoOptions(tx, newInfoId, enrichedField.options);
-  }
+      if (Array.isArray(enrichedField.options) && enrichedField.options.length > 0) {
+        await insertInfoOptions(tx, newInfoId, enrichedField.options)
+      }
 
-  const originalId = enrichedField.id ?? undefined;
-  if (originalId !== undefined) {
-    const raw = data.fieldValues[String(originalId)];
-    if (!isBlank(raw)) {
-      await insertInfoValue(tx, newInfoId, sheetId, String(raw));
+      const originalId = enrichedField.id
+      if (originalId === undefined || originalId === null) {
+        continue
+      }
+
+      const raw = data.fieldValues[String(originalId)]
+      if (!isBlank(raw)) {
+        await insertInfoValue(tx, newInfoId, sheetId, String(raw))
+      }
     }
-  }
-}
   }
 }
 
@@ -468,16 +435,17 @@ async function insertSubsheet(
   orderIndex: number
 ): Promise<number> {
   const rs = await tx.request()
-    .input("SubName",        sql.VarChar(150), nv(subName))
-    .input("SheetID",        sql.Int,          sheetId)
-    .input("OrderIndex",     sql.Int,          orderIndex)
-    .input("TemplateSubID",  sql.Int,          iv(templateSubId))
+    .input('SubName', sql.VarChar(150), nv(subName))
+    .input('SheetID', sql.Int, sheetId)
+    .input('OrderIndex', sql.Int, orderIndex)
+    .input('TemplateSubID', sql.Int, iv(templateSubId))
     .query<{ SubID: number }>(`
       INSERT INTO SubSheets (SubName, SheetID, OrderIndex, TemplateSubID)
       OUTPUT INSERTED.SubID
       VALUES (@SubName, @SheetID, @OrderIndex, @TemplateSubID);
-    `);
-  return rs.recordset[0].SubID;
+    `)
+
+  return rs.recordset[0].SubID
 }
 
 async function insertInfoTemplate(
@@ -486,26 +454,26 @@ async function insertInfoTemplate(
   field: InfoField,
   orderIndex: number
 ): Promise<number> {
-  const required = Boolean(field.required);
-  const uom = field.uom ?? "";
+  const required = Boolean(field.required)
+  const uom = field.uom ?? ''
 
   const rs = await tx.request()
-    .input("SubID",                  sql.Int,          subId)
-    .input("Label",                  sql.VarChar(150), nv(field.label))
-    .input("InfoType",               sql.VarChar(30),  nv(field.infoType))
-    .input("OrderIndex",             sql.Int,          orderIndex)
-    .input("UOM",                    sql.VarChar(50),  nv(uom))
-    .input("Required",               sql.Bit,          required ? 1 : 0)
-    .input("TemplateInfoTemplateID", sql.Int,          iv(field.id)) // original template field id
+    .input('SubID', sql.Int, subId)
+    .input('Label', sql.VarChar(150), nv(field.label))
+    .input('InfoType', sql.VarChar(30), nv(field.infoType))
+    .input('OrderIndex', sql.Int, orderIndex)
+    .input('UOM', sql.VarChar(50), nv(uom))
+    .input('Required', sql.Bit, required ? 1 : 0)
+    .input('TemplateInfoTemplateID', sql.Int, iv(field.id))
     .query<{ InfoTemplateID: number }>(`
       INSERT INTO InformationTemplates
         (SubID, Label, InfoType, OrderIndex, UOM, Required, TemplateInfoTemplateID)
       OUTPUT INSERTED.InfoTemplateID
       VALUES
         (@SubID, @Label, @InfoType, @OrderIndex, @UOM, @Required, @TemplateInfoTemplateID);
-    `);
+    `)
 
-  return rs.recordset[0].InfoTemplateID;
+  return rs.recordset[0].InfoTemplateID
 }
 
 async function insertInfoOptions(
@@ -513,15 +481,15 @@ async function insertInfoOptions(
   infoTemplateId: number,
   options: string[]
 ): Promise<void> {
-  for (let k = 0; k < options.length; k++) {
+  for (let k = 0; k < options.length; k += 1) {
     await tx.request()
-      .input("InfoTemplateID", sql.Int,          infoTemplateId)
-      .input("OptionValue",    sql.VarChar(100), nv(options[k]))
-      .input("SortOrder",      sql.Int,          k)
+      .input('InfoTemplateID', sql.Int, infoTemplateId)
+      .input('OptionValue', sql.VarChar(100), nv(options[k]))
+      .input('SortOrder', sql.Int, k)
       .query(`
         INSERT INTO InformationTemplateOptions (InfoTemplateID, OptionValue, SortOrder)
         VALUES (@InfoTemplateID, @OptionValue, @SortOrder);
-      `);
+      `)
   }
 }
 
@@ -532,16 +500,18 @@ async function insertInfoValue(
   value: string
 ): Promise<void> {
   await tx.request()
-    .input("InfoTemplateID", sql.Int,      infoTemplateId)
-    .input("SheetID",        sql.Int,      sheetId)
-    .input("InfoValue",      sql.VarChar(sql.MAX), value)
+    .input('InfoTemplateID', sql.Int, infoTemplateId)
+    .input('SheetID', sql.Int, sheetId)
+    .input('InfoValue', sql.VarChar(sql.MAX), value)
     .query(`
       INSERT INTO InformationValues (InfoTemplateID, SheetID, InfoValue)
       VALUES (@InfoTemplateID, @SheetID, @InfoValue);
-    `);
+    `)
 }
 
-/* ────────────── helpers: audit / notify ────────────── */
+/* ──────────────────────────────────────────────────────────────
+   Audit and notifications for creation
+   ────────────────────────────────────────────────────────────── */
 
 async function writeAuditAndNotify(
   sheetId: number,
@@ -551,64 +521,75 @@ async function writeAuditAndNotify(
   if (context?.userId) {
     await insertAuditLog({
       PerformedBy: context.userId,
-      TableName: "Sheets",
+      TableName: 'Sheets',
       RecordID: sheetId,
-      Action: "Create Filled Sheet",
+      Action: 'Create Filled Sheet',
       Route: context.route ?? null,
       Method: context.method ?? null,
       StatusCode: 201,
       Changes: JSON.stringify(data),
-    });
+    })
   }
 
   await notifyUsers({
     recipientRoleIds: [1, 2],
     sheetId,
-    title: "New Filled Sheet Created",
+    title: 'New Filled Sheet Created',
     message: `Filled sheet #${sheetId} has been created by User #${context.userId}.`,
-    category: "Datasheet",
+    category: 'Datasheet',
     createdBy: context.userId,
-  });
+  })
 }
 
+/* ──────────────────────────────────────────────────────────────
+   Note types and high-level helpers
+   ────────────────────────────────────────────────────────────── */
+
 export const getAllNoteTypes = async (): Promise<NoteType[]> => {
-  const pool = await poolPromise;
+  const pool = await poolPromise
 
   const result = await pool.request().query<{
-    NoteTypeID: number;
-    NoteType: string;
-    Description: string | null;
+    NoteTypeID: number
+    NoteType: string
+    Description: string | null
   }>(`
     SELECT NoteTypeID, NoteType, Description
     FROM dbo.NoteTypes
     ORDER BY NoteTypeID
-  `);
+  `)
 
-  return result.recordset.map((r) => ({
+  return result.recordset.map(r => ({
     noteTypeId: r.NoteTypeID,
     noteType: r.NoteType,
     description: r.Description,
-  }));
-};
-
-// Not being called right now, but useful when we need TemplateID of a SheetID
-export async function getFilledSheetTemplateId(sheetId: number) {
-  const pool = await poolPromise;
-  const result = await pool.request()
-    .input("SheetID", sql.Int, sheetId)
-    .query(`SELECT TemplateID FROM Sheets WHERE SheetID = @SheetID`);
-  return result.recordset[0];
+  }))
 }
+
+/**
+ * Handy when you need TemplateID for a given filled SheetID.
+ */
+export async function getFilledSheetTemplateId(sheetId: number) {
+  const pool = await poolPromise
+  const result = await pool.request()
+    .input('SheetID', sql.Int, sheetId)
+    .query('SELECT TemplateID FROM Sheets WHERE SheetID = @SheetID')
+
+  return result.recordset[0]
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Load a filled sheet with fields, notes, attachments
+   ────────────────────────────────────────────────────────────── */
 
 export async function getFilledSheetDetailsById(
   sheetId: number,
-  lang: string = "eng",
-  uom: "SI" | "USC" = "SI"
+  lang: string = 'eng',
+  uom: UOM = 'SI'
 ) {
-  const pool = await poolPromise;
+  const pool = await poolPromise
 
   const sheetResult = await pool.request()
-    .input("SheetID", sql.Int, sheetId)
+    .input('SheetID', sql.Int, sheetId)
     .query(`
       SELECT 
         s.*, 
@@ -638,16 +619,19 @@ export async function getFilledSheetDetailsById(
       LEFT JOIN Clients c ON s.ClientID = c.ClientID
       LEFT JOIN Projects p ON s.ProjectID = p.ProjectID
       WHERE s.SheetID = @SheetID
-    `);
+    `)
 
-  const row = sheetResult.recordset[0];
-  if (!row) return null;
+  const row = sheetResult.recordset[0]
 
-  const datasheet: UnifiedSheet = buildUnifiedSheetFromRow(row);
+  if (!row) {
+    return null
+  }
+
+  const datasheet: UnifiedSheet = buildUnifiedSheetFromRow(row)
 
   const templatesResult = await pool.request()
-    .input("SheetID", sql.Int, sheetId)
-    .input("TemplateID", sql.Int, row.TemplateID)
+    .input('SheetID', sql.Int, sheetId)
+    .input('TemplateID', sql.Int, row.TemplateID)
     .query(`
       SELECT 
         sub.SubID,
@@ -668,87 +652,88 @@ export async function getFilledSheetDetailsById(
       LEFT JOIN InformationTemplates tt ON tt.SubID = ts.SubID AND tt.OrderIndex = t.OrderIndex
       WHERE sub.SheetID = @SheetID
       ORDER BY sub.OrderIndex, t.OrderIndex;
-    `);
+    `)
 
   const optionsResult = await pool.request().query(`
     SELECT InfoTemplateID, OptionValue
     FROM InformationTemplateOptions
     ORDER BY InfoTemplateID, SortOrder;
-  `);
+  `)
 
-  const optionMap: Record<number, Record<string, string>> = {};
-  for (const row of optionsResult.recordset) {
-    if (!optionMap[row.InfoTemplateID]) optionMap[row.InfoTemplateID] = {};
-    const count = Object.keys(optionMap[row.InfoTemplateID]).length;
-    optionMap[row.InfoTemplateID][String(count)] = row.OptionValue;
+  const optionMap: Record<number, Record<string, string>> = {}
+
+  for (const optionRow of optionsResult.recordset) {
+    if (!optionMap[optionRow.InfoTemplateID]) {
+      optionMap[optionRow.InfoTemplateID] = {}
+    }
+
+    const count = Object.keys(optionMap[optionRow.InfoTemplateID]).length
+    optionMap[optionRow.InfoTemplateID][String(count)] = optionRow.OptionValue
   }
 
-  const rows = templatesResult.recordset;
-  const subsheetsMap = new Map<number, UnifiedSubsheet>();
+  const rows = templatesResult.recordset
+  const subsheetsMap = new Map<number, UnifiedSubsheet>()
 
-  for (const row of rows) {
-    const originalSubId = row.TemplateSubID ?? row.SubID;
-    const originalFieldId = row.TemplateInfoTemplateID ?? row.InfoTemplateID;
+  for (const fieldRow of rows) {
+    const originalSubId = fieldRow.TemplateSubID ?? fieldRow.SubID
+    const originalFieldId = fieldRow.TemplateInfoTemplateID ?? fieldRow.InfoTemplateID
 
     if (!subsheetsMap.has(originalSubId)) {
       subsheetsMap.set(originalSubId, {
-        id: row.SubID,
-        originalId: row.TemplateSubID,
-        name: row.SubName,
+        id: fieldRow.SubID,
+        originalId: fieldRow.TemplateSubID,
+        name: fieldRow.SubName,
         fields: [],
-      });
+      })
     }
 
-    // Perform unit conversion if needed
-    let value = row.Value ?? undefined;
-    let displayUom = row.UOM ?? undefined;
-    if (uom === "USC" && row.UOM && value !== undefined) {
-      const result = convertToUSC(value, row.UOM);
-      if (result) {
-        value = result.value;
-        displayUom = result.unit;
+    let value = fieldRow.Value ?? undefined
+    let displayUom = fieldRow.UOM ?? undefined
+
+    if (uom === 'USC' && fieldRow.UOM && value !== undefined) {
+      const converted = convertToUSC(value, fieldRow.UOM)
+      if (converted) {
+        value = converted.value
+        displayUom = converted.unit
       }
     }
 
     const field = {
-      id: row.InfoTemplateID,
-      templateInfoTemplateID: row.TemplateInfoTemplateID,
+      id: fieldRow.InfoTemplateID,
+      templateInfoTemplateID: fieldRow.TemplateInfoTemplateID,
       originalId: originalFieldId,
-      label: row.Label,
-      infoType: row.InfoType,
+      label: fieldRow.Label,
+      infoType: fieldRow.InfoType,
       uom: displayUom,
-      sortOrder: row.SortOrder,
-      required: Boolean(row.Required),
-      options: Object.values(optionMap[row.InfoTemplateID] ?? {}),
+      sortOrder: fieldRow.SortOrder,
+      required: Boolean(fieldRow.Required),
+      options: Object.values(optionMap[fieldRow.InfoTemplateID] ?? {}),
       value,
-    };
+    }
 
-    subsheetsMap.get(originalSubId)!.fields.push(field);
+    subsheetsMap.get(originalSubId)?.fields.push(field)
   }
 
-  datasheet.subsheets = Array.from(subsheetsMap.values());
+  datasheet.subsheets = Array.from(subsheetsMap.values())
 
-  // ─────────────────────────────────────────────────────────────
-  //  NEW: NOTES
-  // ─────────────────────────────────────────────────────────────
   type NoteRow = {
-    id: number;
-    noteTypeId: number | null;
-    noteTypeName: string | null;
-    orderIndex: number | null;
-    body: string | null;
-    createdAt: Date | string | null;
-    createdBy: number | null;
-    createdByName: string | null;
-  };
+    id: number
+    noteTypeId: number | null
+    noteTypeName: string | null
+    orderIndex: number | null
+    body: string | null
+    createdAt: Date | string | null
+    createdBy: number | null
+    createdByName: string | null
+  }
 
   const notesResult = await pool.request()
-    .input("SheetID", sql.Int, sheetId)
+    .input('SheetID', sql.Int, sheetId)
     .query<NoteRow>(`
       SELECT
         n.NoteID       AS id,
         n.NoteTypeID   AS noteTypeId,
-        nt.NoteType    AS noteTypeName,            -- ★ pull the display name
+        nt.NoteType    AS noteTypeName,
         n.OrderIndex   AS orderIndex,
         n.NoteText     AS body,
         n.CreatedAt    AS createdAt,
@@ -759,47 +744,44 @@ export async function getFilledSheetDetailsById(
       LEFT JOIN dbo.Users u ON u.UserID = n.CreatedBy
       WHERE n.SheetID = @SheetID
       ORDER BY n.OrderIndex ASC, n.CreatedAt DESC
-    `);
+    `)
 
-  const notes: SheetNoteDTO[] = notesResult.recordset.map((r) => ({
-    id: r.id,
-    noteTypeId: r.noteTypeId,
-    noteTypeName: r.noteTypeName ?? null,          // ★ include the name
-    orderIndex: r.orderIndex,
-    body: r.body ?? "",
-    createdAt: r.createdAt ? new Date(r.createdAt as unknown as string).toISOString() : "",
-    createdBy: r.createdBy,
-    createdByName: r.createdByName ?? null,
-  }));
+  const notes: SheetNoteDTO[] = notesResult.recordset.map(note => ({
+    id: note.id,
+    noteTypeId: note.noteTypeId,
+    noteTypeName: note.noteTypeName ?? null,
+    orderIndex: note.orderIndex,
+    body: note.body ?? '',
+    createdAt: note.createdAt ? new Date(note.createdAt as unknown as string).toISOString() : '',
+    createdBy: note.createdBy,
+    createdByName: note.createdByName ?? null,
+  }))
 
-  (datasheet as typeof datasheet & { notes: SheetNoteDTO[] }).notes = notes;
+  ;(datasheet as typeof datasheet & { notes: SheetNoteDTO[] }).notes = notes
 
-  // ─────────────────────────────────────────────────────────────
-  //  NEW: ATTACHMENTS (SheetAttachments → Attachments)
-  // ─────────────────────────────────────────────────────────────
   type AttachmentRow = {
-    sheetAttachmentId: number;
-    orderIndex: number | null;
-    isFromTemplate: boolean | number | null;
-    linkedFromSheetId: number | null;
-    cloneOnCreate: boolean | number | null;
+    sheetAttachmentId: number
+    orderIndex: number | null
+    isFromTemplate: boolean | number | null
+    linkedFromSheetId: number | null
+    cloneOnCreate: boolean | number | null
 
-    id: number;
-    originalName: string | null;
-    storedName: string | null;
-    contentType: string | null;
-    fileSizeBytes: number | null;
-    storageProvider: string | null;
-    storagePath: string | null;
-    sha256: string | null;
-    uploadedBy: number | null;
-    uploadedAt: Date | string | null;
-    isViewable: boolean | number | null;
-    uploadedByName: string | null;
-  };
+    id: number
+    originalName: string | null
+    storedName: string | null
+    contentType: string | null
+    fileSizeBytes: number | null
+    storageProvider: string | null
+    storagePath: string | null
+    sha256: string | null
+    uploadedBy: number | null
+    uploadedAt: Date | string | null
+    isViewable: boolean | number | null
+    uploadedByName: string | null
+  }
 
   const attsResult = await pool.request()
-    .input("SheetID", sql.Int, sheetId)
+    .input('SheetID', sql.Int, sheetId)
     .query(`
       SELECT
         sa.SheetAttachmentID           AS sheetAttachmentId,
@@ -828,117 +810,154 @@ export async function getFilledSheetDetailsById(
         ON u.UserID = a.UploadedBy
       WHERE sa.SheetID = @SheetID
       ORDER BY sa.OrderIndex ASC, a.UploadedAt DESC
-    `);
+    `)
 
-  const attRows: AttachmentRow[] = attsResult.recordset as AttachmentRow[];
-  const attachments: SheetAttachmentDTO[] = attRows.map((r) => {
+  const attRows: AttachmentRow[] = attsResult.recordset as AttachmentRow[]
+  const attachments: SheetAttachmentDTO[] = attRows.map(att => {
+    const isFromTemplateBool =
+      typeof att.isFromTemplate === 'boolean' ? att.isFromTemplate : att.isFromTemplate === 1
+    const cloneOnCreateBool =
+      typeof att.cloneOnCreate === 'boolean' ? att.cloneOnCreate : att.cloneOnCreate === 1
+    const isViewableBool =
+      typeof att.isViewable === 'boolean' ? att.isViewable : att.isViewable === 1
+
     const dto: SheetAttachmentDTO = {
-      sheetAttachmentId: r.sheetAttachmentId,
-      orderIndex: Number(r.orderIndex ?? 0),
-      isFromTemplate: typeof r.isFromTemplate === "boolean" ? r.isFromTemplate : r.isFromTemplate === 1,
-      linkedFromSheetId: r.linkedFromSheetId ?? null,
-      cloneOnCreate: typeof r.cloneOnCreate === "boolean" ? r.cloneOnCreate : r.cloneOnCreate === 1,
+      sheetAttachmentId: att.sheetAttachmentId,
+      orderIndex: Number(att.orderIndex ?? 0),
+      isFromTemplate: isFromTemplateBool,
+      linkedFromSheetId: att.linkedFromSheetId ?? null,
+      cloneOnCreate: cloneOnCreateBool,
 
-      id: r.id,
-      originalName: r.originalName ?? "",
-      storedName: r.storedName ?? "",
-      contentType: r.contentType ?? "",
-      fileSizeBytes: Number(r.fileSizeBytes ?? 0),
-      storageProvider: r.storageProvider ?? "",
-      storagePath: r.storagePath ?? "",
-      sha256: r.sha256 ?? null,
-      uploadedBy: r.uploadedBy ?? null,
-      uploadedByName: r.uploadedByName ?? null,
-      uploadedAt: r.uploadedAt ? new Date(r.uploadedAt as unknown as string).toISOString() : "",
-      isViewable: typeof r.isViewable === "boolean" ? r.isViewable : r.isViewable === 1,
-      fileUrl: "",
-    };
-    dto.fileUrl = buildAttachmentUrl(dto);
-    return dto;
-  });
+      id: att.id,
+      originalName: att.originalName ?? '',
+      storedName: att.storedName ?? '',
+      contentType: att.contentType ?? '',
+      fileSizeBytes: Number(att.fileSizeBytes ?? 0),
+      storageProvider: att.storageProvider ?? '',
+      storagePath: att.storagePath ?? '',
+      sha256: att.sha256 ?? null,
+      uploadedBy: att.uploadedBy ?? null,
+      uploadedByName: att.uploadedByName ?? null,
+      uploadedAt: att.uploadedAt ? new Date(att.uploadedAt as unknown as string).toISOString() : '',
+      isViewable: isViewableBool,
+      fileUrl: '',
+    }
 
-  (datasheet as typeof datasheet & { attachments: SheetAttachmentDTO[] }).attachments = attachments;
+    dto.fileUrl = buildAttachmentUrl(dto)
+    return dto
+  })
 
-  if (lang !== "eng") {
-    const translations = await getSheetTranslations(row.TemplateID, lang);
-    const translatedSheet = applySheetTranslations(datasheet, translations) as typeof datasheet & {
-      notes: SheetNoteDTO[];
-      attachments: SheetAttachmentDTO[];
-    };
+  ;(datasheet as typeof datasheet & { attachments: SheetAttachmentDTO[] }).attachments = attachments
 
-    // Preserve arrays after translation
-    translatedSheet.notes = (datasheet as typeof translatedSheet).notes;
-    translatedSheet.attachments = (datasheet as typeof translatedSheet).attachments;
-
-    return { datasheet: translatedSheet, translations };
+  if (lang === 'eng') {
+    return { datasheet, translations: null }
   }
 
-  return { datasheet, translations: null };
+  const translations = await getSheetTranslations(row.TemplateID, lang)
+  const translatedSheet = applySheetTranslations(datasheet, translations) as typeof datasheet & {
+    notes: SheetNoteDTO[]
+    attachments: SheetAttachmentDTO[]
+  }
+
+  translatedSheet.notes = (datasheet as typeof translatedSheet).notes
+  translatedSheet.attachments = (datasheet as typeof translatedSheet).attachments
+
+  return { datasheet: translatedSheet, translations }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   UnifiedSheet mapping
+   ────────────────────────────────────────────────────────────── */
 
 interface RawSheetRow {
-  SheetID: number;
-  SheetName: string;
-  SheetDesc: string;
-  SheetDesc2: string;
-  ClientID: number;
-  ClientName: string;
-  ClientLogo: string;
-  ClientProjNum: string;
-  ClientDocNum: string;
-  CompanyDocNum: string;
-  CompanyProjNum: string;
-  AreaID: number;
-  AreaName: string;
-  PackageName: string;
-  RevisionNum: number;
-  RevisionDate: Date | null;
-  PreparedByID: number;
-  preparedByName: string;
-  PreparedByDate: Date | null;
-  VerifiedByID: number | null;
-  verifiedByName: string | null;
-  VerifiedByDate: Date | null;
-  ApprovedByID: number | null;
-  approvedByName: string | null;
-  ApprovedByDate: Date | null;
-  RejectedByID: number | null;
-  rejectedByName: string | null;
-  RejectedByDate: Date | null;
-  ModifiedByID: number | null;
-  modifiedByName: string | null;
-  ModifiedByDate: Date | null;
-  IsTemplate: boolean;
-  IsLatest: boolean;
-  Status: string;
-  RejectComment: string | null;
-  ItemLocation: string;
-  RequiredQty: number;
-  EquipmentName: string;
-  EquipmentTagNum: string;
-  ServiceName: string;
-  ManuID: number;
-  manuName: string;
-  SuppID: number;
-  suppName: string;
-  InstallPackNum: string;
-  EquipSize: string;
-  ModelNum: string;
-  Driver: string;
-  LocationDwg: string;
-  PID: string;
-  InstallDwg: string;
-  CodeStd: string;
-  CategoryID: number;
-  CategoryName: string;
-  ProjectID: number;
-  projectName: string;
-  TemplateID: number;
-  ParentSheetID: number;
+  SheetID: number
+  SheetName: string
+  SheetDesc: string
+  SheetDesc2: string
+  ClientID: number
+  ClientName: string
+  ClientLogo: string
+  ClientProjNum: string
+  ClientDocNum: string
+  CompanyDocNum: string
+  CompanyProjNum: string
+  AreaID: number
+  AreaName: string
+  PackageName: string
+  RevisionNum: number
+  RevisionDate: Date | null
+  PreparedByID: number
+  preparedByName: string
+  PreparedByDate: Date | null
+  VerifiedByID: number | null
+  verifiedByName: string | null
+  VerifiedByDate: Date | null
+  ApprovedByID: number | null
+  approvedByName: string | null
+  ApprovedByDate: Date | null
+  RejectedByID: number | null
+  rejectedByName: string | null
+  RejectedByDate: Date | null
+  ModifiedByID: number | null
+  modifiedByName: string | null
+  ModifiedByDate: Date | null
+  IsTemplate: boolean
+  IsLatest: boolean
+  Status: string
+  RejectComment: string | null
+  ItemLocation: string
+  RequiredQty: number
+  EquipmentName: string
+  EquipmentTagNum: string
+  ServiceName: string
+  ManuID: number
+  manuName: string
+  SuppID: number
+  suppName: string
+  InstallPackNum: string
+  EquipSize: string
+  ModelNum: string
+  Driver: string
+  LocationDwg: string
+  PID: string
+  InstallDwg: string
+  CodeStd: string
+  CategoryID: number
+  CategoryName: string
+  ProjectID: number
+  projectName: string
+  TemplateID: number
+  ParentSheetID: number
 }
 
-
 function buildUnifiedSheetFromRow(row: RawSheetRow): UnifiedSheet {
+  const formatDate = (value: Date | null): string => {
+    if (!value) {
+      return ''
+    }
+
+    return value.toISOString().split('T')[0]
+  }
+
+  const revisionDate = formatDate(row.RevisionDate)
+  const preparedByDate = formatDate(row.PreparedByDate)
+  const verifiedDate = formatDate(row.VerifiedByDate)
+  const approvedDate = formatDate(row.ApprovedByDate)
+  const rejectedDate = formatDate(row.RejectedByDate)
+  const modifiedDate = formatDate(row.ModifiedByDate)
+
+  const allowedStatuses: SheetStatus[] = [
+    'Draft',
+    'Rejected',
+    'Modified Draft',
+    'Verified',
+    'Approved',
+  ]
+
+  const status: SheetStatus = allowedStatuses.includes(row.Status as SheetStatus)
+    ? (row.Status as SheetStatus)
+    : 'Draft'
+
   return {
     sheetId: row.SheetID,
     sheetName: row.SheetName,
@@ -955,25 +974,25 @@ function buildUnifiedSheetFromRow(row: RawSheetRow): UnifiedSheet {
     areaName: row.AreaName,
     packageName: row.PackageName,
     revisionNum: Array.isArray(row.RevisionNum) ? row.RevisionNum[0] : row.RevisionNum,
-    revisionDate: row.RevisionDate?.toISOString().split("T")[0] ?? "",
+    revisionDate,
     preparedById: row.PreparedByID,
     preparedByName: row.preparedByName,
-    preparedByDate: row.PreparedByDate?.toISOString().split("T")[0] ?? "",
+    preparedByDate,
     verifiedById: row.VerifiedByID,
     verifiedByName: row.verifiedByName ?? undefined,
-    verifiedDate: row.VerifiedByDate?.toISOString().split("T")[0] ?? "",
+    verifiedDate,
     approvedById: row.ApprovedByID,
     approvedByName: row.approvedByName ?? undefined,
-    approvedDate: row.ApprovedByDate?.toISOString().split("T")[0] ?? "",
+    approvedDate,
     rejectedById: row.RejectedByID ?? undefined,
     rejectedByName: row.rejectedByName ?? undefined,
-    rejectedByDate: row.RejectedByDate?.toISOString().split("T")[0] ?? "",
+    rejectedByDate: rejectedDate,
     modifiedById: row.ModifiedByID ?? undefined,
     modifiedByName: row.modifiedByName ?? undefined,
-    modifiedByDate: row.ModifiedByDate?.toISOString().split("T")[0] ?? "",
+    modifiedByDate: modifiedDate,
     isTemplate: row.IsTemplate,
     isLatest: row.IsLatest,
-    status: (["Draft", "Rejected", "Modified Draft", "Verified", "Approved"].includes(row.Status) ? (row.Status as SheetStatus) : "Draft"),
+    status,
     rejectComment: row.RejectComment ?? undefined,
     itemLocation: row.ItemLocation,
     requiredQty: row.RequiredQty,
@@ -985,11 +1004,11 @@ function buildUnifiedSheetFromRow(row: RawSheetRow): UnifiedSheet {
     suppId: row.SuppID,
     suppName: row.suppName,
     installPackNum: row.InstallPackNum,
-    equipSize: Number(row.EquipSize), 
+    equipSize: Number(row.EquipSize),
     modelNum: row.ModelNum,
     driver: row.Driver,
     locationDwg: row.LocationDwg,
-    pid: Number(row.PID), 
+    pid: Number(row.PID),
     installDwg: row.InstallDwg,
     codeStd: row.CodeStd,
     categoryId: row.CategoryID,
@@ -1000,53 +1019,57 @@ function buildUnifiedSheetFromRow(row: RawSheetRow): UnifiedSheet {
     parentSheetId: row.ParentSheetID,
     sourceFilePath: null,
     subsheets: [],
-  };
+  }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Update flow for filled sheets (values + change log)
+   ────────────────────────────────────────────────────────────── */
 
 export const updateFilledSheet = async (
   sheetId: number,
   input: UnifiedSheet,
   updatedBy: number
 ): Promise<{ sheetId: number }> => {
-  const pool = await poolPromise;
-  const transaction = new sql.Transaction(pool);
+  const pool = await poolPromise
+  const transaction = new sql.Transaction(pool)
 
   try {
-    await transaction.begin();
+    await transaction.begin()
 
-    const request = transaction.request();
+    const request = transaction.request()
 
-    request.input("SheetID", sheetId);
-    request.input("SheetName", input.sheetName);
-    request.input("SheetDesc", input.sheetDesc);
-    request.input("SheetDesc2", input.sheetDesc2);
-    request.input("ClientDocNum", input.clientDocNum);
-    request.input("ClientProjNum", input.clientProjectNum);
-    request.input("CompanyDocNum", input.companyDocNum);
-    request.input("CompanyProjNum", input.companyProjectNum);
-    request.input("AreaID", input.areaId);
-    request.input("PackageName", input.packageName);
-    request.input("RevisionNum", input.revisionNum);
-    request.input("RevisionDate", input.revisionDate);
-    request.input("ItemLocation", input.itemLocation);
-    request.input("RequiredQty", input.requiredQty);
-    request.input("EquipmentName", input.equipmentName);
-    request.input("EquipmentTagNum", input.equipmentTagNum);
-    request.input("ServiceName", input.serviceName);
-    request.input("ManuID", input.manuId);
-    request.input("SuppID", input.suppId);
-    request.input("InstallPackNum", input.installPackNum);
-    request.input("EquipSize", input.equipSize);
-    request.input("ModelNum", input.modelNum);
-    request.input("Driver", input.driver);
-    request.input("LocationDWG", input.locationDwg);
-    request.input("PID", input.pid);
-    request.input("InstallDWG", input.installDwg);
-    request.input("CodeStd", input.codeStd);
-    request.input("CategoryID", input.categoryId);
-    request.input("ClientID", input.clientId);
-    request.input("ProjectID", input.projectId);
-    request.input("ModifiedByID", updatedBy);
+    request.input('SheetID', sheetId)
+    request.input('SheetName', input.sheetName)
+    request.input('SheetDesc', input.sheetDesc)
+    request.input('SheetDesc2', input.sheetDesc2)
+    request.input('ClientDocNum', input.clientDocNum)
+    request.input('ClientProjNum', input.clientProjectNum)
+    request.input('CompanyDocNum', input.companyDocNum)
+    request.input('CompanyProjNum', input.companyProjectNum)
+    request.input('AreaID', input.areaId)
+    request.input('PackageName', input.packageName)
+    request.input('RevisionNum', input.revisionNum)
+    request.input('RevisionDate', input.revisionDate)
+    request.input('ItemLocation', input.itemLocation)
+    request.input('RequiredQty', input.requiredQty)
+    request.input('EquipmentName', input.equipmentName)
+    request.input('EquipmentTagNum', input.equipmentTagNum)
+    request.input('ServiceName', input.serviceName)
+    request.input('ManuID', input.manuId)
+    request.input('SuppID', input.suppId)
+    request.input('InstallPackNum', input.installPackNum)
+    request.input('EquipSize', input.equipSize)
+    request.input('ModelNum', input.modelNum)
+    request.input('Driver', input.driver)
+    request.input('LocationDWG', input.locationDwg)
+    request.input('PID', input.pid)
+    request.input('InstallDWG', input.installDwg)
+    request.input('CodeStd', input.codeStd)
+    request.input('CategoryID', input.categoryId)
+    request.input('ClientID', input.clientId)
+    request.input('ProjectID', input.projectId)
+    request.input('ModifiedByID', updatedBy)
 
     await request.query(`
       UPDATE Sheets SET
@@ -1083,58 +1106,64 @@ export const updateFilledSheet = async (
         ModifiedByDate = GETDATE(),
         Status = 'Modified Draft'
       WHERE SheetID = @SheetID
-    `);
+    `)
 
     const oldValuesResult = await transaction.request()
-      .input("SheetID", sql.Int, sheetId)
+      .input('SheetID', sql.Int, sheetId)
       .query(`
         SELECT IV.InfoTemplateID, IV.InfoValue, IT.Label, IT.UOM
         FROM InformationValues IV
         JOIN InformationTemplates IT ON IV.InfoTemplateID = IT.InfoTemplateID
         WHERE SheetID = @SheetID
-      `);
+      `)
 
-    const oldValuesMap = new Map<number, { value: string; label: string; uom: string | null }>();
+    const oldValuesMap = new Map<number, { value: string; label: string; uom: string | null }>()
+
     for (const row of oldValuesResult.recordset) {
       oldValuesMap.set(row.InfoTemplateID, {
         value: row.InfoValue,
         label: row.Label,
         uom: row.UOM,
-      });
+      })
     }
 
-    await transaction.request().query(`
-      DELETE FROM InformationValues WHERE SheetID = ${sheetId}
-    `);
+    await transaction.request()
+      .input('SheetID', sql.Int, sheetId)
+      .query(`
+        DELETE FROM InformationValues WHERE SheetID = @SheetID
+      `)
 
-    const insertedTemplateIds = new Set<number>();
+    const insertedTemplateIds = new Set<number>()
 
     for (const subsheet of input.subsheets) {
       for (const field of subsheet.fields) {
-        const templateId = field.id;
-        if (!templateId || insertedTemplateIds.has(templateId)) continue;
+        const templateId = field.id
 
-        insertedTemplateIds.add(templateId);
-        const newValue = field.value ?? "";
+        if (!templateId || insertedTemplateIds.has(templateId)) {
+          continue
+        }
+
+        insertedTemplateIds.add(templateId)
+        const newValue = field.value ?? ''
 
         await transaction.request()
-          .input("InfoTemplateID", sql.Int, templateId)
-          .input("SheetID", sql.Int, sheetId)
-          .input("InfoValue", sql.VarChar(sql.MAX), newValue)
+          .input('InfoTemplateID', sql.Int, templateId)
+          .input('SheetID', sql.Int, sheetId)
+          .input('InfoValue', sql.VarChar(sql.MAX), newValue)
           .query(`
             INSERT INTO InformationValues (InfoTemplateID, SheetID, InfoValue)
             VALUES (@InfoTemplateID, @SheetID, @InfoValue)
-          `);
+          `)
 
-        const previous = oldValuesMap.get(templateId);
+        const previous = oldValuesMap.get(templateId)
         if (previous && previous.value !== newValue) {
           await transaction.request()
-            .input("SheetID", sql.Int, sheetId)
-            .input("ChangedBy", sql.Int, updatedBy)
-            .input("InfoTemplateID", sql.Int, templateId)
-            .input("OldValue", sql.VarChar(sql.MAX), previous.value)
-            .input("NewValue", sql.VarChar(sql.MAX), newValue)
-            .input("UOM", sql.VarChar(100), previous.uom)
+            .input('SheetID', sql.Int, sheetId)
+            .input('ChangedBy', sql.Int, updatedBy)
+            .input('InfoTemplateID', sql.Int, templateId)
+            .input('OldValue', sql.VarChar(sql.MAX), previous.value)
+            .input('NewValue', sql.VarChar(sql.MAX), newValue)
+            .input('UOM', sql.VarChar(100), previous.uom)
             .query(`
               INSERT INTO ChangeLogs (
                 SheetID, ChangedBy, InfoTemplateID,
@@ -1143,61 +1172,56 @@ export const updateFilledSheet = async (
                 @SheetID, @ChangedBy, @InfoTemplateID,
                 @OldValue, @NewValue, @UOM, GETDATE()
               )
-            `);
+            `)
         }
       }
     }
 
-    await insertAuditLog({
-      PerformedBy: updatedBy,
-      TableName: "Sheets",
-      RecordID: sheetId,
-      Action: "Update Filled Sheet",
-    });
-
     await notifyUsers({
       recipientRoleIds: [1, 2],
       sheetId,
-      title: "Filled Datasheet Updated",
+      title: 'Filled Datasheet Updated',
       message: `Sheet #${sheetId} has been updated.`,
-      category: "Datasheet",
+      category: 'Datasheet',
       createdBy: updatedBy,
-    });
+    })
 
-    await transaction.commit();
-    return { sheetId };
-  } catch (err) {
-    await transaction.rollback();
-    throw err;
+    await transaction.commit()
+    return { sheetId }
+  } catch (error) {
+    await transaction.rollback()
+    throw error
   }
-};
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Verify / reject / approve flows
+   ────────────────────────────────────────────────────────────── */
 
 export async function verifyFilledSheet(
   sheetId: number,
-  action: "verify" | "reject",
+  action: 'verify' | 'reject',
   rejectionComment: string | undefined,
   verifierId: number
 ) {
-  const pool = await poolPromise;
-  const status = action === "verify" ? "Verified" : "Rejected";
+  const pool = await poolPromise
+  const status = action === 'verify' ? 'Verified' : 'Rejected'
 
-  // 🔹 1. Get verifier's first name
   const userResult = await pool
     .request()
-    .input("UserID", sql.Int, verifierId)
-    .query(`SELECT FirstName FROM Users WHERE UserID = @UserID`);
+    .input('UserID', sql.Int, verifierId)
+    .query('SELECT FirstName FROM Users WHERE UserID = @UserID')
 
-  const verifierName = userResult.recordset[0]?.FirstName || `User #${verifierId}`;
+  const verifierName = userResult.recordset[0]?.FirstName || `User #${verifierId}`
 
-  // 🔹 2. Build and execute update query for Sheets
   const request = pool.request()
-    .input("SheetID", sql.Int, sheetId)
-    .input("Status", sql.VarChar, status);
+    .input('SheetID', sql.Int, sheetId)
+    .input('Status', sql.VarChar, status)
 
-  if (action === "verify") {
+  if (action === 'verify') {
     request
-      .input("VerifiedByID", sql.Int, verifierId)
-      .input("VerifiedByDate", sql.DateTime, new Date());
+      .input('VerifiedByID', sql.Int, verifierId)
+      .input('VerifiedByDate', sql.DateTime, new Date())
 
     await request.query(`
       UPDATE Sheets
@@ -1206,12 +1230,12 @@ export async function verifyFilledSheet(
         VerifiedByID = @VerifiedByID,
         VerifiedByDate = @VerifiedByDate
       WHERE SheetID = @SheetID
-    `);
+    `)
   } else {
     request
-      .input("RejectedByID", sql.Int, verifierId)
-      .input("RejectedByDate", sql.DateTime, new Date())
-      .input("RejectComment", sql.NVarChar, rejectionComment || null);
+      .input('RejectedByID', sql.Int, verifierId)
+      .input('RejectedByDate', sql.DateTime, new Date())
+      .input('RejectComment', sql.NVarChar, rejectionComment || null)
 
     await request.query(`
       UPDATE Sheets
@@ -1221,33 +1245,23 @@ export async function verifyFilledSheet(
         RejectedByDate = @RejectedByDate,
         RejectComment = @RejectComment
       WHERE SheetID = @SheetID
-    `);
+    `)
   }
 
-  // 🔹 3. Audit log
-  await insertAuditLog({
-    PerformedBy: verifierId,
-    TableName: "Sheets",
-    RecordID: sheetId,
-    Action: action === "verify" ? "Verify Filled Sheet" : "Reject Filled Sheet",
-  });
-
-  // 🔹 4. Notify Admins
   await notifyUsers({
-    recipientRoleIds: [1], // Admins
+    recipientRoleIds: [1],
     sheetId,
     title: `Filled Sheet ${status}`,
     message: `Filled sheet #${sheetId} has been ${status.toLowerCase()} by ${verifierName}.`,
-    category: "Datasheet",
+    category: 'Datasheet',
     createdBy: verifierId,
-  });
+  })
 
-  // 🔹 5. Notify the engineer (PreparedByID)
   const engineerResult = await pool.request()
-    .input("SheetID", sql.Int, sheetId)
-    .query(`SELECT PreparedByID FROM Sheets WHERE SheetID = @SheetID`);
+    .input('SheetID', sql.Int, sheetId)
+    .query('SELECT PreparedByID FROM Sheets WHERE SheetID = @SheetID')
 
-  const preparedById = engineerResult.recordset[0]?.PreparedByID;
+  const preparedById = engineerResult.recordset[0]?.PreparedByID
 
   if (preparedById) {
     await notifyUsers({
@@ -1255,121 +1269,115 @@ export async function verifyFilledSheet(
       sheetId,
       title: `Your filled sheet was ${status.toLowerCase()}`,
       message: `Your filled sheet #${sheetId} has been ${status.toLowerCase()} by ${verifierName}.`,
-      category: "Datasheet",
+      category: 'Datasheet',
       createdBy: verifierId,
-    });
+    })
   }
 }
 
 export async function approveFilledSheet(sheetId: number, approvedById: number): Promise<number> {
-  const pool = await poolPromise;
+  const pool = await poolPromise
 
-  // 🔹 Update the filled sheet
   const updateResult = await pool.request()
-    .input("SheetID", sql.Int, sheetId)
-    .input("ApprovedByID", sql.Int, approvedById)
-    .input("ApprovedByDate", sql.DateTime, new Date())
-    .input("Status", sql.VarChar(50), "Approved")
+    .input('SheetID', sql.Int, sheetId)
+    .input('ApprovedByID', sql.Int, approvedById)
+    .input('ApprovedByDate', sql.DateTime, new Date())
+    .input('Status', sql.VarChar(50), 'Approved')
     .query(`
       UPDATE Sheets
       SET Status = @Status,
           ApprovedByID = @ApprovedByID,
           ApprovedByDate = @ApprovedByDate
       WHERE SheetID = @SheetID AND IsTemplate = 0
-    `);
+    `)
 
-  // 🔍 Check if update affected any row
-  if (updateResult.rowsAffected[0] === 0) {
-    console.warn(`⚠️ No filled sheet found or updated for SheetID: ${sheetId}`);
-    throw new Error("Filled sheet not found or already approved.");
+  const updatedCount = updateResult.rowsAffected[0] ?? 0
+  if (updatedCount === 0) {
+    console.warn(`No filled sheet found or updated for SheetID: ${sheetId}`)
+    throw new Error('Filled sheet not found or already approved.')
   }
 
-  // ✅ Insert audit log
-  await insertAuditLog({
-    PerformedBy: approvedById,
-    TableName: "Sheets",
-    RecordID: sheetId,
-    Action: "Approve Filled Sheet",
-  });
-
-  // 🔍 Fetch engineer (creator)
   const creatorResult = await pool.request()
-    .input("SheetID", sql.Int, sheetId)
-    .query("SELECT PreparedByID FROM Sheets WHERE SheetID = @SheetID");
+    .input('SheetID', sql.Int, sheetId)
+    .query('SELECT PreparedByID FROM Sheets WHERE SheetID = @SheetID')
 
-  const preparedById = creatorResult.recordset[0]?.PreparedByID;
+  const preparedById = creatorResult.recordset[0]?.PreparedByID
 
-  if (preparedById) {
-    try {
-      await notifyUsers({
-        recipientUserIds: [preparedById],
-        sheetId,
-        createdBy: approvedById,
-        category: "Datasheet",
-        title: "Filled Sheet Approved",
-        message: `Your filled sheet #${sheetId} has been approved.`,
-      });
-    } catch (err) {
-      console.error("❌ Failed to send approval notification:", err);
-    }
-  } else {
-    console.warn(`⚠️ No PreparedByID found for Filled SheetID: ${sheetId}`);
+  if (!preparedById) {
+    console.warn(`No PreparedByID found for Filled SheetID: ${sheetId}`)
+    return sheetId
   }
 
-  return sheetId;
+  try {
+    await notifyUsers({
+      recipientUserIds: [preparedById],
+      sheetId,
+      createdBy: approvedById,
+      category: 'Datasheet',
+      title: 'Filled Sheet Approved',
+      message: `Your filled sheet #${sheetId} has been approved.`,
+    })
+  } catch (error) {
+    console.error('Failed to send approval notification:', error)
+  }
+
+  return sheetId
 }
 
+/* ──────────────────────────────────────────────────────────────
+   Reference lookups for UI dropdowns
+   ────────────────────────────────────────────────────────────── */
+
 export const fetchReferenceOptions = async () => {
-  const pool = await poolPromise;
+  const pool = await poolPromise
 
   const [categories, users] = await Promise.all([
-    pool.query(`SELECT CategoryID, CategoryName FROM Categories ORDER BY CategoryName`),
-    pool.query(`SELECT UserID, FirstName, LastName FROM Users ORDER BY FirstName, LastName`)
-  ]);
+    pool.query('SELECT CategoryID, CategoryName FROM Categories ORDER BY CategoryName'),
+    pool.query('SELECT UserID, FirstName, LastName FROM Users ORDER BY FirstName, LastName'),
+  ])
 
   return {
     categories: categories.recordset,
-    users: users.recordset
-  };
-};
+    users: users.recordset,
+  }
+}
 
 /* ──────────────────────────────────────────────────────────────
    Utilities
    ────────────────────────────────────────────────────────────── */
 
-/** Per-project uniqueness check for equipment tag */
 export async function doesEquipmentTagExist(tag: string, projectId: number): Promise<boolean> {
-  const pool = await poolPromise;
-  const req = pool.request();
-  req.input("ProjectID", sql.Int, projectId);
-  req.input("Tag", sql.NVarChar, tag);
+  const pool = await poolPromise
+  const req = pool.request()
+  req.input('ProjectID', sql.Int, projectId)
+  req.input('Tag', sql.NVarChar, tag)
 
   const rs = await req.query<{ Exists: number }>(`
     SELECT TOP 1 1 AS Exists
     FROM Sheets
     WHERE IsTemplate = 0 AND ProjectID = @ProjectID AND EquipmentTagNum = @Tag
-  `);
-  return (rs.recordset?.length ?? 0) > 0;
+  `)
+
+  const hasRow = (rs.recordset?.length ?? 0) > 0
+  return hasRow
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Attachments
-   NOTE: Column names below follow the INSERT/SELECT style you used
-         in your clone logic (FileName, FileUrl, MimeType, Size, StorageKey).
-         If your actual schema differs, adjust the column names accordingly.
+   Attachments (legacy Attachments table, non-SheetAttachments)
    ────────────────────────────────────────────────────────────── */
 
-/** Save attachment metadata after Multer writes the file to /public/attachments */
-export async function saveAttachmentMeta(meta: AttachmentMeta): Promise<AttachmentMeta & { attachmentId: number }> {
-  const pool = await poolPromise;
-  const req = pool.request();
-  req.input("SheetID", sql.Int, meta.sheetId);
-  req.input("FileName", sql.NVarChar, meta.originalName);
-  req.input("FileUrl", sql.NVarChar, meta.relativePath); // store relative path (e.g., "attachments/123_name.pdf")
-  req.input("MimeType", sql.NVarChar, meta.mimeType);
-  req.input("Size", sql.BigInt, meta.size);
-  req.input("StorageKey", sql.NVarChar, null); // If you add S3 keys later, set here
-  req.input("UploadedBy", sql.Int, meta.uploadedBy);
+export async function saveAttachmentMeta(
+  meta: AttachmentMeta
+): Promise<AttachmentMeta & { attachmentId: number }> {
+  const pool = await poolPromise
+  const req = pool.request()
+  req.input('SheetID', sql.Int, meta.sheetId)
+  req.input('FileName', sql.NVarChar, meta.originalName)
+  req.input('FileUrl', sql.NVarChar, meta.relativePath)
+  req.input('MimeType', sql.NVarChar, meta.mimeType)
+  req.input('Size', sql.BigInt, meta.size)
+  req.input('StorageKey', sql.NVarChar, null)
+  req.input('UploadedBy', sql.Int, meta.uploadedBy)
 
   const rs = await req.query<{ AttachmentID: number }>(`
     INSERT INTO Attachments (
@@ -1379,232 +1387,355 @@ export async function saveAttachmentMeta(meta: AttachmentMeta): Promise<Attachme
       @SheetID, @FileName, @FileUrl, @MimeType, @Size, @StorageKey, @UploadedBy, GETDATE(), 0
     );
     SELECT CAST(SCOPE_IDENTITY() AS int) AS AttachmentID;
-  `);
+  `)
 
-  const attachmentId = rs.recordset?.[0]?.AttachmentID ?? 0;
-  return { ...meta, attachmentId };
+  const attachmentId = rs.recordset?.[0]?.AttachmentID ?? 0
+  return { ...meta, attachmentId }
 }
 
-/** List attachments for a sheet (most recent first) */
-export async function getAttachmentsForSheet(sheetId: number): Promise<Array<AttachmentMeta & { attachmentId: number }>> {
-  const pool = await poolPromise;
-  const req = pool.request();
-  req.input("SheetID", sql.Int, sheetId);
+export async function getAttachmentsForSheet(
+  sheetId: number
+): Promise<Array<AttachmentMeta & { attachmentId: number }>> {
+  const pool = await poolPromise
+  const req = pool.request()
+  req.input('SheetID', sql.Int, sheetId)
 
   const rs = await req.query<{
-    AttachmentID: number;
-    SheetID: number;
-    FileName: string;
-    FileUrl: string;
-    MimeType: string | null;
-    Size: number | null;
-    UploadedBy: number | null;
-    UploadedAt: Date | null;
+    AttachmentID: number
+    SheetID: number
+    FileName: string
+    FileUrl: string
+    MimeType: string | null
+    Size: number | null
+    UploadedBy: number | null
+    UploadedAt: Date | null
   }>(`
     SELECT AttachmentID, SheetID, FileName, FileUrl, MimeType, Size, UploadedBy, UploadedAt
     FROM Attachments
     WHERE SheetID = @SheetID
     ORDER BY UploadedAt DESC, AttachmentID DESC
-  `);
+  `)
 
-  const items = (rs.recordset ?? []).map(r => ({
-    attachmentId: r.AttachmentID,
-    sheetId: r.SheetID,
-    originalName: r.FileName,
-    storedName: path.basename(r.FileUrl || ""),
-    size: Number(r.Size ?? 0),
-    mimeType: r.MimeType ?? "application/octet-stream",
-    relativePath: r.FileUrl || "",
-    uploadedBy: Number(r.UploadedBy ?? 0),
-    createdAt: r.UploadedAt ? new Date(r.UploadedAt).toISOString() : undefined,
-  }));
-  return items;
+  const items = (rs.recordset ?? []).map(row => ({
+    attachmentId: row.AttachmentID,
+    sheetId: row.SheetID,
+    originalName: row.FileName,
+    storedName: path.basename(row.FileUrl || ''),
+    size: Number(row.Size ?? 0),
+    mimeType: row.MimeType ?? 'application/octet-stream',
+    relativePath: row.FileUrl || '',
+    uploadedBy: Number(row.UploadedBy ?? 0),
+    createdAt: row.UploadedAt ? new Date(row.UploadedAt).toISOString() : undefined,
+  }))
+
+  return items
 }
 
-/** Delete attachment by id (keeps DB/FS policy simple; delete row, you may also remove the file if desired) */
 export async function deleteAttachmentById(sheetId: number, attachmentId: number): Promise<void> {
-  const pool = await poolPromise;
-  const req = pool.request();
-  req.input("SheetID", sql.Int, sheetId);
-  req.input("AttachmentID", sql.Int, attachmentId);
+  const pool = await poolPromise
+  const req = pool.request()
+  req.input('SheetID', sql.Int, sheetId)
+  req.input('AttachmentID', sql.Int, attachmentId)
 
   await req.query(`
     DELETE FROM Attachments WHERE AttachmentID = @AttachmentID AND SheetID = @SheetID
-  `);
+  `)
+}
 
-  // If you also want to remove the physical file under /public/attachments,
-  // you can SELECT FileUrl before deletion and unlinkSync(path.resolve("public", FileUrl)).
-  // (Left out here to avoid FS side-effects in the service.)
+type SheetAttachmentRow = {
+  sheetAttachmentId: number
+  orderIndex: number | null
+  isFromTemplate: boolean | number | null
+  linkedFromSheetId: number | null
+  cloneOnCreate: boolean | number | null
+
+  id: number
+  originalName: string | null
+  storedName: string | null
+  contentType: string | null
+  fileSizeBytes: number | null
+  storageProvider: string | null
+  storagePath: string | null
+  sha256: string | null
+  uploadedBy: number | null
+  uploadedAt: Date | string | null
+  isViewable: boolean | number | null
+  uploadedByName: string | null
+}
+
+function mapAttachmentRowsToDto(rows: SheetAttachmentRow[]): SheetAttachmentDTO[] {
+  return rows.map(att => {
+    const isFromTemplateBool =
+      typeof att.isFromTemplate === 'boolean' ? att.isFromTemplate : att.isFromTemplate === 1
+    const cloneOnCreateBool =
+      typeof att.cloneOnCreate === 'boolean' ? att.cloneOnCreate : att.cloneOnCreate === 1
+    const isViewableBool =
+      typeof att.isViewable === 'boolean' ? att.isViewable : att.isViewable === 1
+
+    const dto: SheetAttachmentDTO = {
+      sheetAttachmentId: att.sheetAttachmentId,
+      orderIndex: Number(att.orderIndex ?? 0),
+      isFromTemplate: isFromTemplateBool,
+      linkedFromSheetId: att.linkedFromSheetId ?? null,
+      cloneOnCreate: cloneOnCreateBool,
+
+      id: att.id,
+      originalName: att.originalName ?? '',
+      storedName: att.storedName ?? '',
+      contentType: att.contentType ?? '',
+      fileSizeBytes: Number(att.fileSizeBytes ?? 0),
+      storageProvider: att.storageProvider ?? '',
+      storagePath: att.storagePath ?? '',
+      sha256: att.sha256 ?? null,
+      uploadedBy: att.uploadedBy ?? null,
+      uploadedAt: att.uploadedAt ? new Date(att.uploadedAt as unknown as string).toISOString() : '',
+      uploadedByName: att.uploadedByName ?? null,
+      isViewable: isViewableBool,
+      fileUrl: '',
+    }
+
+    dto.fileUrl = buildAttachmentUrl(dto)
+    return dto
+  })
+}
+
+export const listSheetAttachments = async (
+  sheetId: number
+): Promise<SheetAttachmentDTO[]> => {
+  const pool = await poolPromise
+
+  const rs = await pool.request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<SheetAttachmentRow>(`
+      SELECT
+        sa.SheetAttachmentID           AS sheetAttachmentId,
+        sa.OrderIndex                  AS orderIndex,
+        sa.IsFromTemplate              AS isFromTemplate,
+        sa.LinkedFromSheetID           AS linkedFromSheetId,
+        sa.CloneOnCreate               AS cloneOnCreate,
+        sa.CreatedAt                   AS linkedCreatedAt,
+
+        a.AttachmentID                 AS id,
+        a.OriginalName                 AS originalName,
+        a.StoredName                   AS storedName,
+        a.ContentType                  AS contentType,
+        a.FileSizeBytes                AS fileSizeBytes,
+        a.StorageProvider              AS storageProvider,
+        a.StoragePath                  AS storagePath,
+        a.Sha256                       AS sha256,
+        a.UploadedBy                   AS uploadedBy,
+        a.UploadedAt                   AS uploadedAt,
+        a.IsViewable                   AS isViewable,
+        u.FirstName + ' ' + u.LastName AS uploadedByName
+      FROM SheetAttachments sa
+      INNER JOIN Attachments a
+        ON a.AttachmentID = sa.AttachmentID
+      LEFT JOIN Users u
+        ON u.UserID = a.UploadedBy
+      WHERE sa.SheetID = @SheetID
+      ORDER BY sa.OrderIndex ASC, a.UploadedAt DESC
+    `)
+
+  const rows = rs.recordset as SheetAttachmentRow[]
+  return mapAttachmentRowsToDto(rows)
+}
+
+export const deleteSheetAttachmentLink = async (
+  sheetId: number,
+  attachmentId: number
+): Promise<boolean> => {
+  const pool = await poolPromise
+
+  const rs = await pool.request()
+    .input('SheetID', sql.Int, sheetId)
+    .input('AttachmentID', sql.Int, attachmentId)
+    .query(`
+      DELETE FROM SheetAttachments
+      WHERE SheetID = @SheetID AND AttachmentID = @AttachmentID
+    `)
+
+  const affected = rs.rowsAffected?.[0] ?? 0
+  return affected > 0
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Notes
+   Simple SheetNotes helpers (text-only notes)
    ────────────────────────────────────────────────────────────── */
 
-/** List notes for a sheet (most recent first) */
 export async function getNotesForSheet(sheetId: number): Promise<Array<{
-  noteId: number;
-  sheetId: number;
-  text: string;
-  createdBy: number;
-  createdAt: string;
-  updatedBy?: number;
-  updatedAt?: string;
+  noteId: number
+  sheetId: number
+  text: string
+  createdBy: number
+  createdAt: string
+  updatedBy?: number
+  updatedAt?: string
 }>> {
-  const pool = await poolPromise;
-  const req = pool.request();
-  req.input("SheetID", sql.Int, sheetId);
+  const pool = await poolPromise
+  const req = pool.request()
+  req.input('SheetID', sql.Int, sheetId)
 
   const rs = await req.query<{
-    NoteID: number;
-    SheetID: number;
-    Text: string;
-    CreatedBy: number;
-    CreatedAt: Date;
-    UpdatedBy: number | null;
-    UpdatedAt: Date | null;
+    NoteID: number
+    SheetID: number
+    NoteText: string
+    CreatedBy: number
+    CreatedAt: Date
+    UpdatedBy: number | null
+    UpdatedAt: Date | null
   }>(`
-    SELECT NoteID, SheetID, Text, CreatedBy, CreatedAt, UpdatedBy, UpdatedAt
+    SELECT NoteID, SheetID, NoteText, CreatedBy, CreatedAt, UpdatedBy, UpdatedAt
     FROM SheetNotes
     WHERE SheetID = @SheetID
     ORDER BY CreatedAt DESC, NoteID DESC
-  `);
+  `)
 
-  return (rs.recordset ?? []).map(r => ({
-    noteId: r.NoteID,
-    sheetId: r.SheetID,
-    text: r.Text,
-    createdBy: r.CreatedBy,
-    createdAt: new Date(r.CreatedAt).toISOString(),
-    updatedBy: r.UpdatedBy ?? undefined,
-    updatedAt: r.UpdatedAt ? new Date(r.UpdatedAt).toISOString() : undefined,
-  }));
+  return (rs.recordset ?? []).map(row => ({
+    noteId: row.NoteID,
+    sheetId: row.SheetID,
+    text: row.NoteText,
+    createdBy: row.CreatedBy,
+    createdAt: new Date(row.CreatedAt).toISOString(),
+    updatedBy: row.UpdatedBy ?? undefined,
+    updatedAt: row.UpdatedAt ? new Date(row.UpdatedAt).toISOString() : undefined,
+  }))
 }
 
-/** Create a note for a sheet */
-export async function createNoteForSheet(sheetId: number, payload: NoteCreatePayload, userId: number): Promise<{
-  noteId: number;
-  sheetId: number;
-  text: string;
-  createdBy: number;
-  createdAt: string;
+export async function createNoteForSheet(
+  sheetId: number,
+  payload: NoteCreatePayload,
+  userId: number
+): Promise<{
+  noteId: number
+  sheetId: number
+  text: string
+  createdBy: number
+  createdAt: string
 }> {
-  const pool = await poolPromise;
-  const req = pool.request();
-  req.input("SheetID", sql.Int, sheetId);
-  req.input("Text", sql.NVarChar, payload.text);
-  req.input("CreatedBy", sql.Int, userId);
+  const pool = await poolPromise
+  const req = pool.request()
+  req.input('SheetID', sql.Int, sheetId)
+  req.input('NoteText', sql.NVarChar, payload.text)
+  req.input('CreatedBy', sql.Int, userId)
 
   const rs = await req.query<{ NoteID: number; CreatedAt: Date }>(`
-    INSERT INTO SheetNotes (SheetID, Text, CreatedBy, CreatedAt)
-    VALUES (@SheetID, @Text, @CreatedBy, GETDATE());
+    INSERT INTO SheetNotes (SheetID, NoteText, CreatedBy, CreatedAt)
+    VALUES (@SheetID, @NoteText, @CreatedBy, GETDATE());
     SELECT CAST(SCOPE_IDENTITY() AS int) AS NoteID, GETDATE() AS CreatedAt;
-  `);
+  `)
 
-  const row = rs.recordset?.[0];
+  const row = rs.recordset?.[0]
+
+  const createdAtIso = row?.CreatedAt
+    ? new Date(row.CreatedAt).toISOString()
+    : new Date().toISOString()
+
   return {
     noteId: row?.NoteID ?? 0,
     sheetId,
     text: payload.text,
     createdBy: userId,
-    createdAt: row?.CreatedAt ? new Date(row.CreatedAt).toISOString() : new Date().toISOString(),
-  };
+    createdAt: createdAtIso,
+  }
 }
 
-/** Update a note (text only) */
 export async function updateNoteForSheet(
   sheetId: number,
   noteId: number,
   payload: NoteUpdatePayload,
   userId: number
 ): Promise<{
-  noteId: number;
-  sheetId: number;
-  text: string;
-  updatedBy: number;
-  updatedAt: string;
+  noteId: number
+  sheetId: number
+  text: string
+  updatedBy: number
+  updatedAt: string
 }> {
-  const pool = await poolPromise;
-  const req = pool.request();
-  req.input("SheetID", sql.Int, sheetId);
-  req.input("NoteID", sql.Int, noteId);
-  req.input("Text", sql.NVarChar, payload.text ?? "");
+  const pool = await poolPromise
+  const req = pool.request()
+  req.input('SheetID', sql.Int, sheetId)
+  req.input('NoteID', sql.Int, noteId)
+  req.input('NoteText', sql.NVarChar, payload.text ?? '')
+  req.input('UpdatedBy', sql.Int, userId)
 
   const rs = await req.query<{ UpdatedAt: Date }>(`
     UPDATE SheetNotes
-    SET Text = @Text, UpdatedBy = ${userId}, UpdatedAt = GETDATE()
+    SET NoteText = @NoteText, UpdatedBy = @UpdatedBy, UpdatedAt = GETDATE()
     WHERE NoteID = @NoteID AND SheetID = @SheetID;
 
     SELECT GETDATE() AS UpdatedAt;
-  `);
+  `)
 
-  const row = rs.recordset?.[0];
+  const row = rs.recordset?.[0]
+
+  const updatedAtIso = row?.UpdatedAt
+    ? new Date(row.UpdatedAt).toISOString()
+    : new Date().toISOString()
+
   return {
     noteId,
     sheetId,
-    text: payload.text ?? "",
+    text: payload.text ?? '',
     updatedBy: userId,
-    updatedAt: row?.UpdatedAt ? new Date(row.UpdatedAt).toISOString() : new Date().toISOString(),
-  };
+    updatedAt: updatedAtIso,
+  }
 }
 
-/** Delete a note */
 export async function deleteNoteForSheet(sheetId: number, noteId: number): Promise<void> {
-  const pool = await poolPromise;
-  const req = pool.request();
-  req.input("SheetID", sql.Int, sheetId);
-  req.input("NoteID", sql.Int, noteId);
+  const pool = await poolPromise
+  const req = pool.request()
+  req.input('SheetID', sql.Int, sheetId)
+  req.input('NoteID', sql.Int, noteId)
 
   await req.query(`
     DELETE FROM SheetNotes WHERE NoteID = @NoteID AND SheetID = @SheetID
-  `);
-
-  // Optional: insert an audit log here using insertAuditLog(...)
+  `)
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Export helpers (return absolute file path; controller sendsFile)
+   Export helpers (return absolute file path)
    ────────────────────────────────────────────────────────────── */
 
 export async function exportPDF(
   sheetId: number,
-  lang: string = "eng",
-  uom: UOM = "SI"
-): Promise<string> {
-  const dir = path.resolve(process.cwd(), "public", "exports");
-  await ensureDir(dir);
-  const outPath = path.join(dir, `sheet_${sheetId}.pdf`);
+  lang: string = 'eng',
+  uom: UOM = 'SI'
+): Promise<{ filePath: string; fileName: string }> {
+  const dir = path.resolve(process.cwd(), 'public', 'exports')
+  await ensureDir(dir)
 
-  // getFilledSheetDetailsById can return null → guard it
-  const details = await getFilledSheetDetailsById(sheetId, lang, uom);
+  const details = await getFilledSheetDetailsById(sheetId, lang, uom)
   if (!details) {
-    throw new Error(`Sheet ${sheetId} not found`);
+    throw new Error(`Sheet ${sheetId} not found`)
   }
-  const { datasheet } = details; // now safe
 
-  // Your generator expects 3 args (datasheet, lang, uom)
-  const result = await generateDatasheetPDF(datasheet, lang, uom);
+  const { datasheet } = details
+  const result = await generateDatasheetPDF(datasheet, lang, uom)
 
-  return normalizeToPath(result, outPath);
+  const outPath = path.join(dir, result.fileName)
+  await fs.writeFile(outPath, result.buffer)
+
+  return { filePath: outPath, fileName: result.fileName }
 }
 
 export async function exportExcel(
   sheetId: number,
-  lang: string = "eng",
-  uom: UOM = "SI"
-): Promise<string> {
-  const dir = path.resolve(process.cwd(), "public", "exports");
-  await ensureDir(dir);
-  const outPath = path.join(dir, `sheet_${sheetId}.xlsx`);
+  lang: string = 'eng',
+  uom: UOM = 'SI'
+): Promise<{ filePath: string; fileName: string }> {
+  const dir = path.resolve(process.cwd(), 'public', 'exports')
+  await ensureDir(dir)
 
-  const details = await getFilledSheetDetailsById(sheetId, lang, uom);
+  const details = await getFilledSheetDetailsById(sheetId, lang, uom)
   if (!details) {
-    throw new Error(`Sheet ${sheetId} not found`);
+    throw new Error(`Sheet ${sheetId} not found`)
   }
-  const { datasheet } = details;
 
-  // Your generator expects 3 args (datasheet, lang, uom)
-  const result = await generateDatasheetExcel(datasheet, lang, uom);
+  const { datasheet } = details
+  const result = await generateDatasheetExcel(datasheet, lang, uom)
 
-  return normalizeToPath(result, outPath);
+  const outPath = path.join(dir, result.fileName)
+  await fs.writeFile(outPath, result.buffer)
+
+  return { filePath: outPath, fileName: result.fileName }
 }

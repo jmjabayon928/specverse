@@ -1,3 +1,4 @@
+// src/app/login/page.tsx
 'use client'
 
 import { useEffect, useState } from "react";
@@ -126,11 +127,9 @@ export default function LoginPage() {
                           bg-transparent border-none focus:outline-none"
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
-                {showPassword ? (
-                  <EyeIcon className="fill-gray-500 dark:fill-gray-400" />
-                ) : (
-                  <EyeCloseIcon className="fill-gray-500 dark:fill-gray-400" />
-                )}
+                <span className="fill-gray-500 dark:fill-gray-400">
+                  {showPassword ? <EyeIcon /> : <EyeCloseIcon />}
+                </span>
               </button>
             </div>
           </div>

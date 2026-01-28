@@ -8,31 +8,43 @@ import type {
   UpdateFilledSheetBody,
   CloneFilledSheetBody,
   CreateFilledSheetResult,
-  AttachmentMeta,
   NoteCreatePayload,
   NoteUpdatePayload,
   UnifiedSheet,
 } from "../../domain/datasheets/sheetTypes"
 
 import {
+  // lists & references
   fetchAllFilled,
   fetchReferenceOptions,
+
+  // core CRUD
   getFilledSheetDetailsById,
   createFilledSheet,
   updateFilledSheet,
   verifyFilledSheet,
   approveFilledSheet,
+
+  // utils / business rules
   doesEquipmentTagExist,
-  saveAttachmentMeta,
+
+  // attachments (canonical + legacy helpers)
   getAttachmentsForSheet,
   deleteAttachmentById,
+  listSheetAttachments,
+  deleteSheetAttachmentLink,
+
+  // notes
   getNotesForSheet,
   createNoteForSheet,
   updateNoteForSheet,
   deleteNoteForSheet,
+
+  // export
   exportPDF,
   exportExcel,
 } from "../services/filledSheetService"
+import { addSheetAttachment } from "../services/templateService"
 
 import { AppError } from "../errors/AppError"
 
@@ -183,13 +195,18 @@ const verifyFilledSheetBodySchema = z
     })
   )
 
-const noteCreateSchema = z.object({
-  text: z.string().min(1),
-})
+// Allow extra fields to pass through so we do not block future noteTypeId, etc.
+const noteCreateSchema = z
+  .object({
+    text: z.string().min(1),
+  })
+  .passthrough()
 
-const noteUpdateSchema = z.object({
-  text: z.string().min(1).optional(),
-})
+const noteUpdateSchema = z
+  .object({
+    text: z.string().min(1).optional(),
+  })
+  .passthrough()
 
 const checkTagQuerySchema = z.object({
   tag: z.unknown(),
@@ -252,9 +269,7 @@ export const createFilledSheetHandler: RequestHandler = async (req, res, next) =
       return
     }
 
-    // Validate structure / fieldValues with Zod
     createFilledSheetBodySchema.parse(req.body)
-
     const body = req.body as CreateFilledSheetBody
 
     const createInput: UnifiedSheet & { fieldValues: Record<string, string> } = {
@@ -450,17 +465,13 @@ export const uploadFilledSheetAttachmentHandler: RequestHandler = async (req, re
       return
     }
 
-    const meta: AttachmentMeta = {
+    const saved = await addSheetAttachment({
       sheetId,
-      originalName: file.originalname,
-      storedName: file.filename,
-      size: file.size,
-      mimeType: file.mimetype,
-      relativePath: `attachments/${file.filename}`,
+      file,
       uploadedBy: user.userId,
-    }
+      ensureTemplate: false,
+    })
 
-    const saved = await saveAttachmentMeta(meta)
     res.status(201).json(saved)
   } catch (err: unknown) {
     handleError(next, err, "Failed to upload attachment")
@@ -477,7 +488,16 @@ export const listFilledSheetAttachmentsHandler: RequestHandler = async (req, res
       return
     }
 
-    const items = await getAttachmentsForSheet(sheetId)
+    const sourceRaw = Array.isArray(req.query.source) ? req.query.source[0] : req.query.source
+    const source = typeof sourceRaw === "string" ? sourceRaw.toLowerCase() : "canonical"
+
+    if (source === "legacy") {
+      const legacyItems = await getAttachmentsForSheet(sheetId)
+      res.status(200).json(legacyItems)
+      return
+    }
+
+    const items = await listSheetAttachments(sheetId)
     res.status(200).json(items)
   } catch (err: unknown) {
     handleError(next, err, "Failed to list attachments")
@@ -493,6 +513,12 @@ export const deleteFilledSheetAttachmentHandler: RequestHandler = async (req, re
 
     if (sheetId == null || attachmentId == null) {
       next(new AppError("Invalid parameters", 400))
+      return
+    }
+
+    const deletedCanonical = await deleteSheetAttachmentLink(sheetId, attachmentId)
+    if (deletedCanonical) {
+      res.status(204).end()
       return
     }
 
@@ -617,8 +643,10 @@ export const exportFilledSheetPDF: RequestHandler = async (req, res, next) => {
     const lang = parseLang(req.query.lang)
     const uom = parseUom(req.query.uom)
 
-    const fileAbsPath = await exportPDF(sheetId, lang, uom)
-    res.status(200).sendFile(fileAbsPath)
+    const { filePath, fileName } = await exportPDF(sheetId, lang, uom)
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+    res.status(200).sendFile(filePath)
   } catch (err: unknown) {
     handleError(next, err, "Failed to export PDF")
   }
@@ -637,8 +665,10 @@ export const exportFilledSheetExcel: RequestHandler = async (req, res, next) => 
     const lang = parseLang(req.query.lang)
     const uom = parseUom(req.query.uom)
 
-    const fileAbsPath = await exportExcel(sheetId, lang, uom)
-    res.status(200).sendFile(fileAbsPath)
+    const { filePath, fileName } = await exportExcel(sheetId, lang, uom)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+    res.status(200).sendFile(filePath)
   } catch (err: unknown) {
     handleError(next, err, "Failed to export Excel")
   }

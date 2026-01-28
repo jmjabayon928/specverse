@@ -1,38 +1,51 @@
-"use client";
+// src/components/datasheets/ExportSheetButtons.tsx
+'use client'
 
-import React from "react";
-import Image from "next/image";
-import IconTooltip from "@/components/common/IconTooltip";
-import { handleExport } from "@/utils/datasheetExport";
+import Image from 'next/image'
+import IconTooltip from '@/components/ui/tooltip/IconTooltip'
+import { handleExport } from '@/utils/datasheetExport'
 
-type ExportSheetButtonsProps = {
-  sheetId: number;
-  sheetName: string;
-  revisionNum: number;
-  clientName: string;
-  unitSystem: "SI" | "USC";
-  language: string;
-  isTemplate: boolean;
-  isDetailPage?: boolean; // optional fallback if iconSize is not provided
-  iconSize?: number;       // new optional prop to sync icon sizes
-};
+export interface ExportSheetButtonsProps {
+  sheetId: number
+  sheetName: string
+  revisionNum: number
+  clientName: string
+  unitSystem: 'SI' | 'USC'
+  language: string
+  isTemplate: boolean
+  isDetailPage?: boolean
+  iconSize?: number
+}
 
-const ExportSheetButtons: React.FC<ExportSheetButtonsProps> = ({
-  sheetId,
-  sheetName,
-  revisionNum,
-  clientName,
-  unitSystem,
-  language,
-  isTemplate,
-  isDetailPage = false,
-  iconSize,
-}) => {
-  // ✅ Use passed iconSize or fallback to isDetailPage logic
-  const computedSize = iconSize ?? (isDetailPage ? 32 : 20);
-  const sizeClass = computedSize >= 32 ? "w-8 h-8" : "w-5 h-5";
+function getIconSize(
+  explicitSize: number | undefined,
+  isDetailPage: boolean | undefined
+): number {
+  if (typeof explicitSize === 'number') {
+    return explicitSize
+  }
 
-  const onExport = (type: "pdf" | "excel") => {
+  return isDetailPage ? 32 : 20
+}
+
+export default function ExportSheetButtons(props: Readonly<ExportSheetButtonsProps>) {
+  const {
+    sheetId,
+    sheetName,
+    revisionNum,
+    clientName,
+    unitSystem,
+    language,
+    isTemplate,
+    isDetailPage,
+    iconSize,
+  } = props
+
+  const computedSize = getIconSize(iconSize, isDetailPage)
+  const isLarge = computedSize >= 32
+  const sizeClass = isLarge ? 'w-8 h-8' : 'w-5 h-5'
+
+  function handleClick(type: 'pdf' | 'excel') {
     handleExport({
       sheetId,
       type,
@@ -42,20 +55,21 @@ const ExportSheetButtons: React.FC<ExportSheetButtonsProps> = ({
       revisionNum,
       clientName,
       isTemplate,
-    });
-  };
+    })
+  }
 
   return (
-    <div className="flex items-center gap-2">
-      <IconTooltip label="Export as PDF">
+    <div className='flex items-center gap-2'>
+      <IconTooltip label='Export as PDF'>
         <button
-          onClick={() => onExport("pdf")}
-          title="Export as PDF"
-          className="hover:opacity-80 transition"
+          type='button'
+          onClick={() => handleClick('pdf')}
+          title='Export as PDF'
+          className='hover:opacity-80 transition'
         >
           <Image
-            src="/images/pdf.png"
-            alt="PDF Icon"
+            src='/images/pdf.png'
+            alt='PDF icon'
             width={computedSize}
             height={computedSize}
             className={sizeClass}
@@ -63,15 +77,16 @@ const ExportSheetButtons: React.FC<ExportSheetButtonsProps> = ({
         </button>
       </IconTooltip>
 
-      <IconTooltip label="Export as Excel">
+      <IconTooltip label='Export as Excel'>
         <button
-          onClick={() => onExport("excel")}
-          title="Export as Excel"
-          className="hover:opacity-80 transition"
+          type='button'
+          onClick={() => handleClick('excel')}
+          title='Export as Excel'
+          className='hover:opacity-80 transition'
         >
           <Image
-            src="/images/xls.png"
-            alt="Excel Icon"
+            src='/images/xls.png'
+            alt='Excel icon'
             width={computedSize}
             height={computedSize}
             className={sizeClass}
@@ -79,7 +94,5 @@ const ExportSheetButtons: React.FC<ExportSheetButtonsProps> = ({
         </button>
       </IconTooltip>
     </div>
-  );
-};
-
-export default ExportSheetButtons;
+  )
+}
