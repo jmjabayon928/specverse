@@ -92,7 +92,9 @@ export async function getAllInventoryTransactions() {
   return result.recordset;
 }
 
-// Get paginated inventory transactions with filters
+// Get paginated inventory transactions with filters.
+// ASSUMPTION (pending DB verification): Join chain t -> Inventory i (t.InventoryID = i.InventoryID), i -> InventoryItems ii (i.InventoryID = ii.InventoryID).
+// Verify in SSMS: (1) InventoryTransactions.InventoryID FK target, (2) Inventory PK column, (3) Inventory.ItemID vs InventoryItems.InventoryID. If Inventory uses Id as PK, use t.InventoryID = i.Id and i.ItemID = ii.InventoryID.
 export async function getInventoryTransactionsPaged(
   filters: InventoryTransactionFilters,
   page: number,

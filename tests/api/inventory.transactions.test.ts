@@ -263,6 +263,41 @@ describe('Inventory Transactions API', () => {
       )
       expect(res.body.rows.length).toBe(1)
     })
+
+    it('filter by itemId reduces results', async () => {
+      mockGetInventoryTransactionsPaged.mockResolvedValueOnce({
+        total: 1,
+        rows: [
+          {
+            transactionId: 1,
+            itemId: 42,
+            itemName: 'Test Item 42',
+            warehouseId: 1,
+            warehouseName: 'Warehouse A',
+            quantityChanged: 5,
+            transactionType: 'Receive',
+            performedAt: '2026-01-28T10:00:00.000Z',
+            performedBy: 'John Doe',
+          },
+        ],
+      })
+
+      const app = buildTestApp()
+      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+
+      const res = await request(app)
+        .get('/api/backend/inventory/all/transactions?itemId=42')
+        .set('Cookie', [authCookie])
+
+      expect(res.statusCode).toBe(200)
+      expect(mockGetInventoryTransactionsPaged).toHaveBeenCalledWith(
+        expect.objectContaining({ itemId: 42 }),
+        1,
+        20
+      )
+      expect(res.body.rows.length).toBe(1)
+      expect(res.body.rows[0].itemId).toBe(42)
+    })
   })
 
   describe('CSV Export', () => {
