@@ -1,6 +1,11 @@
 // tests/services/templateService.test.ts
+type QueryResult = { recordset: unknown[] }
+type QueryFn = (sql: string) => Promise<QueryResult>
+const mockQuery: jest.MockedFunction<QueryFn> = jest
+  .fn<Promise<QueryResult>, [string]>()
+  .mockResolvedValue({ recordset: [] })
+
 jest.mock('../../src/backend/config/db', () => {
-  const mockQuery = jest.fn<() => Promise<{ recordset: unknown[] }>>()
   const MockTransaction = class {
     begin = () => Promise.resolve()
     commit = () => Promise.resolve()
@@ -18,21 +23,17 @@ jest.mock('../../src/backend/config/db', () => {
       Int: 1,
       NVarChar: () => ({}),
     },
-    getMockQuery: () => mockQuery,
   }
 })
 
-import * as dbConfig from '../../src/backend/config/db'
 import {
   getAllNoteTypes,
   doesTemplateEquipmentTagExist,
 } from '../../src/backend/services/templateService'
 
-const getMockQuery = (): jest.Mock => (dbConfig as { getMockQuery: () => jest.Mock }).getMockQuery()
-
 describe('templateService.getAllNoteTypes', () => {
   it('returns an array of note types with expected shape', async () => {
-    getMockQuery().mockResolvedValueOnce({
+    mockQuery.mockResolvedValueOnce({
       recordset: [
         { NoteTypeID: 1, NoteType: 'General', Description: null as string | null },
       ],
@@ -54,7 +55,7 @@ describe('templateService.getAllNoteTypes', () => {
 
 describe('templateService.doesTemplateEquipmentTagExist', () => {
   it('returns false for a clearly non-existent tag / project combination', async () => {
-    getMockQuery().mockResolvedValueOnce({ recordset: [] })
+    mockQuery.mockResolvedValueOnce({ recordset: [] })
 
     const fakeTag = '@@@__nonexistent_tag__@@@'
     const fakeProjectId = 999_999
@@ -67,7 +68,7 @@ describe('templateService.doesTemplateEquipmentTagExist', () => {
 
 describe('templateService.doesTemplateEquipmentTagExist – true case', () => {
   it('returns true when a matching (EquipmentTagNum, ProjectID) exists', async () => {
-    getMockQuery().mockResolvedValueOnce({ recordset: [{ Exists: 1 }] })
+    mockQuery.mockResolvedValueOnce({ recordset: [{ Exists: 1 }] })
 
     const projectId = 98765
     const testTag = 'TEST-TAG-XYZ'
