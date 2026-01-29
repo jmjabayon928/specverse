@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { useSession } from "@/hooks/useSession";
 
 type UserRow = {
   UserID: number;
@@ -20,6 +21,9 @@ type UserRow = {
 type Paged<T> = { page: number; pageSize: number; total: number; rows: T[] };
 
 export default function UsersPage() {
+  const { user } = useSession();
+  const isAdmin = user?.role?.toLowerCase() === "admin";
+
   const [rows, setRows] = useState<UserRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -143,14 +147,16 @@ export default function UsersPage() {
                   >
                     Edit
                   </button>
-                  <button
-                    className="mr-2 underline text-blue-600"
-                    onClick={() => {
-                      setResetPasswordUser(r);
-                    }}
-                  >
-                    Reset Password
-                  </button>
+                  {isAdmin && (
+                    <button
+                      className="mr-2 underline text-blue-600"
+                      onClick={() => {
+                        setResetPasswordUser(r);
+                      }}
+                    >
+                      Reset Password
+                    </button>
+                  )}
                   <button
                     className="text-red-600 underline"
                     onClick={async () => {
