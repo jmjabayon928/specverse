@@ -7,6 +7,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSidebar } from '../context/SidebarContext'
+import { useSession } from '@/hooks/useSession'
 import {
   GridIcon,
   HorizontaLDots,
@@ -19,8 +20,6 @@ import {
   ReportsIcon,
   AnalyticsIcon,
 } from '../components/icons/index'
-
-const userRole = 'admin'
 
 const FEATURE_REVISIONS_ENABLED = false
 const FEATURE_MIRROR_ENABLED = false
@@ -101,6 +100,7 @@ const navItems: NavItem[] = [
       { name: 'Clients', path: '/settings/clients', pro: false },
       { name: 'Manufacturers', path: '/settings/manufacturers', pro: false },
       { name: 'Suppliers', path: '/settings/suppliers', pro: false },
+      { name: 'Audit Logs', path: '/audit-logs', pro: false },
     ],
   },
   {
@@ -117,7 +117,10 @@ const navItems: NavItem[] = [
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar()
+  const { user, loading } = useSession()
   const pathname = usePathname()
+
+  const userRole = user?.role?.toLowerCase() ?? ''
 
   const [openSubmenuIndex, setOpenSubmenuIndex] = useState<number | null>(null)
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>({})
@@ -417,7 +420,15 @@ const AppSidebar: React.FC = () => {
               >
                 {isExpanded || isHovered || isMobileOpen ? 'Menu' : <HorizontaLDots />}
               </h2>
-              {renderMenuItems()}
+              {loading ? (
+                <ul className="flex flex-col gap-4" aria-hidden="true">
+                  <li className="h-10 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+                  <li className="h-10 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+                  <li className="h-10 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+                </ul>
+              ) : (
+                renderMenuItems()
+              )}
             </div>
           </div>
         </nav>
