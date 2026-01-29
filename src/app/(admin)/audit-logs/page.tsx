@@ -162,7 +162,7 @@ export default function AuditLogsPage() {
   };
 
   return (
-    <SecurePage requiredPermission="DATASHEETS_VIEW">
+    <SecurePage requiredRole="Admin">
       <div className="p-6 space-y-4">
         <h1 className="text-2xl font-bold">Audit Logs</h1>
 
