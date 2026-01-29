@@ -311,7 +311,7 @@ const TemplateListPage = () => {
   }
 
   return (
-    <SecurePage requiredPermission='TEMPLATES_VIEW'>
+    <SecurePage requiredPermission='DATASHEET_VIEW'>
       {loading ? (
         <p className='text-center text-gray-500 py-4'>
           Loading templates...

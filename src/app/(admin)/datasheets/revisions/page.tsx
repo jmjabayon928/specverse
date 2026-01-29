@@ -7,7 +7,7 @@ export default function RevisionBrowserPage() {
   const router = useRouter();
 
   return (
-    <SecurePage requiredPermission="REVISIONS_VIEW">
+    <SecurePage requiredPermission="DATASHEET_VIEW">
       <div className="p-6 max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold mb-4">Datasheet Revisions (Unavailable)</h1>
 

@@ -130,7 +130,7 @@ export default function FilledSheetListPage() {
   }, [categoryFilter, userFilter, dateFrom, dateTo, sheets]);
 
   return (
-    <SecurePage requiredPermission="DATASHEETS_VIEW">
+    <SecurePage requiredPermission="DATASHEET_VIEW">
       {loading ? (
         <p className="text-center text-gray-500 py-4">Loading filled sheets...</p>
       ) : (

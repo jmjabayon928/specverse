@@ -56,7 +56,7 @@ const TemplateEditPage = async (props: TemplateEditPageProps) => {
   })
 
   return (
-    <SecurePage requiredPermission='TEMPLATE_EDIT'>
+    <SecurePage requiredPermission='DATASHEET_EDIT'>
       <TemplateEditorForm
         defaultValues={defaultValues}
         areas={referenceData.areas.map((area) => ({ label: area.name, value: area.id }))}

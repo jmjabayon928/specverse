@@ -47,7 +47,7 @@ const canEditTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
     return false
   }
 
-  return isEditableStatus && userHasPermission(user, 'TEMPLATE_EDIT')
+  return isEditableStatus && userHasPermission(user, 'DATASHEET_EDIT')
 }
 
 const canVerifyTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
@@ -59,7 +59,7 @@ const canVerifyTemplate = (user: UserSession, sheet: MinimalSheetForActions) => 
     return false
   }
 
-  return userHasPermission(user, 'TEMPLATE_VERIFY')
+  return userHasPermission(user, 'DATASHEET_VERIFY')
 }
 
 const canApproveTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
@@ -68,7 +68,7 @@ const canApproveTemplate = (user: UserSession, sheet: MinimalSheetForActions) =>
     return false
   }
 
-  return userHasPermission(user, 'TEMPLATE_APPROVE')
+  return userHasPermission(user, 'DATASHEET_APPROVE')
 }
 
 const canCloneTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
@@ -77,7 +77,7 @@ const canCloneTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
     return false
   }
 
-  return userHasPermission(user, 'TEMPLATE_CREATE')
+  return userHasPermission(user, 'DATASHEET_CREATE')
 }
 
 const canExportTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
@@ -86,7 +86,7 @@ const canExportTemplate = (user: UserSession, sheet: MinimalSheetForActions) => 
     return false
   }
 
-  return userHasPermission(user, 'TEMPLATE_EXPORT')
+  return userHasPermission(user, 'DATASHEET_EXPORT')
 }
 
 const canCreateFilledFromTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {

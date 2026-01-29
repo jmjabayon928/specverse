@@ -87,7 +87,7 @@ const TemplateDetailPage = async (props: TemplateDetailPageProps) => {
     : null
 
   return (
-    <SecurePage requiredPermission='TEMPLATE_VIEW'>
+    <SecurePage requiredPermission='DATASHEET_VIEW'>
       <TemplatePageClient
         sheetId={sheetId}
         user={session}

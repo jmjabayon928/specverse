@@ -15,7 +15,7 @@ const FieldCompletionHeatmap = dynamic(() => import("./FieldCompletionHeatmap"),
 
 export default function AnalyticsPage() {
   return (
-    <SecurePage requiredPermission="VIEW_ANALYTICS">
+    <SecurePage requiredPermission="DASHBOARD_VIEW">
       <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <Card>
           <CardContent>

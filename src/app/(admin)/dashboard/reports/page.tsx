@@ -16,7 +16,7 @@ import SecurePage from '@/components/security/SecurePage';
 
 export default function ReportsPage() {
   return (
-    <SecurePage requiredPermission="VIEW_REPORTS">
+    <SecurePage requiredPermission="DASHBOARD_VIEW">
       <div className="p-6 space-y-10">
         <h1 className="text-2xl font-bold">📑 Reports Dashboard</h1>
 

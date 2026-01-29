@@ -5,7 +5,7 @@ import TemplateCreatorForm from './TemplateCreatorForm'
 
 const CreateTemplatePage = () => {
   return (
-    <SecurePage requiredPermission='TEMPLATE_CREATE'>
+    <SecurePage requiredPermission='DATASHEET_CREATE'>
       <TemplateCreatorForm />
     </SecurePage>
   )
