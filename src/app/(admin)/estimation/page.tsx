@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import EstimationTable from "@/components/estimation/EstimationTable";
-import SecurePage from "@/components/security/SecurePage";
 
 const Select = dynamic(() => import("react-select"), { ssr: false });
 
@@ -67,8 +66,7 @@ export default function EstimationDashboardPage() {
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
-    <SecurePage requiredPermission="ESTIMATION_VIEW">
-      <div className="space-y-6">
+    <div className="space-y-6">
         <h1 className="text-2xl font-bold">Project Estimation Dashboard</h1>
 
         {/* Filter / Search / Create */}
@@ -187,6 +185,5 @@ export default function EstimationDashboardPage() {
           </div>
         )}
       </div>
-    </SecurePage>
   );
 }
