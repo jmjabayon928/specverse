@@ -75,8 +75,35 @@ export default function FilledSheetActions(props: Readonly<FilledSheetActionsPro
   const canExport =
     status === approvedStatus && hasPermission(user, 'DATASHEET_EXPORT')
 
+  const canViewRevisions = hasPermission(user, 'DATASHEET_VIEW')
+
   return (
     <div className={`flex flex-wrap items-center ${gapClass}`}>
+      {canViewRevisions && (
+        <IconTooltip label='View revision history'>
+          <button
+            type='button'
+            onClick={() => router.push(`/datasheets/filled/${sheet.sheetId}/revisions`)}
+            title='View revision history'
+          >
+            <Image
+              src='/images/history.png'
+              alt='Revisions'
+              width={iconSize}
+              height={iconSize}
+              onError={(e) => {
+                // Fallback to text if image doesn't exist
+                const target = e.target as HTMLImageElement
+                target.style.display = 'none'
+                const textButton = document.createElement('span')
+                textButton.textContent = 'Revisions'
+                textButton.className = 'px-2 py-1 text-sm text-blue-600 hover:text-blue-800'
+                target.parentElement?.appendChild(textButton)
+              }}
+            />
+          </button>
+        </IconTooltip>
+      )}
       {canEdit && (
         <IconTooltip label='Edit filled sheet'>
           <button

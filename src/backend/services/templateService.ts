@@ -239,9 +239,9 @@ function applySheetInputsForInsert(
   userId: number
 ): sql.Request {
   return req
-    .input('SheetName', sql.VarChar(255), nv(data.sheetName))
-    .input('SheetDesc', sql.VarChar(255), nv(data.sheetDesc))
-    .input('SheetDesc2', sql.VarChar(255), nv(data.sheetDesc2))
+    .input('SheetName', sql.VarChar(255), nv(data.sheetName) ?? '')
+    .input('SheetDesc', sql.VarChar(255), nv(data.sheetDesc) ?? '')
+    .input('SheetDesc2', sql.VarChar(255), nv(data.sheetDesc2) ?? '')
     .input('ClientDocNum', sql.Int, iv(data.clientDocNum))
     .input('ClientProjNum', sql.Int, iv(data.clientProjectNum))
     .input('CompanyDocNum', sql.Int, iv(data.companyDocNum))
@@ -918,9 +918,11 @@ export async function createTemplate(
 ): Promise<number> {
   const pool = await poolPromise
   const tx = new sql.Transaction(pool)
+  let begun = false
 
   try {
     await tx.begin()
+    begun = true
 
     const insertReq = applySheetInputsForInsert(tx.request(), data, userId)
     const sheetRs = await insertReq.query<{ SheetID: number }>(`
@@ -969,7 +971,16 @@ export async function createTemplate(
 
     return sheetId
   } catch (err) {
-    await tx.rollback()
+    if (begun) {
+      try {
+        await tx.rollback()
+      } catch (rollbackErr: unknown) {
+        // Ignore ENOTBEGUN when server already rolled back (e.g. after INSERT failure)
+        if (typeof rollbackErr === 'object' && rollbackErr !== null && 'code' in rollbackErr && (rollbackErr as { code: string }).code !== 'ENOTBEGUN') {
+          throw rollbackErr
+        }
+      }
+    }
     throw err
   }
 }
@@ -1542,7 +1553,7 @@ export async function doesTemplateEquipmentTagExist(
   req.input('Tag', sql.NVarChar, tag)
 
   const rs = await req.query<{ Exists: number }>(`
-    SELECT TOP 1 1 AS Exists
+    SELECT TOP 1 1 AS [Exists]
     FROM Sheets
     WHERE IsTemplate = 1
       AND ProjectID = @ProjectID

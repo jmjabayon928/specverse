@@ -10,6 +10,7 @@ import { upsertMirrorTemplate, getMirrorTemplate } from "@/backend/services/mirr
 import { renderWorkbookFromDefinition } from "@/backend/services/renderers/xlsxRenderer";
 import { TranslationService } from "@/backend/services/i18n/TranslationService";
 import { NullProvider } from "@/backend/services/i18n/NullProvider";
+import { asSingleString } from "@/backend/utils/requestParam";
 
 // In-memory store for MVP (swap with DB later)
 const MEMORY_DEFS = new Map<string, SheetDefinitionJSON>();
@@ -87,7 +88,11 @@ export const applyDefinition: RequestHandler = async (req, res) => {
 };
 
 export const downloadGenerated: RequestHandler = async (req, res) => {
-  const name = req.params.name;
+  const name = asSingleString(req.params.name as unknown as string | string[] | undefined);
+  if (!name || name.trim().length === 0) {
+    return res.status(400).json({ error: "name is required" });
+  }
+
   const full = path.join(process.cwd(), "tmp_outputs", name);
   res.download(full);
 };

@@ -109,3 +109,16 @@ export interface NewInventoryTransactionInput {
   Notes?: string
   CreatedBy?: number
 }
+
+// DTO for inventory transactions (camelCase)
+export interface InventoryTransactionDTO {
+  transactionId: number
+  itemId: number
+  itemName: string
+  warehouseId: number
+  warehouseName: string
+  quantityChanged: number
+  transactionType: string
+  performedAt: string
+  performedBy: string | null
+}

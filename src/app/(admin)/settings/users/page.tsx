@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import toast from "react-hot-toast";
 
 type UserRow = {
   UserID: number;
@@ -76,6 +77,7 @@ export default function UsersPage() {
 
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<UserRow | null>(null);
 
   return (
     <div className="p-6 space-y-4">
@@ -142,6 +144,14 @@ export default function UsersPage() {
                     Edit
                   </button>
                   <button
+                    className="mr-2 underline text-blue-600"
+                    onClick={() => {
+                      setResetPasswordUser(r);
+                    }}
+                  >
+                    Reset Password
+                  </button>
+                  <button
                     className="text-red-600 underline"
                     onClick={async () => {
                       if (!confirm("Delete this user?")) return;
@@ -196,6 +206,13 @@ export default function UsersPage() {
             setShowForm(false);
             void load(page, pageSize, searchRef.current);
           }}
+        />
+      )}
+
+      {resetPasswordUser && (
+        <ResetPasswordModal
+          user={resetPasswordUser}
+          onClose={() => setResetPasswordUser(null)}
         />
       )}
     </div>
@@ -347,6 +364,150 @@ function UserForm(props: Readonly<{
             {isEdit ? "Save" : "Create"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ResetPasswordModal(props: Readonly<{
+  user: UserRow;
+  onClose: () => void;
+}>) {
+  const { user, onClose } = props;
+  const [newPassword, setNewPassword] = useState("");
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      const body: { newPassword?: string } = {};
+      if (newPassword.trim()) {
+        body.newPassword = newPassword.trim();
+      }
+
+      const r = await fetch(
+        `/api/backend/admin/users/${user.UserID}/reset-password`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(body),
+        }
+      );
+
+      const j = await r.json().catch(() => ({} as Record<string, unknown>));
+
+      if (!r.ok) {
+        const errorMsg = (j as { error?: string; message?: string }).error ?? 
+                        (j as { error?: string; message?: string }).message ?? 
+                        "Failed to reset password";
+        toast.error(errorMsg);
+        return;
+      }
+
+      const response = j as {
+        userId: string;
+        tempPassword?: string;
+        message: string;
+      };
+
+      if (response.tempPassword) {
+        setTempPassword(response.tempPassword);
+      } else {
+        toast.success(response.message);
+        onClose();
+      }
+    } catch (err) {
+      console.error("Reset password error:", err);
+      toast.error("Failed to reset password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-xl space-y-4">
+        <h2 className="text-xl font-semibold">Reset Password</h2>
+        
+        {tempPassword ? (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Temporary password generated. Please copy it now - it will not be shown again.
+            </p>
+            <div className="space-y-2">
+              <label className="flex flex-col">
+                <span className="text-sm font-medium">Temporary Password:</span>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={tempPassword}
+                    className="border rounded px-3 py-2 flex-1 font-mono bg-gray-50"
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(tempPassword);
+                      toast.success("Password copied to clipboard");
+                    }}
+                    className="px-3 py-2 border rounded"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 border rounded"
+                onClick={() => {
+                  setTempPassword(null);
+                  onClose();
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Reset password for <strong>{user.Email ?? `User #${user.UserID}`}</strong>
+            </p>
+            <div className="space-y-2">
+              <label className="flex flex-col">
+                <span className="text-sm font-medium">
+                  New Password (leave blank to generate temporary password):
+                </span>
+                <input
+                  type="password"
+                  className="border rounded px-3 py-2"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Leave blank to auto-generate"
+                />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 border rounded"
+                onClick={onClose}
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+                onClick={handleSubmit}
+                disabled={loading}
+              >
+                {loading ? "Resetting..." : "Reset Password"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

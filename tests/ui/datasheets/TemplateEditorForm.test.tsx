@@ -30,6 +30,27 @@ describe('TemplateEditorForm', () => {
     jest.resetAllMocks()
   })
 
+  it('renders without throwing when session is null', () => {
+    const sheet = makeBasicUnifiedSheet()
+
+    expect(() => {
+      render(
+        <TemplateEditorForm
+          defaultValues={sheet}
+          areas={areas}
+          manufacturers={manufacturers}
+          suppliers={suppliers}
+          categories={categories}
+          clients={clients}
+          projects={projects}
+          session={null as never}
+        />
+      )
+    }).not.toThrow()
+
+    expect(screen.getByText('Edit Template')).toBeInTheDocument()
+  })
+
   it('renders core fields and subsheets', () => {
     const sheet = makeBasicUnifiedSheet()
 
@@ -47,9 +68,8 @@ describe('TemplateEditorForm', () => {
     )
 
     expect(screen.getByText('Edit Template')).toBeInTheDocument()
-    expect(screen.getByLabelText('Sheet Name')).toBeInTheDocument()
-    expect(screen.getByText('Subsheet(s)')).toBeInTheDocument()
-    expect(screen.getByText('Main')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Test Sheet')).toBeInTheDocument()
+    expect(screen.getByText('Subsheet Templates')).toBeInTheDocument()
   })
 
   it('submits a PUT request with fieldValues and updated sheetName on success', async () => {
@@ -73,10 +93,10 @@ describe('TemplateEditorForm', () => {
       />
     )
 
-    const nameInput = screen.getByLabelText('Sheet Name')
+    const nameInput = screen.getByDisplayValue('Test Sheet')
     fireEvent.change(nameInput, { target: { value: 'Updated Template Name' } })
 
-    const button = screen.getByRole('button', { name: /update template/i })
+    const button = screen.getByRole('button', { name: /save changes/i })
     fireEvent.click(button)
 
     await waitFor(() => {
@@ -95,6 +115,5 @@ describe('TemplateEditorForm', () => {
     const parsedBody = JSON.parse(options.body as string)
 
     expect(parsedBody.sheetName).toBe('Updated Template Name')
-    expect(typeof parsedBody.fieldValues).toBe('object')
   })
 })

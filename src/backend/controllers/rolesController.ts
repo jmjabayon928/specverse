@@ -1,5 +1,6 @@
 // src/backend/controllers/rolesController.ts
 import type { RequestHandler } from 'express'
+import { asSingleString, parseIntParam } from '../utils/requestParam'
 import {
   listRoles as svcList,
   getRoleById as svcGet,
@@ -19,18 +20,19 @@ import {
  */
 export const listRoles: RequestHandler = async (req, res) => {
   try {
-    const pageQuery = req.query.page as string | undefined
-    const pageSizeQuery = req.query.pageSize as string | undefined
-    const searchQuery = req.query.search as string | undefined
+    const pageQueryRaw = asSingleString(req.query.page as string | string[] | undefined)
+    const pageSizeQueryRaw = asSingleString(req.query.pageSize as string | string[] | undefined)
+    const searchQueryRaw = asSingleString(req.query.search as string | string[] | undefined)
 
-    const parsedPage = Number.parseInt(pageQuery ?? '1', 10)
+    const parsedPage = pageQueryRaw === undefined ? 1 : Number.parseInt(pageQueryRaw, 10)
     const page = Math.max(Number.isFinite(parsedPage) ? parsedPage : 1, 1)
 
-    const parsedPageSize = Number.parseInt(pageSizeQuery ?? '20', 10)
+    const parsedPageSize =
+      pageSizeQueryRaw === undefined ? 20 : Number.parseInt(pageSizeQueryRaw, 10)
     const rawPageSize = Number.isFinite(parsedPageSize) ? parsedPageSize : 20
     const pageSize = Math.min(Math.max(rawPageSize, 1), 100)
 
-    const search = typeof searchQuery === 'string' ? searchQuery.trim() : ''
+    const search = (searchQueryRaw ?? '').trim()
 
     const out: ListRolesResult = await svcList({ page, pageSize, search })
     res.json(out)
@@ -46,10 +48,8 @@ export const listRoles: RequestHandler = async (req, res) => {
  */
 export const getRole: RequestHandler = async (req, res) => {
   try {
-    const rawId = req.params.id
-    const id = Number.parseInt(rawId, 10)
-
-    if (!Number.isFinite(id)) {
+    const id = parseIntParam(req.params.id)
+    if (id == null) {
       res.status(400).json({ error: 'Invalid id' })
       return
     }
@@ -103,10 +103,8 @@ export const createRole: RequestHandler = async (req, res) => {
  */
 export const updateRole: RequestHandler = async (req, res) => {
   try {
-    const rawId = req.params.id
-    const id = Number.parseInt(rawId, 10)
-
-    if (!Number.isFinite(id)) {
+    const id = parseIntParam(req.params.id)
+    if (id == null) {
       res.status(400).json({ error: 'Invalid id' })
       return
     }
@@ -141,10 +139,8 @@ export const updateRole: RequestHandler = async (req, res) => {
  */
 export const deleteRole: RequestHandler = async (req, res) => {
   try {
-    const rawId = req.params.id
-    const id = Number.parseInt(rawId, 10)
-
-    if (!Number.isFinite(id)) {
+    const id = parseIntParam(req.params.id)
+    if (id == null) {
       res.status(400).json({ error: 'Invalid id' })
       return
     }
@@ -169,10 +165,8 @@ export const deleteRole: RequestHandler = async (req, res) => {
  */
 export const getRolePermissions: RequestHandler = async (req, res) => {
   try {
-    const rawId = req.params.id
-    const id = Number.parseInt(rawId, 10)
-
-    if (!Number.isFinite(id)) {
+    const id = parseIntParam(req.params.id)
+    if (id == null) {
       res.status(400).json({ error: 'Invalid id' })
       return
     }
@@ -197,10 +191,8 @@ export const getRolePermissions: RequestHandler = async (req, res) => {
  */
 export const getRoleAvailablePermissions: RequestHandler = async (req, res) => {
   try {
-    const rawId = req.params.id
-    const id = Number.parseInt(rawId, 10)
-
-    if (!Number.isFinite(id)) {
+    const id = parseIntParam(req.params.id)
+    if (id == null) {
       res.status(400).json({ error: 'Invalid id' })
       return
     }
@@ -220,15 +212,18 @@ export const getRoleAvailablePermissions: RequestHandler = async (req, res) => {
  */
 export const addPermissionToRole: RequestHandler = async (req, res) => {
   try {
-    const rawId = req.params.id
-    const id = Number.parseInt(rawId, 10)
+    const id = parseIntParam(req.params.id)
+    if (id == null) {
+      res.status(400).json({ error: 'Invalid ids' })
+      return
+    }
 
     const body = (req.body ?? {}) as { PermissionID?: number }
     const permissionIdRaw = body.PermissionID
     const permissionId =
       typeof permissionIdRaw === 'number' ? permissionIdRaw : Number.NaN
 
-    if (!Number.isFinite(id) || !Number.isFinite(permissionId)) {
+    if (!Number.isFinite(permissionId)) {
       res.status(400).json({ error: 'Invalid ids' })
       return
     }
@@ -255,13 +250,10 @@ export const addPermissionToRole: RequestHandler = async (req, res) => {
  */
 export const removePermissionFromRole: RequestHandler = async (req, res) => {
   try {
-    const rawId = req.params.id
-    const rawPermissionId = req.params.permissionId
+    const id = parseIntParam(req.params.id)
+    const permissionId = parseIntParam(req.params.permissionId)
 
-    const id = Number.parseInt(rawId, 10)
-    const permissionId = Number.parseInt(rawPermissionId, 10)
-
-    if (!Number.isFinite(id) || !Number.isFinite(permissionId)) {
+    if (id == null || permissionId == null) {
       res.status(400).json({ error: 'Invalid ids' })
       return
     }

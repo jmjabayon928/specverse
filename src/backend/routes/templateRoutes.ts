@@ -62,6 +62,20 @@ router.get(
   getTemplateReferenceOptionsHandler,
 )
 
+// Fixed paths (must be before /:id so they are not matched as id)
+router.get(
+  '/note-types',
+  verifyToken,
+  requirePermission('DATASHEET_VIEW'),
+  getNoteTypesHandler,
+)
+router.get(
+  '/check-tag',
+  verifyToken,
+  requirePermission('DATASHEET_VIEW'),
+  checkTemplateEquipmentTagHandler,
+)
+
 // ───────────────────────────────────────────
 // Single template
 // ───────────────────────────────────────────
@@ -133,18 +147,6 @@ router.post(
 )
 
 // ───────────────────────────────────────────
-// Equipment tag check
-// ───────────────────────────────────────────
-
-router.get(
-  '/check-tag',
-  verifyToken,
-  requirePermission('DATASHEET_VIEW'),
-  checkTemplateEquipmentTagHandler,
-)
-
-
-// ───────────────────────────────────────────
 // Notes
 // ───────────────────────────────────────────
 
@@ -181,14 +183,6 @@ router.delete(
   requirePermission('DATASHEET_NOTE_EDIT'),
   auditAction('Delete Template Note'),
   deleteTemplateNoteHandler,
-)
-
-// List note types
-router.get(
-  '/note-types',
-  verifyToken,
-  requirePermission('DATASHEET_VIEW'),
-  getNoteTypesHandler,
 )
 
 // ───────────────────────────────────────────

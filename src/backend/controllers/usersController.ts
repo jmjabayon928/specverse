@@ -9,10 +9,12 @@ import {
   createUser as svcCreate,
   updateUser as svcUpdate,
   deleteUser as svcDelete,
+  resetUserPassword as svcResetPassword,
   type ListUsersResult,
   type CreateUserInput,
   type UpdateUserInput,
 } from '../services/usersService'
+import { asSingleString, parseIntParam } from '../utils/requestParam'
 
 const createUserSchema = z.object({
   FirstName: z.string().optional(),
@@ -32,6 +34,10 @@ const updateUserSchema = z.object({
   RoleID: z.number().int().optional(),
   ProfilePic: z.string().nullish().optional(),
   IsActive: z.boolean().optional(),
+})
+
+const resetPasswordSchema = z.object({
+  newPassword: z.string().optional(),
 })
 
 /**
@@ -60,19 +66,19 @@ export const getUsers: RequestHandler = async (_req, res, next) => {
  */
 export const listUsers: RequestHandler = async (req, res, next) => {
   try {
-    const pageRaw = req.query.page as string | undefined
-    const pageSizeRaw = req.query.pageSize as string | undefined
-    const searchRaw = req.query.search as string | undefined
+    const pageRaw = asSingleString(req.query.page as string | string[] | undefined)
+    const pageSizeRaw = asSingleString(req.query.pageSize as string | string[] | undefined)
+    const searchRaw = asSingleString(req.query.search as string | string[] | undefined)
 
-    const pageParsed = Number.parseInt(pageRaw ?? '1', 10)
+    const pageParsed = pageRaw === undefined ? 1 : Number.parseInt(pageRaw, 10)
     const page = Math.max(Number.isFinite(pageParsed) ? pageParsed : 1, 1)
 
-    const pageSizeParsed = Number.parseInt(pageSizeRaw ?? '20', 10)
+    const pageSizeParsed =
+      pageSizeRaw === undefined ? 20 : Number.parseInt(pageSizeRaw, 10)
     const safePageSize = Number.isFinite(pageSizeParsed) ? pageSizeParsed : 20
     const pageSize = Math.min(Math.max(safePageSize, 1), 100)
 
-    const search =
-      typeof searchRaw === 'string' ? searchRaw.trim() : ''
+    const search = (searchRaw ?? '').trim()
 
     const out: ListUsersResult = await svcList({ page, pageSize, search })
     res.json(out)
@@ -88,10 +94,8 @@ export const listUsers: RequestHandler = async (req, res, next) => {
  */
 export const getUser: RequestHandler = async (req, res, next) => {
   try {
-    const idRaw = req.params.id
-    const id = Number.parseInt(idRaw, 10)
-
-    if (!Number.isFinite(id)) {
+    const id = parseIntParam(req.params.id)
+    if (id == null) {
       next(new AppError('Invalid id', 400))
       return
     }
@@ -163,10 +167,8 @@ export const createUser: RequestHandler = async (req, res, next) => {
  */
 export const updateUser: RequestHandler = async (req, res, next) => {
   try {
-    const idRaw = req.params.id
-    const id = Number.parseInt(idRaw, 10)
-
-    if (!Number.isFinite(id)) {
+    const id = parseIntParam(req.params.id)
+    if (id == null) {
       next(new AppError('Invalid id', 400))
       return
     }
@@ -217,10 +219,8 @@ export const updateUser: RequestHandler = async (req, res, next) => {
  */
 export const deleteUser: RequestHandler = async (req, res, next) => {
   try {
-    const idRaw = req.params.id
-    const id = Number.parseInt(idRaw, 10)
-
-    if (!Number.isFinite(id)) {
+    const id = parseIntParam(req.params.id)
+    if (id == null) {
       next(new AppError('Invalid id', 400))
       return
     }
@@ -235,5 +235,74 @@ export const deleteUser: RequestHandler = async (req, res, next) => {
   } catch (err) {
     console.error('deleteUser error:', err)
     next(new AppError('Failed to delete user', 500))
+  }
+}
+
+/**
+ * POST /api/backend/admin/users/:userId/reset-password
+ * Admin-only: Reset a user's password.
+ * If newPassword is provided, uses it; otherwise generates a temp password.
+ */
+export const resetPassword: RequestHandler = async (req, res, next) => {
+  try {
+    const userId = parseIntParam(req.params.userId)
+    if (userId == null) {
+      next(new AppError('Invalid userId', 400))
+      return
+    }
+
+    const rawBody = req.body ?? {}
+    const bodyParsed = resetPasswordSchema.parse(rawBody)
+    const { newPassword } = bodyParsed
+
+    // Import here to avoid circular dependency issues
+    const { hashPassword } = await import('../services/passwordHasher')
+    const crypto = await import('crypto')
+
+    let passwordToUse: string
+    let tempPassword: string | undefined
+
+    if (typeof newPassword === 'string' && newPassword.trim().length > 0) {
+      passwordToUse = newPassword.trim()
+    } else {
+      // Generate temp password: 16 bytes = 24 base64url chars
+      const randomBytes = crypto.randomBytes(16)
+      tempPassword = randomBytes.toString('base64url')
+      passwordToUse = tempPassword
+    }
+
+    const hashedPassword = await hashPassword(passwordToUse)
+    const updated = await svcResetPassword(userId, hashedPassword)
+
+    if (!updated) {
+      next(new AppError('User not found', 404))
+      return
+    }
+
+    const response: {
+      userId: string
+      tempPassword?: string
+      message: string
+    } = {
+      userId: String(userId),
+      message: tempPassword
+        ? 'Password reset successfully. Temporary password generated.'
+        : 'Password reset successfully.',
+    }
+
+    if (tempPassword) {
+      response.tempPassword = tempPassword
+    }
+
+    res.json(response)
+  } catch (err: unknown) {
+    if (err instanceof ZodError) {
+      console.error('resetPassword validation error:', err)
+      next(new AppError('Invalid request body', 400))
+      return
+    }
+
+    console.error('resetPassword error:', err)
+    next(new AppError('Failed to reset password', 500))
   }
 }

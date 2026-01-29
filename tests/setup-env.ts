@@ -1,5 +1,7 @@
 import { TextEncoder, TextDecoder } from 'node:util'
 
+process.env.JWT_SECRET ??= 'test-secret'
+
 const encoderIsMissing = globalThis.TextEncoder === undefined
 const decoderIsMissing = globalThis.TextDecoder === undefined
 

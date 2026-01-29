@@ -6,6 +6,32 @@ import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
 
 jest.setTimeout(60000)
 
+jest.mock('../../src/backend/config/db', () => {
+  const MockTransaction = class {
+    begin = () => Promise.resolve()
+    commit = () => Promise.resolve()
+    rollback = () => Promise.resolve()
+  }
+  return {
+    poolPromise: Promise.resolve({}),
+    sql: {
+      Transaction: MockTransaction,
+      Int: 1,
+      NVarChar: (n: number) => n,
+      MAX: 9999,
+    },
+  }
+})
+
+jest.mock('../../src/backend/database/auditQueries', () => ({
+  insertAuditLog: jest.fn().mockResolvedValue(undefined),
+  getAuditLogsForRecord: jest.fn().mockResolvedValue([]),
+}))
+
+jest.mock('../../src/backend/database/changeLogQueries', () => ({
+  getChangeLogsForSheet: jest.fn().mockResolvedValue([]),
+}))
+
 jest.mock('puppeteer', () => ({
   __esModule: true,
   default: {

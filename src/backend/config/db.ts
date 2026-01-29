@@ -83,11 +83,32 @@ const connectWithRetry = async (
   }
 }
 
-// Keep a promise-based export for existing callers that expect poolPromise.
-// NOTE: No top-level await (tsx/esbuild CJS limitation). Callers can `await poolPromise`.
-const poolPromise: Promise<sql.ConnectionPool> = connectWithRetry(
-  dbConfig,
-  MAX_DB_CONNECT_ATTEMPTS,
+// Lazy pool: connect only when first used (e.g. first API request), not at import/build time.
+let cachedPool: Promise<sql.ConnectionPool> | null = null
+
+function getPool(): Promise<sql.ConnectionPool> {
+  if (!cachedPool) {
+    cachedPool = connectWithRetry(dbConfig, MAX_DB_CONNECT_ATTEMPTS)
+  }
+  return cachedPool
+}
+
+// Export a thenable so existing `await poolPromise` still works; connection happens on first use.
+const poolPromise: Promise<sql.ConnectionPool> = new Proxy(
+  {} as Promise<sql.ConnectionPool>,
+  {
+    get(_target, prop: string | symbol) {
+      const p = getPool()
+      const promiseObj = p as unknown as Record<string | symbol, unknown>
+      const value = promiseObj[prop]
+
+      if (typeof value === 'function') {
+        return (value as (...args: unknown[]) => unknown).bind(p)
+      }
+
+      return value
+    },
+  },
 )
 
 export { poolPromise, dbConfig }

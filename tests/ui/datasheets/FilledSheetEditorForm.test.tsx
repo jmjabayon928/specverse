@@ -47,7 +47,7 @@ describe('FilledSheetEditorForm', () => {
     )
 
     expect(screen.getByText('Edit Filled Sheet')).toBeInTheDocument()
-    expect(screen.getByLabelText('Sheet Name')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Test Sheet')).toBeInTheDocument()
     expect(screen.getByText('Subsheet(s)')).toBeInTheDocument()
   })
 

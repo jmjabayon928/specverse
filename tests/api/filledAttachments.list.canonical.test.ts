@@ -27,6 +27,23 @@ function createAuthCookie(permissions: string[]): string {
 
 process.env.JWT_SECRET ??= 'secret'
 
+jest.mock('../../src/backend/config/db', () => {
+  const MockTransaction = class {
+    begin = () => Promise.resolve()
+    commit = () => Promise.resolve()
+    rollback = () => Promise.resolve()
+  }
+  return {
+    poolPromise: Promise.resolve({}),
+    sql: {
+      Transaction: MockTransaction,
+      Int: 1,
+      NVarChar: (n: number) => n,
+      MAX: 9999,
+    },
+  }
+})
+
 const canonicalAttachments: SheetAttachmentDTO[] = [
   {
     sheetAttachmentId: 10,
@@ -52,6 +69,7 @@ const canonicalAttachments: SheetAttachmentDTO[] = [
 
 jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),
+  getUserPermissions: jest.fn().mockResolvedValue([]),
 }))
 
 jest.mock('../../src/backend/database/auditQueries', () => ({

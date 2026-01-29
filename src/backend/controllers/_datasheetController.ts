@@ -4,6 +4,7 @@ import { poolPromise, sql } from "../config/db";
 import { getFilledSheetDetailsById } from "../services/filledSheetService";
 import { getTemplateDetailsById } from "../services/templateService";
 import { generateDatasheetPDF, generateDatasheetExcel } from "../services/_exportService";
+import { asSingleString, parseIntParam } from "../utils/requestParam";
 
 // 🟢 Helper to load the right datasheet
 async function getSheetData(sheetId: number, lang: string, uom: "SI" | "USC") {
@@ -25,9 +26,17 @@ async function getSheetData(sheetId: number, lang: string, uom: "SI" | "USC") {
 // ✅ Export to PDF
 export async function exportSheetPDF(req: Request, res: Response): Promise<void> {
   try {
-    const sheetId = parseInt(req.params.id);
-    const lang = String(req.query.lang || "eng");
-    const uom = req.query.uom === "USC" ? "USC" : "SI";
+    const sheetId = parseIntParam(req.params.id);
+    if (sheetId === undefined) {
+      res.status(400).json({ error: "Invalid sheet id" });
+      return;
+    }
+
+    const langRaw = asSingleString(req.query.lang as string | string[] | undefined);
+    const lang = (langRaw ?? "eng").trim() || "eng";
+
+    const uomRaw = asSingleString(req.query.uom as string | string[] | undefined);
+    const uom: "SI" | "USC" = uomRaw === "USC" ? "USC" : "SI";
 
     const result = await getSheetData(sheetId, lang, uom);
     if (!result) {
@@ -49,9 +58,17 @@ export async function exportSheetPDF(req: Request, res: Response): Promise<void>
 // ✅ Export to Excel
 export async function exportSheetExcel(req: Request, res: Response): Promise<void> {
   try {
-    const sheetId = parseInt(req.params.id);
-    const lang = String(req.query.lang || "eng");
-    const uom = req.query.uom === "USC" ? "USC" : "SI";
+    const sheetId = parseIntParam(req.params.id);
+    if (sheetId === undefined) {
+      res.status(400).json({ error: "Invalid sheet id" });
+      return;
+    }
+
+    const langRaw = asSingleString(req.query.lang as string | string[] | undefined);
+    const lang = (langRaw ?? "eng").trim() || "eng";
+
+    const uomRaw = asSingleString(req.query.uom as string | string[] | undefined);
+    const uom: "SI" | "USC" = uomRaw === "USC" ? "USC" : "SI";
 
     const result = await getSheetData(sheetId, lang, uom);
     if (!result) {

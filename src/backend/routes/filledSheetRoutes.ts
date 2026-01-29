@@ -37,6 +37,12 @@ import {
   checkEquipmentTag,
 } from '../controllers/filledSheetController'
 
+import {
+  listRevisionsHandler,
+  getRevisionHandler,
+  restoreRevisionHandler,
+} from '../controllers/sheetRevisionController'
+
 const router = Router()
 
 /* ──────────────────────────────────────────────────────────────
@@ -186,6 +192,35 @@ router.delete(
   requirePermission('DATASHEET_NOTE_EDIT'),
   auditAction('Delete Filled Sheet Note'),
   deleteFilledSheetNoteHandler
+)
+
+/* ──────────────────────────────────────────────────────────────
+   Revisions (keep BEFORE generic "/:id")
+   ────────────────────────────────────────────────────────────── */
+
+// List revisions for a sheet
+router.get(
+  '/:id/revisions',
+  verifyToken,
+  requirePermission('DATASHEET_VIEW'),
+  listRevisionsHandler
+)
+
+// Get a specific revision
+router.get(
+  '/:id/revisions/:revisionId',
+  verifyToken,
+  requirePermission('DATASHEET_VIEW'),
+  getRevisionHandler
+)
+
+// Restore a revision
+router.post(
+  '/:id/revisions/:revisionId/restore',
+  verifyToken,
+  requirePermission('DATASHEET_EDIT'),
+  auditAction('Restore Filled Sheet Revision', { tableName: 'Sheets', recordIdParam: 'id' }),
+  restoreRevisionHandler
 )
 
 /* ──────────────────────────────────────────────────────────────

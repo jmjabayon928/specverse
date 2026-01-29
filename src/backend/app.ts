@@ -30,6 +30,9 @@ import notificationRoutes from './routes/notificationRoutes'
 import referenceRoutes from '@/backend/routes/referenceRoutes'
 import statsRoutes from './routes/statsRoutes'
 import reportsRoutes from './routes/reportsRoutes'
+import adminRoutes from './routes/adminRoutes'
+import devRoutes from './routes/devRoutes'
+import auditLogsRoutes from './routes/auditLogsRoutes'
 import { errorHandler } from './middleware/errorHandler'
 
 const app: Application = express()
@@ -75,6 +78,9 @@ app.use('/api/backend/notifications', notificationRoutes)
 app.use('/api/backend', referenceRoutes)
 app.use('/api/backend/stats', statsRoutes)
 app.use('/api/backend/reports', reportsRoutes)
+app.use('/api/backend/admin', adminRoutes)
+app.use('/api/backend/dev', devRoutes)
+app.use('/api/backend/audit-logs', auditLogsRoutes)
 
 // ─────────────────────────────────────────────
 // Dev-only routes inspector

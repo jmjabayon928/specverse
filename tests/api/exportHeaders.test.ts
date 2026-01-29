@@ -31,6 +31,28 @@ function createAuthCookie(permissions: string[]): string {
 
 process.env.JWT_SECRET ??= 'secret'
 
+jest.mock('../../src/backend/config/db', () => {
+  const MockTransaction = class {
+    begin = () => Promise.resolve()
+    commit = () => Promise.resolve()
+    rollback = () => Promise.resolve()
+  }
+  return {
+    poolPromise: Promise.resolve({}),
+    sql: {
+      Transaction: MockTransaction,
+      Int: 1,
+      NVarChar: (n: number) => n,
+      MAX: 9999,
+    },
+  }
+})
+
+jest.mock('../../src/backend/database/auditQueries', () => ({
+  insertAuditLog: jest.fn().mockResolvedValue(undefined),
+  getAuditLogsForRecord: jest.fn().mockResolvedValue([]),
+}))
+
 // Always allow permission checks to pass in these focused header tests.
 jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),

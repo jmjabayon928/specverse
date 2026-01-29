@@ -1,29 +1,59 @@
 import type { Config } from 'jest'
 
-const config: Config = {
-  preset: 'ts-jest',
-  testEnvironment: 'jsdom',
-  // ✅ New: ensure TextEncoder/TextDecoder exist before tests run
+const commonConfig: Config = {
   setupFiles: ['<rootDir>/tests/setup-env.ts'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   moduleNameMapper: {
-    // ✅ Handle TypeScript path aliases (e.g., "@/components/Button")
     '^@/(.*)$': '<rootDir>/src/$1',
-
-    // ✅ Mock static assets
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
-    '\\.(svg|png|jpg|jpeg|gif|webp|avif)$': '<rootDir>/__mocks__/fileMock.ts'
-  },
-  transform: {
-    '^.+\\.(ts|tsx)$': 'ts-jest'
+    '\\.(svg|png|jpg|jpeg|gif|webp|avif)$': '<rootDir>/__mocks__/fileMock.ts',
   },
   testPathIgnorePatterns: ['/node_modules/', '/.next/', '/dist/'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
-  globals: {
-    'ts-jest': {
-      tsconfig: 'tsconfig.json'
-    }
-  }
+}
+
+const tsJestTransform: NonNullable<Config['transform']> = {
+  '^.+\\.[tj]sx?$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
+}
+
+// Frontend needs jsx transform; tsconfig.test.json has "jsx": "react-jsx"
+const tsJestTransformFrontend: NonNullable<Config['transform']> = {
+  '^.+\\.[tj]sx?$': ['ts-jest', { tsconfig: 'tsconfig.test.json' }],
+}
+
+const config: Config = {
+  projects: [
+    {
+      displayName: 'backend',
+      testEnvironment: 'node',
+      testEnvironmentOptions: {
+        customExportConditions: ['node', 'node-addons', 'default'],
+      },
+      testMatch: [
+        '<rootDir>/tests/api/**/*.test.ts',
+        '<rootDir>/tests/domain/**/*.test.ts',
+        '<rootDir>/tests/middleware/**/*.test.ts',
+        '<rootDir>/tests/schemas/**/*.test.ts',
+        '<rootDir>/tests/services/**/*.test.ts',
+        '<rootDir>/tests/utils/**/*.test.ts',
+        '<rootDir>/tests/backend/**/*.test.ts',
+      ],
+      ...commonConfig,
+      preset: 'ts-jest',
+      transform: tsJestTransform,
+    },
+    {
+      displayName: 'frontend',
+      testEnvironment: 'jsdom',
+      testMatch: [
+        '<rootDir>/tests/ui/**/*.test.tsx',
+        '<rootDir>/tests/components/**/*.test.ts?(x)',
+      ],
+      ...commonConfig,
+      preset: 'ts-jest',
+      transform: tsJestTransformFrontend,
+    },
+  ],
 }
 
 export default config

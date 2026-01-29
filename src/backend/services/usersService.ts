@@ -342,3 +342,26 @@ export const deleteUser = async (userId: number): Promise<boolean> => {
   const affected = result.recordset[0]?.Affected ?? 0
   return affected > 0
 }
+
+/** Reset user password — returns true if updated, false if user not found */
+export const resetUserPassword = async (
+  userId: number,
+  newPasswordHash: string
+): Promise<boolean> => {
+  const pool = await poolPromise
+
+  const result = await pool
+    .request()
+    .input('id', sql.Int, userId)
+    .input('PasswordHash', sql.NVarChar(255), newPasswordHash)
+    .query<{ Affected: number }>(`
+      UPDATE dbo.Users
+      SET PasswordHash = @PasswordHash
+      WHERE UserID = @id;
+
+      SELECT @@ROWCOUNT AS Affected;
+    `)
+
+  const affected = result.recordset[0]?.Affected ?? 0
+  return affected > 0
+}

@@ -165,9 +165,10 @@ export default function TemplateEditorForm(props: Readonly<TemplateEditorFormPro
   }
 
   const hasErrors = Object.keys(formErrors).length > 0
+  const safeSession = typeof session === 'string' ? session : ''
 
   return (
-    <div className='space-y-6' data-has-session={session.length > 0 ? '1' : '0'}>
+    <div className='space-y-6' data-has-session={safeSession.length > 0 ? '1' : '0'}>
       <h1 className='text-xl font-semibold'>Edit Template</h1>
 
       {hasErrors && (

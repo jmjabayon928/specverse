@@ -76,9 +76,8 @@ describe('requirePermission middleware', () => {
     await middleware(req, res, next)
 
     expect(mockedCheckUserPermission).toHaveBeenCalledWith(2, permissionKey)
-    expect(next).not.toHaveBeenCalled()
-    expect(status).toHaveBeenCalledWith(403)
-    expect(send).toHaveBeenCalledWith('Permission denied')
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'Permission denied', statusCode: 403 }))
   })
 
   it('returns 403 when req.user is missing', async () => {
@@ -94,9 +93,8 @@ describe('requirePermission middleware', () => {
     await middleware(req, res, next)
 
     expect(mockedCheckUserPermission).not.toHaveBeenCalled()
-    expect(next).not.toHaveBeenCalled()
-    expect(status).toHaveBeenCalledWith(403)
-    expect(send).toHaveBeenCalledWith('Missing user in request')
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'Missing user in request', statusCode: 403 }))
   })
 
   it('returns 500 when checkUserPermission throws', async () => {
@@ -120,8 +118,7 @@ describe('requirePermission middleware', () => {
     await middleware(req, res, next)
 
     expect(mockedCheckUserPermission).toHaveBeenCalledWith(3, permissionKey)
-    expect(next).not.toHaveBeenCalled()
-    expect(status).toHaveBeenCalledWith(500)
-    expect(send).toHaveBeenCalledWith('Server error')
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'Server error', statusCode: 500 }))
   })
 })

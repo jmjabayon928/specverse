@@ -1,12 +1,43 @@
 // tests/services/templateService.test.ts
-import { poolPromise, sql } from '../../src/backend/config/db'
+jest.mock('../../src/backend/config/db', () => {
+  const mockQuery = jest.fn<() => Promise<{ recordset: unknown[] }>>()
+  const MockTransaction = class {
+    begin = () => Promise.resolve()
+    commit = () => Promise.resolve()
+    rollback = () => Promise.resolve()
+  }
+  return {
+    poolPromise: Promise.resolve({
+      request: () => ({
+        input: jest.fn().mockReturnThis(),
+        query: mockQuery,
+      }),
+    }),
+    sql: {
+      Transaction: MockTransaction,
+      Int: 1,
+      NVarChar: () => ({}),
+    },
+    getMockQuery: () => mockQuery,
+  }
+})
+
+import * as dbConfig from '../../src/backend/config/db'
 import {
   getAllNoteTypes,
   doesTemplateEquipmentTagExist,
 } from '../../src/backend/services/templateService'
 
+const getMockQuery = (): jest.Mock => (dbConfig as { getMockQuery: () => jest.Mock }).getMockQuery()
+
 describe('templateService.getAllNoteTypes', () => {
   it('returns an array of note types with expected shape', async () => {
+    getMockQuery().mockResolvedValueOnce({
+      recordset: [
+        { NoteTypeID: 1, NoteType: 'General', Description: null as string | null },
+      ],
+    })
+
     const result = await getAllNoteTypes()
 
     expect(Array.isArray(result)).toBe(true)
@@ -14,7 +45,6 @@ describe('templateService.getAllNoteTypes', () => {
     for (const noteType of result) {
       expect(typeof noteType.noteTypeId).toBe('number')
       expect(typeof noteType.noteType).toBe('string')
-      // description may be null, so only check type if not null
       if (noteType.description != null) {
         expect(typeof noteType.description).toBe('string')
       }
@@ -24,6 +54,8 @@ describe('templateService.getAllNoteTypes', () => {
 
 describe('templateService.doesTemplateEquipmentTagExist', () => {
   it('returns false for a clearly non-existent tag / project combination', async () => {
+    getMockQuery().mockResolvedValueOnce({ recordset: [] })
+
     const fakeTag = '@@@__nonexistent_tag__@@@'
     const fakeProjectId = 999_999
 
@@ -35,48 +67,13 @@ describe('templateService.doesTemplateEquipmentTagExist', () => {
 
 describe('templateService.doesTemplateEquipmentTagExist – true case', () => {
   it('returns true when a matching (EquipmentTagNum, ProjectID) exists', async () => {
-    const pool = await poolPromise
+    getMockQuery().mockResolvedValueOnce({ recordset: [{ Exists: 1 }] })
 
-    // --- Begin a controlled transaction (MSSQL style) ---
-    const transaction = new sql.Transaction(pool)
-    await transaction.begin()
+    const projectId = 98765
+    const testTag = 'TEST-TAG-XYZ'
 
-    try {
-      const request = new sql.Request(transaction)
+    const exists = await doesTemplateEquipmentTagExist(testTag, projectId)
 
-      // --- Arrange -------------------------------------------------------
-      const projectId = 98765
-      const testTag = 'TEST-TAG-XYZ'
-
-      // Insert a fake project
-      await request.query(`
-        INSERT INTO Projects (ProjectID, ProjectName)
-        VALUES (${projectId}, 'Unit Test Project')
-      `)
-
-      // Insert a fake template
-      const insertResult = await request.query(`
-        INSERT INTO Sheets
-          (SheetName, IsTemplate, ProjectID, EquipmentTagNum, AreaID, CategoryID)
-        OUTPUT INSERTED.SheetID
-        VALUES
-          ('Unit Test Template', 1, ${projectId}, '${testTag}', 1, 1)
-      `)
-
-      const newTemplateId = insertResult.recordset[0].SheetID
-      expect(typeof newTemplateId).toBe('number')
-
-      // --- Act ----------------------------------------------------------
-      const exists = await doesTemplateEquipmentTagExist(testTag, projectId)
-
-      // --- Assert --------------------------------------------------------
-      expect(exists).toBe(true)
-
-      // Even if successful → rollback to avoid DB pollution
-      await transaction.rollback()
-    } catch (err) {
-      await transaction.rollback()
-      throw err
-    }
+    expect(exists).toBe(true)
   })
 })

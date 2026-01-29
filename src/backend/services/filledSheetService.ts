@@ -4,6 +4,7 @@ import path from 'node:path'
 import { poolPromise, sql } from '../config/db'
 import { insertAuditLog } from '../database/auditQueries'
 import { notifyUsers } from '../utils/notifyUsers'
+import { createRevision } from '../database/sheetRevisionQueries'
 import type {
   InfoField,
   SheetStatus,
@@ -1029,7 +1030,8 @@ function buildUnifiedSheetFromRow(row: RawSheetRow): UnifiedSheet {
 export const updateFilledSheet = async (
   sheetId: number,
   input: UnifiedSheet,
-  updatedBy: number
+  updatedBy: number,
+  options?: { skipRevisionCreation?: boolean }
 ): Promise<{ sheetId: number }> => {
   const pool = await poolPromise
   const transaction = new sql.Transaction(pool)
@@ -1175,6 +1177,20 @@ export const updateFilledSheet = async (
             `)
         }
       }
+    }
+
+    // Create revision snapshot (unless skipped, e.g., during restore to avoid recursion)
+    if (!options?.skipRevisionCreation) {
+      const snapshotStatus = input.status ?? 'Modified Draft'
+      const snapshotJson = JSON.stringify(input)
+      
+      await createRevision(transaction, {
+        sheetId,
+        snapshotJson,
+        createdBy: updatedBy,
+        status: snapshotStatus,
+        comment: null,
+      })
     }
 
     await notifyUsers({
@@ -1353,7 +1369,7 @@ export async function doesEquipmentTagExist(tag: string, projectId: number): Pro
   req.input('Tag', sql.NVarChar, tag)
 
   const rs = await req.query<{ Exists: number }>(`
-    SELECT TOP 1 1 AS Exists
+    SELECT TOP 1 1 AS [Exists]
     FROM Sheets
     WHERE IsTemplate = 0 AND ProjectID = @ProjectID AND EquipmentTagNum = @Tag
   `)

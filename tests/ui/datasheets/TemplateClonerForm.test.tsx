@@ -23,7 +23,10 @@ describe('TemplateClonerForm', () => {
   const projects = makeOptions([1])
 
   beforeEach(() => {
-    globalThis.fetch = jest.fn()
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ exists: false }),
+    })
   })
 
   afterEach(() => {
@@ -33,6 +36,7 @@ describe('TemplateClonerForm', () => {
   it('requires at least one subsheet and shows error if none', async () => {
     const sheet = makeBasicUnifiedSheet()
     sheet.subsheets = []
+    sheet.equipmentTagNum = ''
 
     render(
       <TemplateClonerForm
@@ -46,7 +50,7 @@ describe('TemplateClonerForm', () => {
       />
     )
 
-    const button = screen.getByRole('button', { name: /create cloned template/i })
+    const button = screen.getByRole('button', { name: /save new template/i })
     fireEvent.click(button)
 
     const error = await screen.findByText(/at least one subsheet is required/i)
@@ -58,10 +62,13 @@ describe('TemplateClonerForm', () => {
     const sheet = makeBasicUnifiedSheet()
     sheet.sheetId = 99
 
-    ;(globalThis.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ sheetId: 1234 }),
-    })
+    const fetchMock = globalThis.fetch as jest.Mock
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ exists: false }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ sheetId: 1234 }),
+      })
 
     render(
       <TemplateClonerForm
@@ -75,17 +82,20 @@ describe('TemplateClonerForm', () => {
       />
     )
 
-    const button = screen.getByRole('button', { name: /create cloned template/i })
+    const button = screen.getByRole('button', { name: /save new template/i })
     fireEvent.click(button)
 
     await waitFor(() => {
       expect(globalThis.fetch).toHaveBeenCalled()
     })
 
-    const [url, options] = (globalThis.fetch as jest.Mock).mock.calls[0]
-
+    const postCall = (globalThis.fetch as jest.Mock).mock.calls.find(
+      (call: [string, RequestInit]) =>
+        call[0] === '/api/backend/templates' && (call[1]?.method === 'POST')
+    )
+    expect(postCall).toBeDefined()
+    const [url, options] = postCall as [string, RequestInit]
     expect(url).toBe('/api/backend/templates')
-
     expect(options).toMatchObject({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
