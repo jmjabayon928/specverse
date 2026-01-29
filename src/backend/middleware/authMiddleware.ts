@@ -11,6 +11,32 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is not defined in environment variables')
 }
 
+/** Optional auth: sets req.user when cookie/header present; never fails. Use for routes that accept either session or token param. */
+export const optionalVerifyToken: RequestHandler = (req: Request, res: Response, next: NextFunction): void => {
+  const token = req.cookies?.token || req.headers.authorization?.split(' ')[1]
+  if (!token) {
+    next()
+    return
+  }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload
+    if (decoded.userId && decoded.role) {
+      req.user = {
+        userId: decoded.userId,
+        roleId: decoded.roleId,
+        role: decoded.role,
+        email: decoded.email,
+        name: decoded.name,
+        profilePic: decoded.profilePic ?? undefined,
+        permissions: decoded.permissions ?? [],
+      }
+    }
+  } catch {
+    // ignore invalid token; route handler will require token param or session
+  }
+  next()
+}
+
 export const verifyToken: RequestHandler = (req: Request, res: Response, next: NextFunction): void => {
   if (req.skipAuth) {
     console.log('✅ Skipping auth for test')

@@ -33,6 +33,7 @@ import reportsRoutes from './routes/reportsRoutes'
 import adminRoutes from './routes/adminRoutes'
 import devRoutes from './routes/devRoutes'
 import auditLogsRoutes from './routes/auditLogsRoutes'
+import exportJobsRoutes from './routes/exportJobsRoutes'
 import { errorHandler } from './middleware/errorHandler'
 
 const app: Application = express()
@@ -81,6 +82,7 @@ app.use('/api/backend/reports', reportsRoutes)
 app.use('/api/backend/admin', adminRoutes)
 app.use('/api/backend/dev', devRoutes)
 app.use('/api/backend/audit-logs', auditLogsRoutes)
+app.use('/api/backend/exports/jobs', exportJobsRoutes)
 
 // ─────────────────────────────────────────────
 // Dev-only routes inspector
