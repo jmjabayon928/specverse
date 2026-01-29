@@ -27,6 +27,7 @@ Thumbs.db
 
 # Build / exports
 public/exports/
+exports/
 
 # Test artifacts
 coverage/
