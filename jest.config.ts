@@ -6,7 +6,7 @@ const commonConfig: Config = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
-    '\\.(svg|png|jpg|jpeg|gif|webp|avif)$': '<rootDir>/__mocks__/fileMock.ts',
+    '\\.(svg|png|jpg|jpeg|gif|webp|avif)$': '<rootDir>/tests/__mocks__/fileMock.ts',
   },
   testPathIgnorePatterns: ['/node_modules/', '/.next/', '/dist/'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
