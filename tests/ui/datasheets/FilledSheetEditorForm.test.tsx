@@ -91,4 +91,67 @@ describe('FilledSheetEditorForm', () => {
     const parsedBody = JSON.parse(options.body as string)
     expect(typeof parsedBody.fieldValues).toBe('object')
   })
+
+  it('shows completeness hint when a required subsheet field is empty', () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.isTemplate = false
+    sheet.subsheets[0].fields[0].value = ''
+    sheet.subsheets[0].fields[0].required = true
+
+    render(
+      <FilledSheetEditorForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+      />
+    )
+
+    expect(screen.getByText(/Required field is empty/)).toBeInTheDocument()
+    expect(screen.getAllByText(/1 required field missing/).length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('shows all complete when all required subsheet fields are filled', () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.isTemplate = false
+
+    render(
+      <FilledSheetEditorForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+      />
+    )
+
+    expect(screen.getAllByText(/All required fields complete/).length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('submit button is enabled when required field is empty (hints do not block)', () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.isTemplate = false
+    sheet.subsheets[0].fields[0].value = ''
+    sheet.subsheets[0].fields[0].required = true
+
+    render(
+      <FilledSheetEditorForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+      />
+    )
+
+    const button = screen.getByRole('button', { name: /update filled sheet/i })
+    expect(button).toBeEnabled()
+  })
 })
