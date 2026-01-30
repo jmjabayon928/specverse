@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ZodError } from 'zod'
 import { unifiedSheetSchema } from '@/validation/sheetSchema'
@@ -130,13 +130,25 @@ export default function FilledSheetEditorForm(
     buildFieldValueMap(defaultValues.subsheets)
   )
 
-  const completeness = useDatasheetCompleteness(datasheet.subsheets, fieldValues)
+  // Debounced copy for completeness display only; submit/validation use live fieldValues
+  const [debouncedFieldValues, setDebouncedFieldValues] = useState<Record<string, string>>(
+    () => buildFieldValueMap(defaultValues.subsheets)
+  )
 
-  const handleChange = <K extends keyof UnifiedSheet>(field: K, value: UnifiedSheet[K]) => {
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedFieldValues(fieldValues)
+    }, 250)
+    return () => clearTimeout(t)
+  }, [fieldValues])
+
+  const completeness = useDatasheetCompleteness(datasheet.subsheets, debouncedFieldValues)
+
+  const handleChange = useCallback(<K extends keyof UnifiedSheet>(field: K, value: UnifiedSheet[K]) => {
     setDatasheet((prev) => ({ ...prev, [field]: value }))
-  }
+  }, [])
 
-  const handleFieldValueChange = (subsheetIndex: number, infoTemplateId: number, value: string) => {
+  const handleFieldValueChange = useCallback((subsheetIndex: number, infoTemplateId: number, value: string) => {
     setFieldValues((prev) => ({ ...prev, [infoTemplateId]: value }))
 
     setDatasheet((prev) => {
@@ -150,7 +162,7 @@ export default function FilledSheetEditorForm(
       updatedSubsheets[subsheetIndex] = targetSubsheet
       return { ...prev, subsheets: updatedSubsheets }
     })
-  }
+  }, [])
 
   const handleSubmit = async () => {
     try {
@@ -289,17 +301,22 @@ export default function FilledSheetEditorForm(
 
       <div className='mt-6'>
         <h2 className='text-lg font-semibold mb-2'>Subsheet(s)</h2>
-        {datasheet.subsheets.map((sub, i) => (
-          <FilledSheetSubsheetForm
-            key={sub.id ?? i}
-            subsheet={sub}
-            subsheetIndex={i}
-            fieldValues={fieldValues}
-            onFieldValueChange={handleFieldValueChange}
-            formErrors={formErrors}
-            sectionCompleteness={completeness.bySubsheet[getSubsheetKey(sub, i)]}
-          />
-        ))}
+        {datasheet.subsheets.map((sub, i) => {
+          const sectionKey = getSubsheetKey(sub, i)
+          const sectionComp = completeness.bySubsheet[sectionKey]
+          return (
+            <FilledSheetSubsheetForm
+              key={sub.id ?? i}
+              subsheet={sub}
+              subsheetIndex={i}
+              fieldValues={fieldValues}
+              onFieldValueChange={handleFieldValueChange}
+              formErrors={formErrors}
+              sectionTotalRequired={sectionComp?.totalRequired}
+              sectionFilledRequired={sectionComp?.filledRequired}
+            />
+          )
+        })}
       </div>
 
       <div className='flex justify-end'>
