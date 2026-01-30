@@ -3,13 +3,14 @@ import { useEffect, useState } from "react";
 
 interface PastEstimation {
   EstimationID: number;
-  EstimationName: string;
-  EstimatorID: number;
-  EstimatorName: string;
+  Title: string;
+  Status: string;
   CreatedAt: string;
-  TotalEstimatedCost: number;
+  CreatedBy: number | null;
+  PreparedBy: string | null;
   ItemCount: number;
-  LastModified: string;
+  TotalCost: number;
+  LastModified: string | null;
 }
 
 export default function EstimationHistoryPage() {
@@ -67,12 +68,12 @@ export default function EstimationHistoryPage() {
           {estimates.map((e) => (
             <tr key={e.EstimationID} className="border-t">
               <td className="px-4 py-2">{e.EstimationID}</td>
-              <td className="px-4 py-2">{e.EstimationName}</td>
-              <td className="px-4 py-2">{e.EstimatorName}</td>
+              <td className="px-4 py-2">{e.Title}</td>
+              <td className="px-4 py-2">{e.PreparedBy ?? "—"}</td>
               <td className="px-4 py-2">{new Date(e.CreatedAt).toLocaleDateString()}</td>
               <td className="px-4 py-2">{e.ItemCount}</td>
-              <td className="px-4 py-2">${e.TotalEstimatedCost?.toFixed(2) ?? "0.00"}</td>
-              <td className="px-4 py-2">{new Date(e.LastModified).toLocaleDateString()}</td>
+              <td className="px-4 py-2">${e.TotalCost?.toFixed(2) ?? "0.00"}</td>
+              <td className="px-4 py-2">{e.LastModified ? new Date(e.LastModified).toLocaleDateString() : "—"}</td>
             </tr>
           ))}
         </tbody>

@@ -159,6 +159,83 @@ describe('Audit Logs API', () => {
       expect(row).toHaveProperty('changes')
       expect(row).toHaveProperty('changesRaw')
     })
+
+    it('returns rows[] with numeric auditLogId and unique keys', async () => {
+      const app = buildTestApp()
+      const authCookie = createAuthCookie('Admin', [])
+
+      const res = await request(app)
+        .get('/api/backend/audit-logs')
+        .set('Cookie', [authCookie])
+
+      expect(res.statusCode).toBe(200)
+      expect(Array.isArray(res.body.rows)).toBe(true)
+      const rows = res.body.rows as Array<{ auditLogId: number }>
+      const ids = rows.map((r) => r.auditLogId)
+      ids.forEach((id) => {
+        expect(typeof id).toBe('number')
+        expect(Number.isFinite(id)).toBe(true)
+      })
+      const uniqueIds = new Set(ids)
+      expect(uniqueIds.size).toBe(ids.length)
+    })
+
+    it('maps LogID to auditLogId when DB returns LogID', async () => {
+      mockGetAllAuditLogs.mockResolvedValueOnce([
+        {
+          LogID: 99,
+          TableName: 'Sheets',
+          RecordID: 1,
+          Action: 'Test',
+          PerformedBy: 1,
+          PerformedByName: 'Tester',
+          PerformedAtISO: '2026-01-30T12:00:00.000Z',
+          Route: null,
+          Method: null,
+          StatusCode: null,
+          Changes: '{}',
+        },
+      ])
+      mockGetAllAuditLogsCount.mockResolvedValueOnce(1)
+      const app = buildTestApp()
+      const authCookie = createAuthCookie('Admin', [])
+
+      const res = await request(app)
+        .get('/api/backend/audit-logs?pageSize=1')
+        .set('Cookie', [authCookie])
+
+      expect(res.statusCode).toBe(200)
+      expect(res.body.rows).toHaveLength(1)
+      expect(res.body.rows[0].auditLogId).toBe(99)
+      expect(typeof res.body.rows[0].auditLogId).toBe('number')
+    })
+
+    it('returns 500 when row has neither LogID nor AuditLogID', async () => {
+      mockGetAllAuditLogs.mockResolvedValueOnce([
+        {
+          TableName: 'Sheets',
+          RecordID: 1,
+          Action: 'Test',
+          PerformedBy: 1,
+          PerformedByName: 'Tester',
+          PerformedAtISO: '2026-01-30T12:00:00.000Z',
+          Route: null,
+          Method: null,
+          StatusCode: null,
+          Changes: '{}',
+        },
+      ])
+      mockGetAllAuditLogsCount.mockResolvedValueOnce(1)
+      const app = buildTestApp()
+      const authCookie = createAuthCookie('Admin', [])
+
+      const res = await request(app)
+        .get('/api/backend/audit-logs?pageSize=1')
+        .set('Cookie', [authCookie])
+
+      expect(res.statusCode).toBe(500)
+      expect(res.body.error || res.body.message).toMatch(/Invalid audit log row.*missing LogID\/AuditLogID/i)
+    })
   })
 
   describe('Pagination', () => {

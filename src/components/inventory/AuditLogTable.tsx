@@ -25,23 +25,16 @@ export default function AuditLogTable({ inventoryId }: Props) {
     async function fetchLogs() {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/backend/inventory/${inventoryId}/audit`
+          `/api/backend/inventory/${inventoryId}/audit`,
+          {
+            credentials: "include",
+            headers: { Accept: "application/json" },
+          }
         );
 
         if (!res.ok) {
-          const contentType = res.headers.get("content-type");
-          let errorMessage = `Error ${res.status}`;
-
-          // If response is JSON, try to extract error message
-          if (contentType && contentType.includes("application/json")) {
-            const errorJson = await res.json();
-            errorMessage += `: ${errorJson.message || JSON.stringify(errorJson)}`;
-          } else {
-            const text = await res.text();
-            errorMessage += `: ${text}`;
-          }
-
-          throw new Error(errorMessage);
+          const errorText = await res.text();
+          throw new Error(`Error ${res.status}: ${errorText}`);
         }
 
         const data = await res.json();

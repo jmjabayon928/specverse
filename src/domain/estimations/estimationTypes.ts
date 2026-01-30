@@ -103,6 +103,8 @@ export interface NewEstimationItemInput {
 
 // Supplier quote with full details for an item
 export interface SupplierQuote {
+  /** Unique row id for React keys; one per quote row from API */
+  QuoteRowID: number
   QuoteID: number
   ItemID: number
   SupplierID: number
@@ -118,6 +120,19 @@ export interface SupplierQuote {
   ItemName: string
   SupplierName: string
   CreatedAt?: string
+}
+
+/** Response shape for PUT /api/backend/estimation/quotes/:id (only fields from UPDATE/SELECT) */
+export interface SupplierQuoteUpdateResponse {
+  QuoteRowID: number
+  QuoteID: number
+  ItemID: number
+  SupplierID: number
+  QuotedUnitCost: number
+  ExpectedDeliveryDays: number
+  CurrencyCode: string
+  IsSelected: boolean
+  Notes: string
 }
 
 // Input payload for creating or updating a supplier quote

@@ -56,7 +56,16 @@ export async function getAuditLogsForRecord(
     .input("Limit", sql.Int, input.limit)
     .query(`
       SELECT TOP (@Limit)
-        a.*,
+        a.LogID AS AuditLogID,
+        a.TableName,
+        a.RecordID,
+        a.Action,
+        a.PerformedBy,
+        a.PerformedAt,
+        a.Route,
+        a.Method,
+        a.StatusCode,
+        a.Changes,
         u.UserID AS PerformedByUserID,
         u.FirstName + ' ' + u.LastName AS PerformedByName,
         CONVERT(varchar, a.PerformedAt, 126) AS PerformedAtISO
@@ -64,7 +73,7 @@ export async function getAuditLogsForRecord(
         LEFT JOIN Users u ON u.UserID = a.PerformedBy
       WHERE a.TableName = @TableName
         AND a.RecordID = @RecordID
-      ORDER BY a.PerformedAt DESC
+      ORDER BY a.PerformedAt DESC, a.LogID DESC
     `);
 
   return result.recordset as unknown[];
@@ -133,7 +142,7 @@ export async function getAllAuditLogs(
 
   const result = await request.query(`
     SELECT
-      a.AuditLogID,
+      a.LogID AS AuditLogID,
       a.TableName,
       a.RecordID,
       a.Action,
@@ -149,7 +158,7 @@ export async function getAllAuditLogs(
     FROM AuditLogs a
       LEFT JOIN Users u ON u.UserID = a.PerformedBy
     ${whereClause}
-    ORDER BY a.PerformedAt DESC, a.AuditLogID DESC
+    ORDER BY a.PerformedAt DESC, a.LogID DESC
     OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY
   `);
 

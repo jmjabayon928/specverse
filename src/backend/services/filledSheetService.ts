@@ -105,19 +105,19 @@ export const fetchAllFilled = async () => {
       s.RevisionDate AS revisionDate,
       s.Status AS status,
       s.DisciplineID AS disciplineId,
-      d.DisciplineName AS disciplineName,
-      s.DatasheetSubtypeID AS subtypeId,
-      ds.SubtypeName AS subtypeName
+      d.Name AS disciplineName,
+      s.SubtypeID AS subtypeId,
+      st.Name AS subtypeName
     FROM Sheets s
     LEFT JOIN Categories c ON s.CategoryID = c.CategoryID
     LEFT JOIN Users u ON s.PreparedByID = u.UserID
-    LEFT JOIN dbo.Disciplines d ON s.DisciplineID = d.DisciplineID
-    LEFT JOIN dbo.DatasheetSubtypes ds ON s.DatasheetSubtypeID = ds.DatasheetSubtypeID
+    LEFT JOIN dbo.Disciplines d ON d.DisciplineID = s.DisciplineID
+    LEFT JOIN dbo.DatasheetSubtypes st ON st.SubtypeID = s.SubtypeID
     WHERE s.IsTemplate = 0
     ORDER BY s.SheetID DESC
   `)
 
-  return result.recordset
+  return result.recordset ?? []
 }
 
 export async function getRequiredTemplateFields(templateId: number): Promise<RequiredTemplateField[]> {
@@ -164,12 +164,12 @@ export async function createFilledSheet(
 
     const templateSheetRow = await tx.request()
       .input('TemplateID', sql.Int, templateIdNum)
-      .query<{ DisciplineID: number | null; DatasheetSubtypeID: number | null }>(`
-        SELECT DisciplineID, DatasheetSubtypeID FROM Sheets WHERE SheetID = @TemplateID
+      .query<{ DisciplineID: number | null; SubtypeID: number | null }>(`
+        SELECT DisciplineID, SubtypeID FROM Sheets WHERE SheetID = @TemplateID
       `)
     const templateSheet = templateSheetRow.recordset[0]
     const disciplineId = templateSheet?.DisciplineID ?? data.disciplineId ?? null
-    const subtypeId = templateSheet?.DatasheetSubtypeID ?? data.subtypeId ?? null
+    const subtypeId = templateSheet?.SubtypeID ?? data.subtypeId ?? null
     const dataWithDiscipline: UnifiedSheet & { fieldValues: Record<string, string> } = {
       ...data,
       disciplineId: disciplineId ?? undefined,
@@ -378,7 +378,7 @@ async function insertSheet(
     .input('ClientID', sql.Int, iv(data.clientId))
     .input('ProjectID', sql.Int, iv(data.projectId))
     .input('DisciplineID', sql.Int, iv(data.disciplineId))
-    .input('DatasheetSubtypeID', sql.Int, iv(data.subtypeId))
+    .input('SubtypeID', sql.Int, iv(data.subtypeId))
     .input('Status', sql.VarChar(50), 'Draft')
     .input('IsLatest', sql.Bit, 1)
     .input('IsTemplate', sql.Bit, 0)
@@ -390,7 +390,7 @@ async function insertSheet(
         AreaID, PackageName, RevisionNum, RevisionDate, PreparedByID, PreparedByDate,
         EquipmentName, EquipmentTagNum, ServiceName, RequiredQty, ItemLocation,
         ManuID, SuppID, InstallPackNum, EquipSize, ModelNum, Driver, LocationDwg, PID, InstallDwg, CodeStd,
-        CategoryID, ClientID, ProjectID, DisciplineID, DatasheetSubtypeID, Status, IsLatest, IsTemplate, AutoCADImport, TemplateID
+        CategoryID, ClientID, ProjectID, DisciplineID, SubtypeID, Status, IsLatest, IsTemplate, AutoCADImport, TemplateID
       )
       OUTPUT INSERTED.SheetID
       VALUES (
@@ -398,7 +398,7 @@ async function insertSheet(
         @AreaID, @PackageName, @RevisionNum, @RevisionDate, @PreparedByID, @PreparedByDate,
         @EquipmentName, @EquipmentTagNum, @ServiceName, @RequiredQty, @ItemLocation,
         @ManuID, @SuppID, @InstallPackNum, @EquipSize, @ModelNum, @Driver, @LocationDwg, @PID, @InstallDwg, @CodeStd,
-        @CategoryID, @ClientID, @ProjectID, @DisciplineID, @DatasheetSubtypeID, @Status, @IsLatest, @IsTemplate, @AutoCADImport, @TemplateID
+        @CategoryID, @ClientID, @ProjectID, @DisciplineID, @SubtypeID, @Status, @IsLatest, @IsTemplate, @AutoCADImport, @TemplateID
       );
     `)
 
@@ -629,8 +629,8 @@ export async function getFilledSheetDetailsById(
         c.ClientName,
         c.ClientLogo,
         p.ProjName AS projectName,
-        d.DisciplineName AS disciplineName,
-        ds.SubtypeName AS subtypeName
+        d.Name AS disciplineName,
+        ds.Name AS subtypeName
       FROM Sheets s
       LEFT JOIN Users u1 ON s.PreparedByID = u1.UserID
       LEFT JOIN Users u2 ON s.VerifiedByID = u2.UserID
@@ -644,7 +644,7 @@ export async function getFilledSheetDetailsById(
       LEFT JOIN Clients c ON s.ClientID = c.ClientID
       LEFT JOIN Projects p ON s.ProjectID = p.ProjectID
       LEFT JOIN dbo.Disciplines d ON s.DisciplineID = d.DisciplineID
-      LEFT JOIN dbo.DatasheetSubtypes ds ON s.DatasheetSubtypeID = ds.DatasheetSubtypeID
+      LEFT JOIN dbo.DatasheetSubtypes ds ON s.SubtypeID = ds.SubtypeID
       WHERE s.SheetID = @SheetID
     `)
 
@@ -957,7 +957,7 @@ interface RawSheetRow {
   ParentSheetID: number
   DisciplineID?: number | null
   disciplineName?: string | null
-  DatasheetSubtypeID?: number | null
+  SubtypeID?: number | null
   subtypeName?: string | null
 }
 
@@ -1050,7 +1050,7 @@ function buildUnifiedSheetFromRow(row: RawSheetRow): UnifiedSheet {
     parentSheetId: row.ParentSheetID,
     disciplineId: row.DisciplineID ?? null,
     disciplineName: row.disciplineName ?? null,
-    subtypeId: row.DatasheetSubtypeID ?? null,
+    subtypeId: row.SubtypeID ?? null,
     subtypeName: row.subtypeName ?? null,
     sourceFilePath: null,
     subsheets: [],

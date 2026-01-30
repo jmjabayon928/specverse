@@ -5,6 +5,7 @@ import {
   type GetAllAuditLogsFilters,
   type GetAllAuditLogsPagination,
 } from '../database/auditQueries'
+import { AppError } from '../errors/AppError'
 
 export interface ListAuditLogsParams {
   page: number
@@ -70,7 +71,10 @@ function safeParseJSON(raw: unknown): { parsed: unknown; raw: string | null } {
 }
 
 function mapRowToDTO(row: Record<string, unknown>): AuditLogDTO {
-  const auditLogId = toNumber(row.AuditLogID) ?? 0
+  const auditLogId = toNumber(row.AuditLogID) ?? toNumber(row.LogID) ?? 0
+  if (auditLogId === 0) {
+    throw new AppError('Invalid audit log row: missing LogID/AuditLogID', 500)
+  }
   const entityType = toString(row.TableName)
   const entityId = toNumber(row.RecordID)
   const action = toString(row.Action) ?? ''

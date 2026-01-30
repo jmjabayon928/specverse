@@ -26,7 +26,7 @@ export default function SupplierQuotesTable({ quotes, onSelectQuote }: SupplierQ
                 </thead>
                 <tbody>
                     {quotes.map(quote => (
-                        <tr key={quote.QuoteID} className="border-b">
+                        <tr key={quote.QuoteRowID} className="border-b">
                             <td className="px-4 py-2">{quote.SupplierName || `ID: ${quote.SupplierID}`}</td>
                             <td className="px-4 py-2">${quote.QuotedUnitCost.toFixed(2)}</td>
                             <td className="px-4 py-2">{quote.CurrencyCode ?? "USD"}</td>

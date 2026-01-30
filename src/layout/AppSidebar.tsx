@@ -46,8 +46,7 @@ const navItems: NavItem[] = [
     name: 'Dashboard',
     roles: ['admin', 'manager', 'estimator', 'user'],
     subItems: [
-      { name: 'Overview & Stats', path: '/', pro: false },
-      { name: 'Alerts & Warnings', path: '/alerts', pro: false },
+      { name: 'Overview & Stats', path: '/', pro: false }
     ],
   },
   {

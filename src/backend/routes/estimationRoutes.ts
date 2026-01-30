@@ -44,19 +44,19 @@ router.post(
 )
 
 // ======================
-// Core Estimation CRUD
+// Core Estimation CRUD (static /history before param :id)
 // ======================
 router.get('/', verifyToken, controller.getAllEstimationsHandler)
+router.get('/history', verifyToken, controller.getPastEstimationsHandler)
 router.get('/:id', verifyToken, controller.getEstimationByIdHandler)
 router.post('/', verifyToken, controller.createEstimationHandler)
 router.put('/:id', verifyToken, controller.updateEstimationHandler)
 router.delete('/:id', verifyToken, controller.deleteEstimationHandler)
 
 // ======================
-// Filtering + history
+// Filtering
 // ======================
 router.post('/filter', verifyToken, controller.getFilteredEstimationsHandler)
-router.get('/history', verifyToken, controller.getPastEstimationsHandler)
 
 // ======================
 // Filter export

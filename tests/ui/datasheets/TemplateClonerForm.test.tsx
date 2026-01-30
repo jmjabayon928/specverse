@@ -1,9 +1,16 @@
 // tests/ui/datasheets/TemplateClonerForm.test.tsx
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom'
 import TemplateClonerForm from '../../../src/app/(admin)/datasheets/templates/[id]/clone/TemplateClonerForm'
-import { getMockReferenceOptions, makeBasicUnifiedSheet, makeOptions } from './datasheetTestUtils'
+import {
+  getMockReferenceOptions,
+  makeBasicUnifiedSheet,
+  makeJsonResponse,
+  makeOptions,
+  waitForReferenceOptionsLoaded,
+} from './datasheetTestUtils'
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -13,6 +20,8 @@ jest.mock('next/navigation', () => ({
     back: jest.fn(),
   }),
 }))
+
+const originalFetch = globalThis.fetch
 
 describe('TemplateClonerForm', () => {
   const areas = makeOptions([1])
@@ -25,33 +34,26 @@ describe('TemplateClonerForm', () => {
   beforeEach(() => {
     const fetchMock = jest.fn((url: string, init?: RequestInit) => {
       if (url.includes('reference-options')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => getMockReferenceOptions(),
-        })
+        return Promise.resolve(makeJsonResponse(getMockReferenceOptions()))
       }
       if (url.includes('equipment-tag/check')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ exists: false }),
-        })
+        return Promise.resolve(makeJsonResponse({ exists: false }))
       }
       if (url === '/api/backend/templates' && init?.method === 'POST') {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ sheetId: 1234 }),
-        })
+        return Promise.resolve(makeJsonResponse({ sheetId: 1234 }))
       }
       return Promise.reject(new Error('Unexpected fetch: ' + url))
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
   })
 
   afterEach(() => {
+    globalThis.fetch = originalFetch
     jest.resetAllMocks()
   })
 
   it('requires at least one subsheet and shows error if none', async () => {
+    const user = userEvent.setup()
     const sheet = makeBasicUnifiedSheet()
     sheet.subsheets = []
     sheet.equipmentTagNum = ''
@@ -68,8 +70,10 @@ describe('TemplateClonerForm', () => {
       />
     )
 
+    await waitForReferenceOptionsLoaded(screen)
+
     const button = screen.getByRole('button', { name: /save new template/i })
-    fireEvent.click(button)
+    await user.click(button)
 
     const error = await screen.findByText(/at least one subsheet is required/i)
     expect(error).toBeInTheDocument()
@@ -81,6 +85,7 @@ describe('TemplateClonerForm', () => {
   })
 
   it('POSTs to /api/backend/templates on success', async () => {
+    const user = userEvent.setup()
     const sheet = makeBasicUnifiedSheet()
     sheet.sheetId = 99
     sheet.disciplineId = 1
@@ -97,12 +102,10 @@ describe('TemplateClonerForm', () => {
       />
     )
 
-    await waitFor(() => {
-      expect(screen.getByText('Discipline 1')).toBeInTheDocument()
-    })
+    await waitForReferenceOptionsLoaded(screen)
 
     const button = screen.getByRole('button', { name: /save new template/i })
-    fireEvent.click(button)
+    await user.click(button)
 
     await waitFor(() => {
       const postCall = (globalThis.fetch as jest.Mock).mock.calls.find(

@@ -112,7 +112,17 @@ export const getInventoryForecastFromDB = async () => {
   return result.recordset;
 };
 
-export async function getInventoryContributionFromDB() {
+export interface InventoryContributionItem {
+  itemName: string;
+  quantity: number;
+}
+
+export interface InventoryContributionCategory {
+  categoryName: string;
+  items: InventoryContributionItem[];
+}
+
+export async function getInventoryContributionFromDB(): Promise<InventoryContributionCategory[]> {
   const pool = await poolPromise;
   const result = await pool.request().query(`
     SELECT 
@@ -125,28 +135,23 @@ export async function getInventoryContributionFromDB() {
     ORDER BY c.CategoryName, i.QuantityOnHand DESC
   `);
 
-  // Format the result as:
-  // [
-  //   { categoryName: 'Pipes', items: [ { itemName: 'Steel Pipe', quantity: 100 }, ... ] },
-  //   ...
-  // ]
-  const rows = result.recordset;
-  const grouped: Record<string, { itemName: string; quantity: number }[]> = {};
+  const rows = Array.isArray(result.recordset) ? result.recordset : [];
+  const grouped: Record<string, InventoryContributionItem[]> = {};
 
   for (const row of rows) {
-    const category = row.CategoryName ?? 'Uncategorized'
-
-    grouped[category] ??= []
-
+    const category = row.CategoryName ?? 'Uncategorized';
+    if (!grouped[category]) {
+      grouped[category] = [];
+    }
     grouped[category].push({
-      itemName: row.ItemName,
-      quantity: Number(row.QuantityOnHand) || 0
-    })
+      itemName: String(row.ItemName ?? ''),
+      quantity: Number(row.QuantityOnHand) || 0,
+    });
   }
 
   return Object.entries(grouped).map(([categoryName, items]) => ({
     categoryName,
-    items,
+    items: Array.isArray(items) ? items : [],
   }));
 }
 

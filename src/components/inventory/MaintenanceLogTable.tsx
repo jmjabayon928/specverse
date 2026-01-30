@@ -4,10 +4,14 @@
 import React, { useEffect, useState } from "react";
 
 interface MaintenanceLog {
-  id: number;
+  maintenanceId: number;
+  inventoryId: number;
+  maintenanceDate: string;
   description: string;
-  date: string;
-  performedBy: string;
+  notes: string | null;
+  performedByUserId: number | null;
+  performedByName: string | null;
+  createdAt: string | null;
 }
 
 interface Props {
@@ -21,10 +25,13 @@ export default function MaintenanceLogTable({ inventoryId, canEdit }: Props) {
   useEffect(() => {
     async function fetchLogs() {
       try {
-        const res = await fetch(`/api/backend/inventory/${inventoryId}/maintenance`);
+        const res = await fetch(`/api/backend/inventory/${inventoryId}/maintenance`, {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
         if (!res.ok) {
           const errorText = await res.text();
-          throw new Error(`Fetch failed: ${errorText}`);
+          throw new Error(`Error ${res.status}: ${errorText}`);
         }
         const data = await res.json();
         setLogs(data);
@@ -50,10 +57,10 @@ export default function MaintenanceLogTable({ inventoryId, canEdit }: Props) {
         </thead>
         <tbody>
           {logs.map((log) => (
-            <tr key={log.id}>
+            <tr key={log.maintenanceId}>
               <td className="border px-4 py-2">{log.description}</td>
-              <td className="border px-4 py-2">{new Date(log.date).toLocaleDateString()}</td>
-              <td className="border px-4 py-2">{log.performedBy}</td>
+              <td className="border px-4 py-2">{new Date(log.maintenanceDate).toLocaleDateString()}</td>
+              <td className="border px-4 py-2">{log.performedByName ?? "—"}</td>
               {canEdit && (
                 <td className="border px-4 py-2 text-blue-500 hover:underline cursor-pointer">
                   Edit

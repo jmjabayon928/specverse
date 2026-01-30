@@ -2,6 +2,22 @@
 import type { UnifiedSheet } from '../../../src/domain/datasheets/sheetTypes'
 import type { Option } from '../../../src/domain/shared/commonTypes'
 
+/** Waits until reference-options fetch has applied and "Discipline 1" is visible. Call after render in tests that mock reference-options. */
+export async function waitForReferenceOptionsLoaded(
+  screen: { findByText: (text: string | RegExp) => Promise<HTMLElement> }
+): Promise<void> {
+  await screen.findByText('Discipline 1')
+}
+
+/** Returns a real Response with JSON body for fetch mocks. Requires Response polyfill (e.g. cross-fetch) in jsdom. */
+export function makeJsonResponse<T>(body: T, init?: ResponseInit): Response {
+  const status = init?.status ?? 200
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  })
+}
+
 export interface MockReferenceOptions {
   disciplines: Array<{ id: number; code: string; name: string }>
   subtypes: Array<{ id: number; disciplineId: number; code: string; name: string }>

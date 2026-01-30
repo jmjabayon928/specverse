@@ -9,17 +9,27 @@ interface MaintenanceLog {
   itemName: string;
   description: string;
   maintenanceDate: string;
-  performedBy: string;
+  performedByUserId: number | null;
+  performedByName: string | null;
 }
 
 export default function GlobalMaintenancePage() {
   const [logs, setLogs] = useState<MaintenanceLog[]>([]);
 
   useEffect(() => {
-    fetch("/api/backend/inventory/all/maintenance")
-      .then(res => res.json())
-      .then(data => setLogs(data))
-      .catch(err => console.error("Failed to load maintenance logs:", err));
+    fetch("/api/backend/inventory/all/maintenance", {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`Error ${res.status}: ${errorText}`);
+        }
+        return res.json();
+      })
+      .then((data) => setLogs(Array.isArray(data) ? data : []))
+      .catch((err) => console.error("Failed to load maintenance logs:", err));
   }, []);
 
   return (
@@ -43,7 +53,7 @@ export default function GlobalMaintenancePage() {
                 <td className="px-4 py-2">
                   {new Date(log.maintenanceDate).toLocaleDateString()}
                 </td>
-                <td className="px-4 py-2">{log.performedBy}</td>
+                <td className="px-4 py-2">{log.performedByName ?? "—"}</td>
               </tr>
             ))}
           </tbody>

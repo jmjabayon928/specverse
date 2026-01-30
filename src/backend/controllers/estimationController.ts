@@ -2,6 +2,7 @@
 
 import type { RequestHandler } from 'express'
 import { z } from 'zod'
+import type { SupplierQuoteUpdateResponse } from '@/domain/estimations/estimationTypes'
 import { poolPromise, sql } from '../config/db'
 import { AppError } from '../errors/AppError'
 import {
@@ -282,32 +283,44 @@ export const getPastEstimationsHandler: RequestHandler = async (_req, res, next)
     const pool = await poolPromise
 
     const result = await pool.request().query(`
-      SELECT 
-        e.EstimationID,
-        e.Title AS EstimationName,
-        e.CreatedBy,
-        u.FirstName + ' ' + u.LastName AS EstimatorName,
-        e.CreatedAt,
-        (ISNULL(e.TotalMaterialCost, 0) + ISNULL(e.TotalLaborCost, 0)) AS TotalEstimatedCost,
-        COUNT(DISTINCT ei.EItemID) AS ItemCount,
-        MAX(eq.ModifiedAt) AS LastModified
-      FROM Estimations e
-        LEFT JOIN Users u ON e.CreatedBy = u.UserID
-        LEFT JOIN EstimationItems ei ON e.EstimationID = ei.EstimationID
-        LEFT JOIN EstimationItemSupplierQuotes eq ON ei.EItemID = eq.ItemID
-      GROUP BY
+      SELECT
         e.EstimationID,
         e.Title,
-        e.CreatedBy,
-        u.FirstName,
-        u.LastName,
+        e.Status,
         e.CreatedAt,
-        e.TotalMaterialCost,
-        e.TotalLaborCost
+        e.CreatedBy,
+        PreparedBy = u.FirstName + ' ' + u.LastName,
+        ItemCount = (SELECT COUNT(*) FROM EstimationItems ei WHERE ei.EstimationID = e.EstimationID),
+        TotalCost = COALESCE(e.TotalMaterialCost, 0) + COALESCE(e.TotalLaborCost, 0),
+        LastModified = (SELECT MAX(dt) FROM (VALUES (e.CreatedAt), (e.VerifiedAt), (e.ApprovedAt)) v(dt))
+      FROM Estimations e
+      LEFT JOIN Users u ON e.CreatedBy = u.UserID
       ORDER BY e.CreatedAt DESC
     `)
 
-    res.json(result.recordset)
+    const rows = (result.recordset as Array<{
+      EstimationID: number
+      Title: string
+      Status: string
+      CreatedAt: Date
+      CreatedBy: number | null
+      PreparedBy: string | null
+      ItemCount: number
+      TotalCost: number
+      LastModified: Date | null
+    }>).map((r) => ({
+      EstimationID: r.EstimationID,
+      Title: r.Title,
+      Status: r.Status,
+      CreatedAt: r.CreatedAt instanceof Date ? r.CreatedAt.toISOString() : String(r.CreatedAt),
+      CreatedBy: r.CreatedBy ?? null,
+      PreparedBy: r.PreparedBy ?? null,
+      ItemCount: r.ItemCount,
+      TotalCost: r.TotalCost,
+      LastModified: r.LastModified instanceof Date ? r.LastModified.toISOString() : (r.LastModified == null ? null : String(r.LastModified))
+    }))
+
+    res.json(rows)
   } catch (error) {
     next(error)
   }
@@ -772,6 +785,7 @@ export const getAllQuotesHandler: RequestHandler = async (_req, res, next) => {
 
     const result = await pool.request().query(`
       SELECT TOP (100)
+        q.QuoteID AS QuoteRowID,
         q.QuoteID,
         q.ItemID,
         q.SupplierID,
@@ -787,15 +801,16 @@ export const getAllQuotesHandler: RequestHandler = async (_req, res, next) => {
         i.ItemName,
         sup.SuppName AS SupplierName
       FROM EstimationItemSupplierQuotes q
-        LEFT JOIN EstimationItems ei ON q.ItemID = ei.ItemID
+        LEFT JOIN EstimationItems ei ON q.ItemID = ei.EItemID
         LEFT JOIN EstimationSuppliers s
           ON q.SupplierID = s.SupplierID
           AND ei.EstimationID = s.EstimationID
-        LEFT JOIN InventoryItems i ON q.ItemID = i.InventoryItemID
+        LEFT JOIN InventoryItems i ON ei.ItemID = i.InventoryItemID
         LEFT JOIN Suppliers sup ON q.SupplierID = sup.SuppID
     `)
 
     const quotes = result.recordset.map((row) => ({
+      QuoteRowID: row.QuoteRowID,
       QuoteID: row.QuoteID,
       ItemID: row.ItemID,
       SupplierID: row.SupplierID,
@@ -873,7 +888,33 @@ export const updateSupplierQuoteHandler: RequestHandler = async (req, res, next)
       throw new AppError('Quote not found', 404)
     }
 
-    res.json(result.recordset[0])
+    const row = result.recordset[0] as {
+      QuoteID: unknown
+      ItemID: unknown
+      SupplierID: unknown
+      QuotedUnitCost: unknown
+      ExpectedDeliveryDays: unknown
+      CurrencyCode: unknown
+      IsSelected: unknown
+      Notes: unknown
+    }
+    const quoteIdFromRow = Number(row.QuoteID)
+    if (typeof quoteIdFromRow !== 'number' || Number.isNaN(quoteIdFromRow)) {
+      throw new AppError('Invalid quote row: QuoteID is not a number', 500)
+    }
+
+    const payload: SupplierQuoteUpdateResponse = {
+      QuoteRowID: quoteIdFromRow,
+      QuoteID: quoteIdFromRow,
+      ItemID: Number(row.ItemID),
+      SupplierID: Number(row.SupplierID),
+      QuotedUnitCost: Number(row.QuotedUnitCost),
+      ExpectedDeliveryDays: row.ExpectedDeliveryDays != null ? Number(row.ExpectedDeliveryDays) : 0,
+      CurrencyCode: typeof row.CurrencyCode === 'string' ? row.CurrencyCode : '',
+      IsSelected: Boolean(row.IsSelected),
+      Notes: row.Notes != null ? String(row.Notes) : ''
+    }
+    res.json(payload)
   } catch (error) {
     next(error)
   }

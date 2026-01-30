@@ -250,7 +250,76 @@ describe('Templates API', () => {
     }
   })
 
-  it('GET /api/backend/templates/reference-options should return 200 and include disciplines and subtypes', async () => {
+  it('GET /api/backend/templates returns disciplineName/subtypeName when DB returns rows with IDs', async () => {
+    const templateService = await import('../../src/backend/services/templateService')
+    const mockFetch = templateService.fetchAllTemplates as jest.Mock
+    mockFetch.mockResolvedValueOnce([
+      {
+        sheetId: 1,
+        sheetName: 'T1',
+        sheetDesc: '',
+        categoryId: 1,
+        categoryName: 'Cat',
+        preparedById: 1,
+        preparedByName: 'User',
+        revisionDate: null,
+        status: 'Draft',
+        disciplineId: 1,
+        disciplineName: 'PIPING',
+        subtypeId: 1,
+        subtypeName: 'Pressure Transmitter',
+      },
+    ])
+
+    const res = await request(app)
+      .get('/api/backend/templates')
+      .set('Cookie', [authCookie])
+
+    expect(res.statusCode).toBe(200)
+    expect(Array.isArray(res.body)).toBe(true)
+    expect(res.body).toHaveLength(1)
+    const row = res.body[0] as Record<string, unknown>
+    expect(row.disciplineId).toBe(1)
+    expect(row.disciplineName).toBe('PIPING')
+    expect(row.subtypeId).toBe(1)
+    expect(row.subtypeName).toBe('Pressure Transmitter')
+  })
+
+  it('GET /api/backend/templates returns null disciplineName/subtypeName when DisciplineID/SubtypeID are null', async () => {
+    const templateService = await import('../../src/backend/services/templateService')
+    const mockFetch = templateService.fetchAllTemplates as jest.Mock
+    mockFetch.mockResolvedValueOnce([
+      {
+        sheetId: 2,
+        sheetName: 'T2',
+        sheetDesc: '',
+        categoryId: 1,
+        categoryName: 'Cat',
+        preparedById: 1,
+        preparedByName: 'User',
+        revisionDate: null,
+        status: 'Draft',
+        disciplineId: null,
+        disciplineName: null,
+        subtypeId: null,
+        subtypeName: null,
+      },
+    ])
+
+    const res = await request(app)
+      .get('/api/backend/templates')
+      .set('Cookie', [authCookie])
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toHaveLength(1)
+    const row = res.body[0] as Record<string, unknown>
+    expect(row.disciplineId).toBeNull()
+    expect(row.disciplineName).toBeNull()
+    expect(row.subtypeId).toBeNull()
+    expect(row.subtypeName).toBeNull()
+  })
+
+  it('GET /api/backend/templates/reference-options should return 200 with disciplines/subtypes shaped by id, code (Code column), name (Name column)', async () => {
     const res = await request(app)
       .get('/api/backend/templates/reference-options')
       .set('Cookie', [authCookie])
@@ -260,6 +329,19 @@ describe('Templates API', () => {
     expect(res.body).not.toBeNull()
     expect(Array.isArray(res.body.disciplines)).toBe(true)
     expect(Array.isArray(res.body.subtypes)).toBe(true)
+    expect(res.body.disciplines.length).toBeGreaterThan(0)
+    expect(res.body.subtypes.length).toBeGreaterThan(0)
+    const disc = res.body.disciplines[0] as Record<string, unknown>
+    expect(disc).toHaveProperty('id')
+    expect(disc).toHaveProperty('name')
+    expect(disc).toHaveProperty('code')
+    expect(disc).not.toHaveProperty('DisciplineName')
+    const sub = res.body.subtypes[0] as Record<string, unknown>
+    expect(sub).toHaveProperty('id')
+    expect(sub).toHaveProperty('disciplineId')
+    expect(sub).toHaveProperty('name')
+    expect(sub).toHaveProperty('code')
+    expect(sub).not.toHaveProperty('SubtypeName')
   })
 
   it('GET /api/backend/templates/note-types should return 200 and an array', async () => {

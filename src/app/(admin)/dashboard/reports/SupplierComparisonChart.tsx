@@ -13,16 +13,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
-
-interface ItemDetail {
-  itemName: string;
-  quantity: number;
-}
-
-interface CategoryContribution {
-  categoryName: string;
-  items: ItemDetail[];
-}
+import { normalizeCategoryContribution, hasNoUsableData } from "./chartDataUtils";
 
 interface GroupedBarDataEntry {
   itemName: string;
@@ -41,6 +32,7 @@ const generateColors = (count: number): string[] => {
 export default function InventoryContributionChart() {
   const [data, setData] = useState<GroupedBarDataEntry[]>([]);
   const [categoryNames, setCategoryNames] = useState<string[]>([]);
+  const [noUsableData, setNoUsableData] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -48,20 +40,22 @@ export default function InventoryContributionChart() {
         const res = await fetch("/api/backend/reports/supplier-comparison", {
           credentials: "include",
         });
-        const raw: CategoryContribution[] = await res.json();
+        const raw = await res.json();
+        const categoriesNormalized = normalizeCategoryContribution(raw);
+        setNoUsableData(hasNoUsableData(categoriesNormalized));
 
-        const categories = raw.map((c) => c.categoryName);
+        const names = categoriesNormalized.map((c) => c.categoryName);
         const itemMap: Record<string, GroupedBarDataEntry> = {};
 
-        for (const category of raw) {
+        for (const category of categoriesNormalized) {
           for (const item of category.items) {
-            itemMap[item.itemName] ??= { itemName: item.itemName }
-            itemMap[item.itemName][category.categoryName] = item.quantity
+            itemMap[item.itemName] ??= { itemName: item.itemName };
+            itemMap[item.itemName][category.categoryName] = item.quantity;
           }
         }
 
         setData(Object.values(itemMap));
-        setCategoryNames(categories);
+        setCategoryNames(names);
       } catch (error) {
         console.error("Error loading inventory contribution:", error);
       }
@@ -71,6 +65,17 @@ export default function InventoryContributionChart() {
   }, []);
 
   const colors = generateColors(categoryNames.length);
+
+  if (noUsableData) {
+    return (
+      <Card className="w-full">
+        <CardContent className="p-4">
+          <h2 className="text-lg font-semibold mb-4">Inventory Category Contribution</h2>
+          <p className="text-muted-foreground text-sm">No supplier comparison data to display.</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="w-full">

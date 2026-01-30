@@ -667,7 +667,7 @@ export default function EstimationDetailPage() {
                                   </thead>
                                   <tbody>
                                     {(quotesByItem[item.EItemID] || []).map((quote) => (
-                                      <React.Fragment key={quote.QuoteID}>
+                                      <React.Fragment key={quote.QuoteRowID}>
                                         <tr className="bg-white">
                                           <td className="border px-2 py-1">{quote.SupplierName}</td>
                                           <td className="border px-2 py-1 text-right">${quote.QuotedUnitCost.toFixed(2)}</td>

@@ -59,6 +59,74 @@ describe('Filled Sheets API', () => {
     }
   })
 
+  it('GET /api/backend/filledsheets returns disciplineName/subtypeName when DB returns rows with IDs', async () => {
+    const filledSheetService = await import('../../src/backend/services/filledSheetService')
+    const mockFetch = filledSheetService.fetchAllFilled as jest.Mock
+    mockFetch.mockResolvedValueOnce([
+      {
+        sheetId: 1,
+        sheetName: 'F1',
+        sheetDesc: '',
+        categoryId: 1,
+        categoryName: 'Cat',
+        preparedById: 1,
+        preparedByName: 'User',
+        revisionDate: null,
+        status: 'Draft',
+        disciplineId: 1,
+        disciplineName: 'PIPING',
+        subtypeId: 1,
+        subtypeName: 'Pressure Transmitter',
+      },
+    ])
+
+    const res = await request(app)
+      .get('/api/backend/filledsheets')
+      .set('Cookie', [authCookie])
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toHaveLength(1)
+    const row = res.body[0] as Record<string, unknown>
+    expect(row.disciplineId).toBe(1)
+    expect(row.disciplineName).toBe('PIPING')
+    expect(row.subtypeId).toBe(1)
+    expect(row.subtypeName).toBe('Pressure Transmitter')
+  })
+
+  it('GET /api/backend/filledsheets returns null disciplineName/subtypeName when DisciplineID/SubtypeID are null', async () => {
+    const filledSheetService = await import('../../src/backend/services/filledSheetService')
+    const mockFetch = filledSheetService.fetchAllFilled as jest.Mock
+    mockFetch.mockResolvedValueOnce([
+      {
+        sheetId: 2,
+        sheetName: 'F2',
+        sheetDesc: '',
+        categoryId: 1,
+        categoryName: 'Cat',
+        preparedById: 1,
+        preparedByName: 'User',
+        revisionDate: null,
+        status: 'Draft',
+        disciplineId: null,
+        disciplineName: null,
+        subtypeId: null,
+        subtypeName: null,
+      },
+    ])
+
+    const res = await request(app)
+      .get('/api/backend/filledsheets')
+      .set('Cookie', [authCookie])
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toHaveLength(1)
+    const row = res.body[0] as Record<string, unknown>
+    expect(row.disciplineId).toBeNull()
+    expect(row.disciplineName).toBeNull()
+    expect(row.subtypeId).toBeNull()
+    expect(row.subtypeName).toBeNull()
+  })
+
   it('GET /api/backend/filledsheets/reference-options should return 200 and an object', async () => {
     const res = await request(app)
       .get('/api/backend/filledsheets/reference-options')

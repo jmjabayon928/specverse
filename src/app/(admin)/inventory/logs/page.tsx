@@ -18,10 +18,19 @@ export default function GlobalAuditLogsPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
 
   useEffect(() => {
-    fetch("/api/backend/inventory/all/audit")
-      .then(res => res.json())
-      .then(data => setLogs(data))
-      .catch(err => console.error("Failed to load audit logs:", err));
+    fetch("/api/backend/inventory/all/audit", {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`Error ${res.status}: ${errorText}`);
+        }
+        return res.json();
+      })
+      .then((data) => setLogs(Array.isArray(data) ? data : []))
+      .catch((err) => console.error("Failed to load audit logs:", err));
   }, []);
 
   return (

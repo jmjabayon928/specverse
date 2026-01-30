@@ -280,40 +280,102 @@ export async function getInventoryTransactionsForCsv(
   }));
 }
 
-export async function getAllInventoryMaintenanceLogs() {
+// Join key: InventoryItems.InventoryID exists and matches InventoryMaintenanceLogs.InventoryID (see inventoryQueries / getAllInventoryItems).
+export async function getAllInventoryMaintenanceLogs(): Promise<
+  Array<{
+    maintenanceId: number;
+    inventoryId: number;
+    itemName: string;
+    maintenanceDate: string;
+    description: string;
+    performedByUserId: number | null;
+    performedByName: string | null;
+    notes: string | null;
+    createdAt: string | null;
+  }>
+> {
   const pool = await poolPromise;
   const result = await pool.request().query(`
     SELECT 
-      m.MaintenanceID,
-      m.InventoryID,
+      ml.MaintenanceLogID,
+      ml.InventoryID,
       i.ItemName,
-      m.Description,
-      m.MaintenanceDate,
-      u.FirstName + ' ' + u.LastName AS PerformedBy
-    FROM InventoryMaintenance m
-    JOIN InventoryItems i ON m.InventoryID = i.InventoryID
-    JOIN Users u ON m.PerformedBy = u.UserID
-    ORDER BY m.MaintenanceDate DESC
+      CONVERT(varchar, ml.MaintenanceDate, 126) AS MaintenanceDate,
+      ml.Description,
+      ml.Notes,
+      CONVERT(varchar, ml.CreatedAt, 126) AS CreatedAt,
+      ml.PerformedBy AS PerformedByUserId,
+      CASE WHEN u.UserID IS NOT NULL THEN u.FirstName + ' ' + u.LastName ELSE NULL END AS PerformedByName
+    FROM InventoryMaintenanceLogs ml
+    JOIN InventoryItems i ON ml.InventoryID = i.InventoryID
+    LEFT JOIN Users u ON ml.PerformedBy = u.UserID
+    ORDER BY ml.MaintenanceDate DESC, ml.MaintenanceLogID DESC
   `);
-  return result.recordset;
+  const rows = result.recordset as Array<{
+    MaintenanceLogID: number;
+    InventoryID: number;
+    ItemName: string;
+    MaintenanceDate: string;
+    Description: string;
+    Notes: string | null;
+    CreatedAt: string | null;
+    PerformedByUserId: number | null;
+    PerformedByName: string | null;
+  }>;
+  return rows.map((r) => ({
+    maintenanceId: r.MaintenanceLogID,
+    inventoryId: r.InventoryID,
+    itemName: r.ItemName ?? "",
+    maintenanceDate: r.MaintenanceDate,
+    description: r.Description ?? "",
+    performedByUserId: r.PerformedByUserId ?? null,
+    performedByName: r.PerformedByName ?? null,
+    notes: r.Notes ?? null,
+    createdAt: r.CreatedAt ?? null,
+  }));
 }
 
-export async function getAllInventoryAuditLogs() {
+export async function getAllInventoryAuditLogs(): Promise<
+  Array<{
+    auditLogId: number;
+    inventoryId: number;
+    itemName: string;
+    actionType: string;
+    oldValue: string;
+    newValue: string;
+    changedBy: string;
+    changedAt: string;
+  }>
+> {
   const pool = await poolPromise;
   const result = await pool.request().query(`
     SELECT 
-      a.AuditLogID,
-      a.InventoryID,
-      i.ItemName,
-      a.ActionType,
+      a.AuditLogID AS auditLogId,
+      a.InventoryID AS inventoryId,
+      i.ItemName AS itemName,
+      a.ActionType AS actionType,
       a.OldValue,
       a.NewValue,
-      u.FirstName + ' ' + u.LastName AS ChangedBy,
-      a.ChangedAt
+      CONVERT(varchar, a.ChangedAt, 126) AS changedAt,
+      CASE WHEN u.UserID IS NOT NULL THEN u.FirstName + ' ' + u.LastName ELSE NULL END AS changedBy
     FROM InventoryAuditLogs a
     JOIN InventoryItems i ON a.InventoryID = i.InventoryID
-    JOIN Users u ON a.ChangedBy = u.UserID
-    ORDER BY a.ChangedAt DESC
+    LEFT JOIN Users u ON a.ChangedBy = u.UserID
+    ORDER BY a.ChangedAt DESC, a.AuditLogID DESC
   `);
-  return result.recordset;
+  const rows = result.recordset as Array<Record<string, unknown>>;
+  return rows.map((r) => {
+    const auditLogId = Number(r.auditLogId ?? r.AuditLogID);
+    const inventoryId = Number(r.inventoryId ?? r.InventoryID);
+    return {
+      auditLogId,
+      inventoryId,
+      itemName: String(r.itemName ?? r.ItemName ?? ""),
+      actionType: String(r.actionType ?? r.ActionType ?? ""),
+      oldValue: String(r.OldValue ?? r.oldValue ?? ""),
+      newValue: String(r.NewValue ?? r.newValue ?? ""),
+      changedBy: String(r.changedBy ?? r.ChangedBy ?? ""),
+      changedAt: String(r.changedAt ?? r.ChangedAt ?? ""),
+    };
+  });
 }

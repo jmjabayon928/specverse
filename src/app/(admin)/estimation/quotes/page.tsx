@@ -54,7 +54,7 @@ export default function QuotesPage() {
           <tbody>
             {quotes.length > 0 ? (
               quotes.map((quote) => (
-                <tr key={quote.QuoteID} className="border-t">
+                <tr key={quote.QuoteRowID} className="border-t">
                   <td className="px-4 py-2">{quote.QuoteID}</td>
                   <td className="px-4 py-2">{quote.SupplierName}</td>
                   <td className="px-4 py-2">{quote.ItemName ?? "Unnamed"}</td>

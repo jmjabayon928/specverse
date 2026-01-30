@@ -13,16 +13,7 @@ import {
   Legend,
 } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
-
-interface ItemDetail {
-  itemName: string;
-  quantity: number;
-}
-
-interface CategoryContribution {
-  categoryName: string;
-  items: ItemDetail[];
-}
+import { normalizeCategoryContribution, hasNoUsableData } from "./chartDataUtils";
 
 interface StackedDataEntry {
   categoryName: string;
@@ -41,6 +32,7 @@ const generateColors = (count: number): string[] => {
 export default function InventoryContributionChart() {
   const [data, setData] = useState<StackedDataEntry[]>([]);
   const [itemNames, setItemNames] = useState<string[]>([]);
+  const [noUsableData, setNoUsableData] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -48,16 +40,18 @@ export default function InventoryContributionChart() {
         const res = await fetch("/api/backend/reports/inventory-contribution", {
           credentials: "include",
         });
-        const raw: CategoryContribution[] = await res.json();
+        const raw = await res.json();
+        const categories = normalizeCategoryContribution(raw);
+        setNoUsableData(hasNoUsableData(categories));
 
         const itemsSet = new Set<string>();
-        const transformed: StackedDataEntry[] = raw.map((category) => {
+        const transformed: StackedDataEntry[] = categories.map((category) => {
           const entry: StackedDataEntry = {
             categoryName: category.categoryName,
           };
           for (const item of category.items) {
-            entry[item.itemName] = item.quantity
-            itemsSet.add(item.itemName)
+            entry[item.itemName] = item.quantity;
+            itemsSet.add(item.itemName);
           }
           return entry;
         });
@@ -73,6 +67,17 @@ export default function InventoryContributionChart() {
   }, []);
 
   const colors = generateColors(itemNames.length);
+
+  if (noUsableData) {
+    return (
+      <Card className="w-full">
+        <CardContent className="p-4">
+          <h2 className="text-lg font-semibold mb-4">Inventory Category Contribution</h2>
+          <p className="text-muted-foreground text-sm">No inventory data to display.</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="w-full">

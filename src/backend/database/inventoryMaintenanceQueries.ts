@@ -14,7 +14,8 @@ type InventoryMaintenanceRow = {
   MaintenanceDate: string;
   Description: string;
   Notes?: string;
-  PerformedByName: string;
+  PerformedByUserId: number | null;
+  PerformedByName: string | null;
   CreatedAt: string;
 };
 
@@ -37,25 +38,27 @@ export async function getInventoryMaintenanceLogs(inventoryId: number) {
         CONVERT(varchar, ml.MaintenanceDate, 126) AS MaintenanceDate,
         ml.Description,
         ml.Notes,
-        u.FirstName + ' ' + u.LastName AS PerformedByName, 
+        ml.PerformedBy AS PerformedByUserId,
+        CASE WHEN u.UserID IS NOT NULL THEN u.FirstName + ' ' + u.LastName ELSE NULL END AS PerformedByName,
         CONVERT(varchar, ml.CreatedAt, 126) AS CreatedAt
       FROM InventoryMaintenanceLogs ml
-        LEFT JOIN Users u ON u.UserID = ml.PerformedBy 
+        LEFT JOIN Users u ON u.UserID = ml.PerformedBy
       WHERE ml.InventoryID = @InventoryID
       ORDER BY ml.MaintenanceDate DESC
     `);
 
   const records = result.recordset as InventoryMaintenanceRow[];
 
-  // ✅ map to camelCase for frontend
+  // Canonical fields only. Deprecated aliases (id, date, performedBy) removed after frontend migrated to maintenanceId, maintenanceDate, performedByName.
   return records.map(row => ({
-    MaintenanceLogID: row.MaintenanceLogID,
+    maintenanceId: row.MaintenanceLogID,
     inventoryId: row.InventoryID,
     maintenanceDate: row.MaintenanceDate,
     description: row.Description,
     notes: row.Notes ?? "",
-    performedBy: row.PerformedByName,
-    CreatedAt: row.CreatedAt,
+    performedByUserId: row.PerformedByUserId ?? null,
+    performedByName: row.PerformedByName ?? null,
+    createdAt: row.CreatedAt,
   }));
 }
 

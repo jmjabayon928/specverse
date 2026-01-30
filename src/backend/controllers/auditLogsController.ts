@@ -119,6 +119,10 @@ export const listAuditLogsHandler: RequestHandler = async (req, res, next) => {
     res.json(result)
   } catch (err) {
     console.error('listAuditLogsHandler error:', err)
+    if (err instanceof AppError) {
+      next(err)
+      return
+    }
     next(new AppError('Failed to fetch audit logs', 500))
   }
 }

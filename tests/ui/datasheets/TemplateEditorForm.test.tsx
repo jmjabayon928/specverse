@@ -1,9 +1,16 @@
 // tests/ui/datasheets/TemplateEditorForm.test.tsx
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom'
 import TemplateEditorForm from '../../../src/app/(admin)/datasheets/templates/[id]/edit/TemplateEditorForm'
-import { getMockReferenceOptions, makeBasicUnifiedSheet, makeOptions } from './datasheetTestUtils'
+import {
+  getMockReferenceOptions,
+  makeBasicUnifiedSheet,
+  makeJsonResponse,
+  makeOptions,
+  waitForReferenceOptionsLoaded,
+} from './datasheetTestUtils'
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -13,6 +20,8 @@ jest.mock('next/navigation', () => ({
     back: jest.fn(),
   }),
 }))
+
+const originalFetch = globalThis.fetch
 
 describe('TemplateEditorForm', () => {
   const areas = makeOptions([1])
@@ -25,49 +34,23 @@ describe('TemplateEditorForm', () => {
   beforeEach(() => {
     const fetchMock = jest.fn((url: string, init?: RequestInit) => {
       if (url.includes('reference-options')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => getMockReferenceOptions(),
-        })
+        return Promise.resolve(makeJsonResponse(getMockReferenceOptions()))
       }
       const putMatch = url.match(/^\/api\/backend\/templates\/(\d+)$/)
       if (putMatch != null && init?.method === 'PUT') {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ sheetId: Number(putMatch[1]) }),
-        })
+        return Promise.resolve(makeJsonResponse({ sheetId: Number(putMatch[1]) }))
       }
       return Promise.reject(new Error('Unexpected fetch: ' + url))
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
   })
 
   afterEach(() => {
+    globalThis.fetch = originalFetch
     jest.resetAllMocks()
   })
 
-  it('renders without throwing when session is null', () => {
-    const sheet = makeBasicUnifiedSheet()
-
-    expect(() => {
-      render(
-        <TemplateEditorForm
-          defaultValues={sheet}
-          areas={areas}
-          manufacturers={manufacturers}
-          suppliers={suppliers}
-          categories={categories}
-          clients={clients}
-          projects={projects}
-          session={null as never}
-        />
-      )
-    }).not.toThrow()
-
-    expect(screen.getByText('Edit Template')).toBeInTheDocument()
-  })
-
-  it('renders core fields and subsheets', () => {
+  it('renders without throwing when session is null', async () => {
     const sheet = makeBasicUnifiedSheet()
 
     render(
@@ -83,12 +66,34 @@ describe('TemplateEditorForm', () => {
       />
     )
 
+    await waitForReferenceOptionsLoaded(screen)
+    expect(screen.getByText('Edit Template')).toBeInTheDocument()
+  })
+
+  it('renders core fields and subsheets', async () => {
+    const sheet = makeBasicUnifiedSheet()
+
+    render(
+      <TemplateEditorForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+        session={null as never}
+      />
+    )
+
+    await waitForReferenceOptionsLoaded(screen)
     expect(screen.getByText('Edit Template')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Test Sheet')).toBeInTheDocument()
     expect(screen.getByText('Subsheet Templates')).toBeInTheDocument()
   })
 
   it('submits a PUT request with fieldValues and updated sheetName on success', async () => {
+    const user = userEvent.setup()
     const sheet = makeBasicUnifiedSheet()
 
     render(
@@ -104,15 +109,14 @@ describe('TemplateEditorForm', () => {
       />
     )
 
-    await waitFor(() => {
-      expect(screen.getByText('Discipline 1')).toBeInTheDocument()
-    })
+    await waitForReferenceOptionsLoaded(screen)
 
     const nameInput = screen.getByDisplayValue('Test Sheet')
-    fireEvent.change(nameInput, { target: { value: 'Updated Template Name' } })
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Updated Template Name')
 
     const button = screen.getByRole('button', { name: /save changes/i })
-    fireEvent.click(button)
+    await user.click(button)
 
     await waitFor(() => {
       const putCall = (globalThis.fetch as jest.Mock).mock.calls.find(

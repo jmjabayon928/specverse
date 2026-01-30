@@ -271,7 +271,7 @@ function applySheetInputsForInsert(
     .input('ClientID', sql.Int, iv(data.clientId))
     .input('ProjectID', sql.Int, iv(data.projectId))
     .input('DisciplineID', sql.Int, iv(data.disciplineId))
-    .input('DatasheetSubtypeID', sql.Int, iv(data.subtypeId))
+    .input('SubtypeID', sql.Int, iv(data.subtypeId))
     .input('Status', sql.VarChar(50), 'Draft')
     .input('IsLatest', sql.Bit, 1)
     .input('IsTemplate', sql.Bit, 1)
@@ -314,7 +314,7 @@ function applySheetInputsForUpdate(
     .input('ClientID', sql.Int, iv(data.clientId))
     .input('ProjectID', sql.Int, iv(data.projectId))
     .input('DisciplineID', sql.Int, iv(data.disciplineId))
-    .input('DatasheetSubtypeID', sql.Int, iv(data.subtypeId))
+    .input('SubtypeID', sql.Int, iv(data.subtypeId))
     .input('ModifiedByID', sql.Int, userId)
 }
 
@@ -458,14 +458,14 @@ export const fetchTemplateReferenceOptions = async () => {
       ORDER BY FirstName, LastName
     `),
     pool.query(`
-      SELECT DisciplineID AS id, DisciplineName AS code, DisciplineName AS name
+      SELECT DisciplineID AS id, Code AS code, Name AS name
       FROM dbo.Disciplines
-      ORDER BY DisciplineName
+      ORDER BY Name
     `),
     pool.query(`
-      SELECT DatasheetSubtypeID AS id, DisciplineID AS disciplineId, SubtypeName AS code, SubtypeName AS name
+      SELECT SubtypeID AS id, DisciplineID AS disciplineId, Code AS code, Name AS name
       FROM dbo.DatasheetSubtypes
-      ORDER BY DisciplineID, SubtypeName
+      ORDER BY DisciplineID, Name
     `),
   ])
 
@@ -503,19 +503,19 @@ export const fetchAllTemplates = async () => {
       s.RevisionDate AS revisionDate,
       s.Status AS status,
       s.DisciplineID AS disciplineId,
-      d.DisciplineName AS disciplineName,
-      s.DatasheetSubtypeID AS subtypeId,
-      ds.SubtypeName AS subtypeName
+      d.Name AS disciplineName,
+      s.SubtypeID AS subtypeId,
+      st.Name AS subtypeName
     FROM Sheets s
     LEFT JOIN Categories c ON s.CategoryID = c.CategoryID
     LEFT JOIN Users u ON s.PreparedByID = u.UserID
-    LEFT JOIN dbo.Disciplines d ON s.DisciplineID = d.DisciplineID
-    LEFT JOIN dbo.DatasheetSubtypes ds ON s.DatasheetSubtypeID = ds.DatasheetSubtypeID
+    LEFT JOIN dbo.Disciplines d ON d.DisciplineID = s.DisciplineID
+    LEFT JOIN dbo.DatasheetSubtypes st ON st.SubtypeID = s.SubtypeID
     WHERE s.IsTemplate = 1
     ORDER BY s.SheetID DESC
   `)
 
-  return result.recordset
+  return result.recordset ?? []
 }
 
 // ───────────────────────────────────────────
@@ -953,7 +953,7 @@ export async function createTemplate(
         AreaID, PackageName, RevisionNum, RevisionDate, PreparedByID, PreparedByDate,
         EquipmentName, EquipmentTagNum, ServiceName, RequiredQty, ItemLocation,
         ManuID, SuppID, InstallPackNum, EquipSize, ModelNum, Driver, LocationDwg, PID, InstallDwg, CodeStd,
-        CategoryID, ClientID, ProjectID, DisciplineID, DatasheetSubtypeID, Status, IsLatest, IsTemplate, AutoCADImport
+        CategoryID, ClientID, ProjectID, DisciplineID, SubtypeID, Status, IsLatest, IsTemplate, AutoCADImport
       )
       OUTPUT INSERTED.SheetID
       VALUES (
@@ -961,7 +961,7 @@ export async function createTemplate(
         @AreaID, @PackageName, @RevisionNum, @RevisionDate, @PreparedByID, @PreparedByDate,
         @EquipmentName, @EquipmentTagNum, @ServiceName, @RequiredQty, @ItemLocation,
         @ManuID, @SuppID, @InstallPackNum, @EquipSize, @ModelNum, @Driver, @LocationDwg, @PID, @InstallDwg, @CodeStd,
-        @CategoryID, @ClientID, @ProjectID, @DisciplineID, @DatasheetSubtypeID, @Status, @IsLatest, @IsTemplate, @AutoCADImport
+        @CategoryID, @ClientID, @ProjectID, @DisciplineID, @SubtypeID, @Status, @IsLatest, @IsTemplate, @AutoCADImport
       );
     `)
 
@@ -1034,7 +1034,7 @@ export async function updateTemplate(
           EquipSize = @EquipSize, ModelNum = @ModelNum, Driver = @Driver, LocationDwg = @LocationDwg,
           PID = @PID, InstallDwg = @InstallDwg, CodeStd = @CodeStd,
           CategoryID = @CategoryID, ClientID = @ClientID, ProjectID = @ProjectID,
-          DisciplineID = @DisciplineID, DatasheetSubtypeID = @DatasheetSubtypeID,
+          DisciplineID = @DisciplineID, SubtypeID = @SubtypeID,
           ModifiedByID = @ModifiedByID, ModifiedDate = SYSDATETIME()
       WHERE SheetID = @SheetID AND IsTemplate = 1
     `)
@@ -1136,9 +1136,9 @@ export async function getTemplateDetailsById(
         s.TemplateID,
         s.ParentSheetID,
         s.DisciplineID,
-        d.DisciplineName AS disciplineName,
-        s.DatasheetSubtypeID,
-        ds.SubtypeName AS subtypeName
+        d.Name AS disciplineName,
+        s.SubtypeID,
+        ds.Name AS subtypeName
       FROM Sheets s
       LEFT JOIN Users u1 ON s.PreparedByID = u1.UserID
       LEFT JOIN Users u2 ON s.VerifiedByID = u2.UserID
@@ -1152,7 +1152,7 @@ export async function getTemplateDetailsById(
       LEFT JOIN Clients c ON s.ClientID = c.ClientID
       LEFT JOIN Projects p ON s.ProjectID = p.ProjectID
       LEFT JOIN dbo.Disciplines d ON s.DisciplineID = d.DisciplineID
-      LEFT JOIN dbo.DatasheetSubtypes ds ON s.DatasheetSubtypeID = ds.DatasheetSubtypeID
+      LEFT JOIN dbo.DatasheetSubtypes ds ON s.SubtypeID = ds.SubtypeID
       WHERE s.SheetID = @SheetID
     `)
 
@@ -1223,7 +1223,7 @@ export async function getTemplateDetailsById(
     parentSheetId: row.ParentSheetID,
     disciplineId: row.DisciplineID ?? null,
     disciplineName: row.disciplineName ?? null,
-    subtypeId: row.DatasheetSubtypeID ?? null,
+    subtypeId: row.SubtypeID ?? null,
     subtypeName: row.subtypeName ?? null,
     sourceFilePath: row.SourceFilePath,
     subsheets: [],

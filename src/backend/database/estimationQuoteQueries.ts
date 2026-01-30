@@ -7,6 +7,7 @@ export async function getQuotesByItemId(itemId: number) {
     .input("ItemID", sql.Int, itemId)
     .query(`
       SELECT 
+        q.QuoteID AS QuoteRowID,
         q.QuoteID,
         q.ItemID,
         q.SupplierID,
