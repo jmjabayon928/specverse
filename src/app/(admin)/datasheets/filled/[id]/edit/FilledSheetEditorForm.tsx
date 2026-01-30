@@ -6,6 +6,9 @@ import { ZodError } from 'zod'
 import { unifiedSheetSchema } from '@/validation/sheetSchema'
 import { renderInput, renderSelect, renderDate } from '@/components/ui/form/FormHelper'
 import FilledSheetSubsheetForm from '../../create/FilledSheetSubsheetForm'
+import SheetCompletenessBanner from '@/components/datasheets/SheetCompletenessBanner'
+import { useDatasheetCompleteness } from '@/hooks/useDatasheetCompleteness'
+import { getSubsheetKey } from '@/utils/datasheetCompleteness'
 import type { UnifiedSheet, UnifiedSubsheet } from '@/domain/datasheets/sheetTypes'
 import type { Option } from '@/domain/shared/commonTypes'
 
@@ -127,6 +130,8 @@ export default function FilledSheetEditorForm(
     buildFieldValueMap(defaultValues.subsheets)
   )
 
+  const completeness = useDatasheetCompleteness(datasheet.subsheets, fieldValues)
+
   const handleChange = <K extends keyof UnifiedSheet>(field: K, value: UnifiedSheet[K]) => {
     setDatasheet((prev) => ({ ...prev, [field]: value }))
   }
@@ -220,6 +225,11 @@ export default function FilledSheetEditorForm(
         </div>
       )}
 
+      <SheetCompletenessBanner
+        totalRequired={completeness.totalRequired}
+        filledRequired={completeness.filledRequired}
+      />
+
       <fieldset className='border border-gray-300 rounded p-4'>
         <legend className='text-md font-semibold px-2'>Datasheet Details</legend>
         <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mt-2'>
@@ -287,6 +297,7 @@ export default function FilledSheetEditorForm(
             fieldValues={fieldValues}
             onFieldValueChange={handleFieldValueChange}
             formErrors={formErrors}
+            sectionCompleteness={completeness.bySubsheet[getSubsheetKey(sub, i)]}
           />
         ))}
       </div>

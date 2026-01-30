@@ -3,13 +3,18 @@
 
 import React from "react";
 import type { UnifiedSubsheet, InfoField } from "@/domain/datasheets/sheetTypes";
+import FieldCompletenessHint from "@/components/datasheets/FieldCompletenessHint";
+import SectionCompletenessSummary from "@/components/datasheets/SectionCompletenessSummary";
+import type { SubsheetCompleteness } from "@/utils/datasheetCompleteness";
 
 interface Props {
   subsheet: UnifiedSubsheet;
   subsheetIndex: number;
-  fieldValues: Record<number, string>; // 🔹 Now keyed by InfoTemplateID
+  fieldValues: Record<number, string>; // keyed by InfoTemplateID (number or string key both work)
   onFieldValueChange: (subsheetIndex: number, infoTemplateId: number, value: string) => void;
   formErrors?: Record<string, string[]>;
+  /** Optional section-level completeness for hint (UX only) */
+  sectionCompleteness?: SubsheetCompleteness;
 }
 
 export default function FilledSheetSubsheetForm(props: Readonly<Props>) {
@@ -19,6 +24,7 @@ export default function FilledSheetSubsheetForm(props: Readonly<Props>) {
     fieldValues,
     onFieldValueChange,
     formErrors = {},
+    sectionCompleteness,
   } = props;
 
   const handleInputChange = (infoTemplateId: number, value: string) => {
@@ -29,7 +35,9 @@ export default function FilledSheetSubsheetForm(props: Readonly<Props>) {
     const key = `subsheet-${subsheetIndex}-field-${index}`;
     const infoTemplateId = field.id!;
     const label = field.label;
-    const value = fieldValues[infoTemplateId] || "";
+    const value = fieldValues[infoTemplateId] ?? "";
+    const valueStr = typeof value === "string" ? value : String(value ?? "");
+    const isIncompleteHint = field.required && valueStr.trim() === "";
 
     const errorKey = `Subsheet #${subsheetIndex + 1} - Template #${index + 1} - value`;
     const hasError = formErrors?.[errorKey]?.length > 0;
@@ -47,6 +55,7 @@ export default function FilledSheetSubsheetForm(props: Readonly<Props>) {
           >
             {field.uom ? `${label} (${field.uom})` : label}
             {isRequired && <span className="text-red-500 ml-1">*</span>}
+            <FieldCompletenessHint show={isIncompleteHint} />
           </label>
           <select
             value={value}
@@ -81,6 +90,7 @@ export default function FilledSheetSubsheetForm(props: Readonly<Props>) {
         >
           {field.uom ? `${label} (${field.uom})` : label}
           {isRequired && <span className="text-red-500 ml-1">*</span>}
+          <FieldCompletenessHint show={isIncompleteHint} />
         </label>
         <input
           type={inputType}
@@ -98,8 +108,14 @@ export default function FilledSheetSubsheetForm(props: Readonly<Props>) {
   };
 
   return (
-    <fieldset className="border border-gray-400 rounded p-4">
+    <fieldset className="border border-gray-400 rounded p-4 mb-6">
       <legend className="text-lg font-semibold">{subsheet.name}</legend>
+      {sectionCompleteness != null && (
+        <SectionCompletenessSummary
+          totalRequired={sectionCompleteness.totalRequired}
+          filledRequired={sectionCompleteness.filledRequired}
+        />
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
         {subsheet.fields.map((field, index) => renderField(field, index))}
       </div>

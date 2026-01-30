@@ -6,6 +6,9 @@ import { translations as labelTranslations } from "@/constants/translations";
 import { convertToUSC } from "@/utils/unitConversionTable";
 import OtherConversionsCell from "@/utils/OtherConversionsCell";
 import ChangeLogTable from "@/components/datasheets/ChangeLogTable";
+import { computeCompleteness, getSubsheetKey } from "@/utils/datasheetCompleteness";
+import SectionCompletenessSummary from "@/components/datasheets/SectionCompletenessSummary";
+import SheetCompletenessBanner from "@/components/datasheets/SheetCompletenessBanner";
 
 // ✅ Local fallback type (no need for types/unit.ts)
 type UnitSystem = "SI" | "USC";
@@ -158,6 +161,11 @@ const FilledSheetViewer: React.FC<Props> = ({
   // ─────────────────────────────────────────────────────────────
   type NoteGroup = { key: string; label: string; items: SheetNoteDTO[] };
 
+  const completeness = React.useMemo(
+    () => computeCompleteness(sheet.subsheets),
+    [sheet.subsheets]
+  );
+
   const groupedNotes: NoteGroup[] = React.useMemo(() => {
     const byType = new Map<string, NoteGroup>();
     for (const n of notes) {
@@ -185,6 +193,10 @@ const FilledSheetViewer: React.FC<Props> = ({
 
   return (
     <div className="space-y-8">
+      <SheetCompletenessBanner
+        totalRequired={completeness.totalRequired}
+        filledRequired={completeness.filledRequired}
+      />
       {/* Datasheet Details */}
       <fieldset className="border rounded p-4">
         <div className="text-xl font-semibold mb-4">
@@ -264,18 +276,24 @@ const FilledSheetViewer: React.FC<Props> = ({
       </fieldset>
 
       {/* Subsheet Sections */}
-      {sheet.subsheets.map((sub) => {
+      {sheet.subsheets.map((sub, subIndex) => {
         const originalSubId = sub.originalId ?? sub.id;
         const translatedSubName = getTranslatedSubsheetName(originalSubId, sub.name);
         const totalFields = sub.fields.length;
         const midpoint = Math.ceil(totalFields / 2);
         const leftFields = sub.fields.slice(0, midpoint);
         const rightFields = sub.fields.slice(midpoint);
+        const sectionComplete = completeness.bySubsheet[getSubsheetKey(sub, subIndex)];
 
         return (
           <fieldset key={`sub-${originalSubId}`} className="border rounded p-4 mb-6">
             <div className="text-xl font-semibold mb-4">{translatedSubName}</div>
-
+            {sectionComplete != null && (
+              <SectionCompletenessSummary
+                totalRequired={sectionComplete.totalRequired}
+                filledRequired={sectionComplete.filledRequired}
+              />
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[leftFields, rightFields].map((fieldGroup, groupIndex) => {
                 const side = groupIndex === 0 ? "left" : "right"; // stable, not index
