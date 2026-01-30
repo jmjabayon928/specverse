@@ -131,6 +131,12 @@ export interface UnifiedSheet {
   templateId?: number
   parentSheetId?: number
 
+  // Discipline / subtype (Phase 1)
+  disciplineId?: number | null
+  disciplineName?: string | null
+  subtypeId?: number | null
+  subtypeName?: string | null
+
   // Audit
   sourceFilePath?: string | null
 

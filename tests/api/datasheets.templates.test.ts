@@ -30,6 +30,19 @@ const TEMPLATE_PERMISSIONS: string[] = [
   'DATASHEET_NOTE_EDIT',
 ]
 
+interface DisciplineOption {
+  id: number
+  code: string
+  name: string
+}
+
+interface SubtypeOption {
+  id: number
+  disciplineId: number
+  code: string
+  name: string
+}
+
 interface ReferenceOptionsResponse {
   areas?: Array<{ value: number; label: string }>
   categories?: Array<{ value: number; label: string }>
@@ -37,6 +50,8 @@ interface ReferenceOptionsResponse {
   projects?: Array<{ value: number; label: string }>
   manufacturers?: Array<{ value: number; label: string }>
   suppliers?: Array<{ value: number; label: string }>
+  disciplines?: DisciplineOption[]
+  subtypes?: SubtypeOption[]
 }
 
 interface TemplateFieldPayload {
@@ -84,6 +99,8 @@ interface TemplatePayload {
   categoryId: number | null
   clientId: number | null
   projectId: number | null
+  disciplineId: number
+  subtypeId?: number | null
   subsheets: TemplateSubsheetPayload[]
 }
 
@@ -116,6 +133,9 @@ describe('Templates API', () => {
     const projectId = pickFirstOrNull(refs.projects) ?? FALLBACK_REF_ID
     const manuId = pickFirstOrNull(refs.manufacturers) ?? FALLBACK_REF_ID
     const suppId = pickFirstOrNull(refs.suppliers) ?? FALLBACK_REF_ID
+    const firstDisciplineId =
+      Array.isArray(refs.disciplines) && refs.disciplines.length > 0 ? refs.disciplines[0].id : null
+    const disciplineId = typeof firstDisciplineId === 'number' ? firstDisciplineId : FALLBACK_REF_ID
 
     const today = new Date().toISOString().slice(0, 10)
 
@@ -149,6 +169,7 @@ describe('Templates API', () => {
       categoryId,
       clientId,
       projectId,
+      disciplineId,
       subsheets: [
         {
           name: 'Main Subsheet',
@@ -176,16 +197,23 @@ describe('Templates API', () => {
     }
   }
 
-  it('GET /api/backend/templates should return 200 and an array', async () => {
+  it('GET /api/backend/templates should return 200 and array with optional discipline fields', async () => {
     const res = await request(app)
       .get('/api/backend/templates')
       .set('Cookie', [authCookie])
 
     expect(res.statusCode).toBe(200)
     expect(Array.isArray(res.body)).toBe(true)
+    for (const row of res.body as Array<Record<string, unknown>>) {
+      expect(typeof row.sheetId === 'number' || typeof row.sheetId === 'undefined').toBe(true)
+      if (row.disciplineId !== undefined) expect(typeof row.disciplineId === 'number' || row.disciplineId === null).toBe(true)
+      if (row.disciplineName !== undefined) expect(typeof row.disciplineName === 'string' || row.disciplineName === null).toBe(true)
+      if (row.subtypeId !== undefined) expect(typeof row.subtypeId === 'number' || row.subtypeId === null).toBe(true)
+      if (row.subtypeName !== undefined) expect(typeof row.subtypeName === 'string' || row.subtypeName === null).toBe(true)
+    }
   })
 
-  it('GET /api/backend/templates/reference-options should return 200 and an object', async () => {
+  it('GET /api/backend/templates/reference-options should return 200 and include disciplines and subtypes', async () => {
     const res = await request(app)
       .get('/api/backend/templates/reference-options')
       .set('Cookie', [authCookie])
@@ -193,6 +221,8 @@ describe('Templates API', () => {
     expect(res.statusCode).toBe(200)
     expect(typeof res.body).toBe('object')
     expect(res.body).not.toBeNull()
+    expect(Array.isArray(res.body.disciplines)).toBe(true)
+    expect(Array.isArray(res.body.subtypes)).toBe(true)
   })
 
   it('GET /api/backend/templates/note-types should return 200 and an array', async () => {
@@ -256,9 +286,19 @@ describe('Templates API', () => {
 
       expect(getRes.statusCode).toBe(200)
       expect(typeof getRes.body).toBe('object')
-      expect(getRes.body.sheetId ?? getRes.body.SheetID ?? getRes.body.id).toBe(
-        sheetId
-      )
+      const resolvedSheetId =
+        getRes.body.datasheet?.sheetId ??
+        getRes.body.sheetId ??
+        getRes.body.SheetID ??
+        getRes.body.id
+      expect(resolvedSheetId).toBe(sheetId)
+      if (getRes.body.datasheet) {
+        expect(
+          typeof getRes.body.datasheet.disciplineId === 'number' ||
+            getRes.body.datasheet.disciplineId === null ||
+            getRes.body.datasheet.disciplineId === undefined
+        ).toBe(true)
+      }
 
       // 3) UPDATE name
       const updatedName = 'API Test Template (Updated)'
@@ -303,6 +343,56 @@ describe('Templates API', () => {
       .send(invalidPayload)
 
     expect(res.statusCode).toBeGreaterThanOrEqual(400)
+  })
+
+  it('POST /api/backend/templates should return 400 when disciplineId is missing', async () => {
+    const refRes = await request(app)
+      .get('/api/backend/templates/reference-options')
+      .set('Cookie', [authCookie])
+    expect(refRes.statusCode).toBe(200)
+    const refs = refRes.body as ReferenceOptionsResponse
+    const categoryId = pickFirstOrNull(refs.categories) ?? FALLBACK_REF_ID
+    const clientId = pickFirstOrNull(refs.clients) ?? FALLBACK_REF_ID
+    const projectId = pickFirstOrNull(refs.projects) ?? FALLBACK_REF_ID
+    const payloadWithoutDiscipline = {
+      sheetName: 'Missing Discipline',
+      sheetDesc: 'No disciplineId',
+      sheetDesc2: '',
+      clientDocNum: 1,
+      clientProjectNum: 1,
+      companyDocNum: 1,
+      companyProjectNum: 1,
+      areaId: FALLBACK_REF_ID,
+      packageName: 'PKG',
+      revisionNum: 1,
+      revisionDate: new Date().toISOString().slice(0, 10),
+      equipmentName: 'Eq',
+      equipmentTagNum: `T-${Date.now()}`,
+      serviceName: 'Svc',
+      requiredQty: 1,
+      itemLocation: 'Loc',
+      manuId: FALLBACK_REF_ID,
+      suppId: FALLBACK_REF_ID,
+      installPackNum: '',
+      equipSize: 0,
+      modelNum: '',
+      driver: '',
+      locationDwg: '',
+      pid: 0,
+      installDwg: '',
+      codeStd: '',
+      categoryId,
+      clientId,
+      projectId,
+      subsheets: [],
+    }
+
+    const res = await request(app)
+      .post('/api/backend/templates')
+      .set('Cookie', [authCookie])
+      .send(payloadWithoutDiscipline)
+
+    expect(res.statusCode).toBe(400)
   })
 
   it('PUT /api/backend/templates/:id should reject invalid id or body', async () => {

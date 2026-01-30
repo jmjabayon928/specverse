@@ -26,6 +26,10 @@ type TemplateRow = {
   preparedByName: string
   revisionDate: string
   status: TemplateStatus
+  disciplineId?: number | null
+  disciplineName?: string | null
+  subtypeId?: number | null
+  subtypeName?: string | null
 }
 
 type CategoryOption = {
@@ -44,9 +48,24 @@ type SelectOption = {
   label: string
 }
 
+type DisciplineOption = {
+  id: number
+  code: string
+  name: string
+}
+
+type SubtypeOption = {
+  id: number
+  disciplineId: number
+  code: string
+  name: string
+}
+
 type ReferenceOptionsResponse = {
   categories: CategoryOption[]
   users: UserOption[]
+  disciplines?: DisciplineOption[]
+  subtypes?: SubtypeOption[]
 }
 
 type SelectState = SelectOption | null
@@ -181,14 +200,31 @@ const mapUsersToOptions = (users: UserOption[]): SelectOption[] => {
   return options
 }
 
+const mapDisciplinesToOptions = (disciplines: DisciplineOption[]): SelectOption[] =>
+  disciplines.map((d) => ({ value: d.id, label: d.name }))
+
+const mapSubtypesToOptions = (subtypes: SubtypeOption[]): SelectOption[] =>
+  subtypes.map((s) => ({ value: s.id, label: s.name }))
+
+function disciplineLabel(row: TemplateRow): string {
+  if (row.disciplineName != null && row.disciplineName !== '') {
+    return row.disciplineName
+  }
+  return 'Unspecified'
+}
+
 const TemplateListPage = () => {
   const { user } = useSession()
 
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   const [categories, setCategories] = useState<SelectOption[]>([])
   const [users, setUsers] = useState<SelectOption[]>([])
+  const [disciplineOptions, setDisciplineOptions] = useState<SelectOption[]>([])
+  const [subtypesRaw, setSubtypesRaw] = useState<SubtypeOption[]>([])
 
   const [categoryFilter, setCategoryFilter] = useState<SelectState>(null)
+  const [disciplineFilter, setDisciplineFilter] = useState<SelectState>(null)
+  const [subtypeFilter, setSubtypeFilter] = useState<SelectState>(null)
   const [userFilter, setUserFilter] = useState<SelectState>(null)
   const [dateFrom, setDateFrom] = useState<Date | null>(null)
   const [dateTo, setDateTo] = useState<Date | null>(null)
@@ -208,15 +244,21 @@ const TemplateListPage = () => {
           console.warn('Unexpected reference-options payload:', data)
           setCategories([])
           setUsers([])
+          setDisciplineOptions([])
+          setSubtypesRaw([])
           return
         }
 
         setCategories(mapCategoriesToOptions(data.categories))
         setUsers(mapUsersToOptions(data.users))
+        setDisciplineOptions(mapDisciplinesToOptions(data.disciplines ?? []))
+        setSubtypesRaw(data.subtypes ?? [])
       } catch (error: unknown) {
         console.error('Failed to fetch reference options', error)
         setCategories([])
         setUsers([])
+        setDisciplineOptions([])
+        setSubtypesRaw([])
       }
     }
 
@@ -249,12 +291,30 @@ const TemplateListPage = () => {
     void fetchTemplates()
   }, [])
 
+  const subtypeOptions = useMemo<SelectOption[]>(() => {
+    if (disciplineFilter === null) {
+      return mapSubtypesToOptions(subtypesRaw)
+    }
+    const disciplineId = disciplineFilter.value
+    return mapSubtypesToOptions(subtypesRaw.filter((s) => s.disciplineId === disciplineId))
+  }, [subtypesRaw, disciplineFilter])
+
   const filteredTemplates = useMemo<TemplateRow[]>(() => {
     let result = templates
 
     if (categoryFilter !== null) {
       const selectedCategoryId = categoryFilter.value
       result = result.filter((template) => template.categoryId === selectedCategoryId)
+    }
+
+    if (disciplineFilter !== null) {
+      const selectedDisciplineId = disciplineFilter.value
+      result = result.filter((template) => template.disciplineId === selectedDisciplineId)
+    }
+
+    if (subtypeFilter !== null) {
+      const selectedSubtypeId = subtypeFilter.value
+      result = result.filter((template) => template.subtypeId === selectedSubtypeId)
     }
 
     if (userFilter !== null) {
@@ -303,7 +363,7 @@ const TemplateListPage = () => {
     }
 
     return result
-  }, [templates, categoryFilter, userFilter, dateFrom, dateTo])
+  }, [templates, categoryFilter, disciplineFilter, subtypeFilter, userFilter, dateFrom, dateTo])
 
   if (process.env.NODE_ENV !== 'production') {
     // Helpful while wiring filters; safe to remove later
@@ -331,7 +391,7 @@ const TemplateListPage = () => {
           </div>
 
           {/* Filter Bar */}
-          <div className='bg-white p-4 rounded shadow-md grid grid-cols-1 md:grid-cols-4 gap-4'>
+          <div className='bg-white p-4 rounded shadow-md grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4'>
             <Select
               options={categories}
               value={categoryFilter}
@@ -343,6 +403,34 @@ const TemplateListPage = () => {
                 setCategoryFilter(null)
               }}
               placeholder='Filter by Category'
+              isClearable
+            />
+            <Select
+              options={disciplineOptions}
+              value={disciplineFilter}
+              onChange={(newValue: unknown) => {
+                if (isSelectOption(newValue)) {
+                  setDisciplineFilter(newValue)
+                  setSubtypeFilter(null)
+                  return
+                }
+                setDisciplineFilter(null)
+                setSubtypeFilter(null)
+              }}
+              placeholder='Filter by Discipline'
+              isClearable
+            />
+            <Select
+              options={subtypeOptions}
+              value={subtypeFilter}
+              onChange={(newValue: unknown) => {
+                if (isSelectOption(newValue)) {
+                  setSubtypeFilter(newValue)
+                  return
+                }
+                setSubtypeFilter(null)
+              }}
+              placeholder='Filter by Subtype'
               isClearable
             />
             <Select
@@ -379,6 +467,7 @@ const TemplateListPage = () => {
                 <tr>
                   <th className='px-4 py-2'>📄 Template Name</th>
                   <th className='px-4 py-2'>📝 Description</th>
+                  <th className='px-4 py-2'>Discipline</th>
                   <th className='px-4 py-2'>🏷 Category</th>
                   <th className='px-4 py-2'>👤 Prepared By</th>
                   <th className='px-4 py-2'>🗓 Revision Date</th>
@@ -396,6 +485,14 @@ const TemplateListPage = () => {
                     </td>
                     <td className='px-4 py-2'>
                       {template.sheetDesc ?? '-'}
+                    </td>
+                    <td className='px-4 py-2'>
+                      <span
+                        className='inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800'
+                        title={disciplineLabel(template)}
+                      >
+                        {disciplineLabel(template)}
+                      </span>
                     </td>
                     <td className='px-4 py-2'>
                       {template.categoryName ?? '-'}
@@ -434,7 +531,7 @@ const TemplateListPage = () => {
                 {filteredTemplates.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className='text-center py-4 text-gray-500'
                     >
                       No templates found.

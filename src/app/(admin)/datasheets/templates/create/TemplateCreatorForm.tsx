@@ -108,6 +108,8 @@ export default function TemplateCreatorForm() {
     categoryId: 0,
     clientId: 0,
     projectId: 0,
+    disciplineId: undefined,
+    subtypeId: undefined,
     subsheets: [],
   })
 
@@ -118,6 +120,8 @@ export default function TemplateCreatorForm() {
   const [categories, setCategories] = useState<Option[]>([])
   const [clients, setClients] = useState<Option[]>([])
   const [projects, setProjects] = useState<Option[]>([])
+  const [disciplineOptions, setDisciplineOptions] = useState<Option[]>([])
+  const [subtypesRaw, setSubtypesRaw] = useState<Array<{ id: number; disciplineId: number; code: string; name: string }>>([])
 
   useEffect(() => {
     const loadReferences = async () => {
@@ -143,12 +147,43 @@ export default function TemplateCreatorForm() {
     void loadReferences()
   }, [])
 
+  useEffect(() => {
+    const loadTemplateReferenceOptions = async () => {
+      try {
+        const response = await fetch('/api/backend/templates/reference-options', {
+          credentials: 'include',
+        })
+        const payload = await response.json()
+        if (!response.ok || payload == null) {
+          return
+        }
+        const disciplines = Array.isArray(payload.disciplines) ? payload.disciplines : []
+        const subtypes = Array.isArray(payload.subtypes) ? payload.subtypes : []
+        setDisciplineOptions(disciplines.map((d: { id: number; name: string }) => ({ value: d.id, label: d.name })))
+        setSubtypesRaw(subtypes)
+      } catch (error) {
+        console.error('Failed to load discipline/subtype options', error)
+      }
+    }
+    void loadTemplateReferenceOptions()
+  }, [])
+
   const handleChange = <K extends keyof UnifiedSheet>(field: K, value: UnifiedSheet[K]) => {
-    setDatasheet((previous) => ({
-      ...previous,
-      [field]: value,
-    }))
+    setDatasheet((previous) => {
+      const next = { ...previous, [field]: value }
+      if (field === 'disciplineId') {
+        next.subtypeId = undefined
+      }
+      return next
+    })
   }
+
+  const subtypeOptions: Option[] =
+    datasheet.disciplineId != null && datasheet.disciplineId > 0
+      ? subtypesRaw
+          .filter((s) => s.disciplineId === datasheet.disciplineId)
+          .map((s) => ({ value: s.id, label: s.name }))
+      : []
 
   const handleSubsheetsChange = (subsheets: UnifiedSubsheet[]) => {
     setDatasheet((previous) => ({
@@ -159,6 +194,11 @@ export default function TemplateCreatorForm() {
 
   const buildManualErrors = (validated: UnifiedSheet): Record<string, string[]> => {
     const manualErrors: Record<string, string[]> = {}
+
+    const disciplineIdNum = validated.disciplineId
+    if (disciplineIdNum == null || typeof disciplineIdNum !== 'number' || disciplineIdNum <= 0) {
+      manualErrors['disciplineId'] = ['Discipline is required.']
+    }
 
     if (validated.subsheets.length === 0) {
       manualErrors['Subsheet(s)'] = ['At least one subsheet is required.']
@@ -244,6 +284,30 @@ export default function TemplateCreatorForm() {
           </ul>
         </div>
       )}
+
+      <fieldset className='border border-gray-300 rounded p-4'>
+        <legend className='text-md font-semibold px-2'>Discipline</legend>
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mt-2'>
+          {renderSelect(
+            'Discipline',
+            'disciplineId',
+            { ...datasheet, disciplineId: datasheet.disciplineId ?? 0 },
+            (_, value) => handleChange('disciplineId', value === 0 ? undefined : value),
+            isReadOnly,
+            disciplineOptions,
+            formErrors
+          )}
+          {renderSelect(
+            'Subtype (optional)',
+            'subtypeId',
+            { ...datasheet, subtypeId: datasheet.subtypeId ?? 0 },
+            (_, value) => handleChange('subtypeId', value === 0 ? undefined : value),
+            isReadOnly || datasheet.disciplineId == null || datasheet.disciplineId <= 0,
+            subtypeOptions,
+            formErrors
+          )}
+        </div>
+      </fieldset>
 
       <fieldset className='border border-gray-300 rounded p-4'>
         <legend className='text-md font-semibold px-2'>Datasheet Details</legend>

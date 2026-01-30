@@ -140,6 +140,15 @@ const FilledSheetPageClient: React.FC<Props> = ({
             </h1>
             <h2 className="text-md text-gray-800">{translatedSheet?.sheetDesc}</h2>
             <h3 className="text-sm text-gray-600">{translatedSheet?.sheetDesc2}</h3>
+            {(filledSheet.disciplineName != null && filledSheet.disciplineName !== "") ||
+            (filledSheet.subtypeName != null && filledSheet.subtypeName !== "") ? (
+              <p className="text-sm text-gray-500 mt-1">
+                {filledSheet.disciplineName ?? "Unspecified"}
+                {filledSheet.subtypeName != null && filledSheet.subtypeName !== ""
+                  ? ` · ${filledSheet.subtypeName}`
+                  : ""}
+              </p>
+            ) : null}
           </div>
         </div>
 

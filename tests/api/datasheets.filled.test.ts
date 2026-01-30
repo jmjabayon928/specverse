@@ -32,13 +32,19 @@ const FILLED_PERMISSIONS: string[] = [
 describe('Filled Sheets API', () => {
   const authCookie = createAuthCookie(FILLED_PERMISSIONS)
 
-  it('GET /api/backend/filledsheets should return 200 and an array', async () => {
+  it('GET /api/backend/filledsheets should return 200 and array with optional discipline fields', async () => {
     const res = await request(app)
       .get('/api/backend/filledsheets')
       .set('Cookie', [authCookie])
 
     expect(res.statusCode).toBe(200)
     expect(Array.isArray(res.body)).toBe(true)
+    for (const row of res.body as Array<Record<string, unknown>>) {
+      if (row.disciplineId !== undefined) expect(typeof row.disciplineId === 'number' || row.disciplineId === null).toBe(true)
+      if (row.disciplineName !== undefined) expect(typeof row.disciplineName === 'string' || row.disciplineName === null).toBe(true)
+      if (row.subtypeId !== undefined) expect(typeof row.subtypeId === 'number' || row.subtypeId === null).toBe(true)
+      if (row.subtypeName !== undefined) expect(typeof row.subtypeName === 'string' || row.subtypeName === null).toBe(true)
+    }
   })
 
   it('GET /api/backend/filledsheets/reference-options should return 200 and an object', async () => {

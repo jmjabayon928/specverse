@@ -1,6 +1,8 @@
 # 📘 SpecVerse - Engineering Data & Estimation Platform
 
-[![CI](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml)
+[![CI (main)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml)
+[![CI (staging)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg?branch=staging)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml?branch=staging)
+[![CI (release/v0.5)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg?branch=release/v0.5)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml?branch=release/v0.5)
 
 SpecVerse is an all-in-one engineering datasheet and project estimation system tailored for EPC and industrial projects. It supports datasheet creation, equipment specification, multi-language exports, cost estimation, procurement tracking, and more.
 
@@ -376,6 +378,19 @@ npm run dev
 .env for backend
 .env.production for deployment
 ```
+
+---
+
+## Contributing
+
+Before opening a PR, run locally:
+
+* `npm ci`
+* `npm run lint`
+* `npm run type-check`
+* `npm test -- --runInBand --no-cache`
+
+CI must pass for PRs to be merged. The CI workflow runs on pushes to `main`, `staging`, and `release/**`.
 
 ---
 

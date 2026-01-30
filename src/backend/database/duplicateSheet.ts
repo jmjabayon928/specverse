@@ -52,6 +52,8 @@ export async function duplicateSheet(templateId: number, isTemplate = false): Pr
     .input("CategoryID", sql.Int, template.CategoryID)
     .input("ClientID", sql.Int, template.ClientID)
     .input("ProjectID", sql.Int, template.ProjectID)
+    .input("DisciplineID", sql.Int, template.DisciplineID ?? null)
+    .input("DatasheetSubtypeID", sql.Int, template.DatasheetSubtypeID ?? null)
     .input("ParentSheetID", sql.Int, isTemplate ? null : template.SheetID)
     .input("Status", sql.NVarChar, isTemplate ? "Template" : "Draft")
     .input("IsLatest", sql.Bit, 1)
@@ -64,7 +66,7 @@ export async function duplicateSheet(templateId: number, isTemplate = false): Pr
         ApprovedByID, ApprovedByDate, EquipmentName, EquipmentTagNum, ServiceName, RequiredQty,
         ItemLocation, ManuID, SuppID, InstallPackNum, EquipSize, ModelNum, Driver,
         LocationDwg, PID, InstallDwg, CodeStd, CategoryID, ClientID, ProjectID,
-        ParentSheetID, Status, IsLatest, IsTemplate
+        DisciplineID, DatasheetSubtypeID, ParentSheetID, Status, IsLatest, IsTemplate
       )
       OUTPUT INSERTED.SheetID
       VALUES (
@@ -74,7 +76,7 @@ export async function duplicateSheet(templateId: number, isTemplate = false): Pr
         @ApprovedByID, @ApprovedByDate, @EquipmentName, @EquipmentTagNum, @ServiceName, @RequiredQty,
         @ItemLocation, @ManuID, @SuppID, @InstallPackNum, @EquipSize, @ModelNum, @Driver,
         @LocationDwg, @PID, @InstallDwg, @CodeStd, @CategoryID, @ClientID, @ProjectID,
-        @ParentSheetID, @Status, @IsLatest, @IsTemplate
+        @DisciplineID, @DatasheetSubtypeID, @ParentSheetID, @Status, @IsLatest, @IsTemplate
       )
     `);
 

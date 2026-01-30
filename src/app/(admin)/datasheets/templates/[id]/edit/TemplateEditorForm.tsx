@@ -2,7 +2,7 @@
 
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ZodError } from 'zod'
 import { unifiedSheetSchema } from '@/validation/sheetSchema'
@@ -102,13 +102,44 @@ export default function TemplateEditorForm(props: Readonly<TemplateEditorFormPro
 
   const [datasheet, setDatasheet] = useState<UnifiedSheet>(defaultValues)
   const [formErrors, setFormErrors] = useState<Record<string, string[]>>({})
+  const [disciplineOptions, setDisciplineOptions] = useState<Option[]>([])
+  const [subtypesRaw, setSubtypesRaw] = useState<Array<{ id: number; disciplineId: number; name: string }>>([])
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const response = await fetch('/api/backend/templates/reference-options', {
+          credentials: 'include',
+        })
+        const payload = await response.json()
+        if (!response.ok || payload == null) return
+        const disciplines = Array.isArray(payload.disciplines) ? payload.disciplines : []
+        const subtypes = Array.isArray(payload.subtypes) ? payload.subtypes : []
+        setDisciplineOptions(disciplines.map((d: { id: number; name: string }) => ({ value: d.id, label: d.name })))
+        setSubtypesRaw(subtypes)
+      } catch (error) {
+        console.error('Failed to load discipline/subtype options', error)
+      }
+    }
+    void load()
+  }, [])
 
   const handleChange = <K extends keyof UnifiedSheet>(field: K, value: UnifiedSheet[K]) => {
-    setDatasheet((previous) => ({
-      ...previous,
-      [field]: value,
-    }))
+    setDatasheet((previous) => {
+      const next = { ...previous, [field]: value }
+      if (field === 'disciplineId') {
+        next.subtypeId = undefined
+      }
+      return next
+    })
   }
+
+  const subtypeOptions: Option[] =
+    datasheet.disciplineId != null && datasheet.disciplineId > 0
+      ? subtypesRaw
+          .filter((s) => s.disciplineId === datasheet.disciplineId)
+          .map((s) => ({ value: s.id, label: s.name }))
+      : []
 
   const handleSubsheetsChange = (subsheets: UnifiedSubsheet[]) => {
     setDatasheet((previous) => ({
@@ -182,6 +213,30 @@ export default function TemplateEditorForm(props: Readonly<TemplateEditorFormPro
           </ul>
         </div>
       )}
+
+      <fieldset className='border border-gray-300 rounded p-4'>
+        <legend className='text-md font-semibold px-2'>Discipline</legend>
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mt-2'>
+          {renderSelect(
+            'Discipline',
+            'disciplineId',
+            { ...datasheet, disciplineId: datasheet.disciplineId ?? 0 },
+            (_, value) => handleChange('disciplineId', value === 0 ? undefined : value),
+            false,
+            disciplineOptions,
+            formErrors
+          )}
+          {renderSelect(
+            'Subtype (optional)',
+            'subtypeId',
+            { ...datasheet, subtypeId: datasheet.subtypeId ?? 0 },
+            (_, value) => handleChange('subtypeId', value === 0 ? undefined : value),
+            datasheet.disciplineId == null || datasheet.disciplineId <= 0,
+            subtypeOptions,
+            formErrors
+          )}
+        </div>
+      </fieldset>
 
       <fieldset className='border border-gray-300 rounded p-4'>
         <legend className='text-md font-semibold px-2'>Datasheet Details</legend>

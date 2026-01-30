@@ -171,12 +171,16 @@ const attachmentParamsSchema = z.object({
 const createTemplateBodySchema = z
   .object({
     fieldValues: z.record(z.string(), z.string()).optional(),
+    disciplineId: z.number().int().positive(),
+    subtypeId: z.number().int().positive().nullable().optional(),
   })
   .passthrough()
 
 const updateTemplateBodySchema = z
   .object({
     fieldValues: z.record(z.string(), z.string()).optional(),
+    disciplineId: z.number().int().positive().nullable().optional(),
+    subtypeId: z.number().int().positive().nullable().optional(),
   })
   .passthrough()
 

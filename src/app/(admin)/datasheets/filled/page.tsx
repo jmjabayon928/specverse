@@ -23,6 +23,10 @@ type FilledSheetRow = {
   preparedByName: string;
   revisionDate: string;
   status: string;
+  disciplineId?: number | null;
+  disciplineName?: string | null;
+  subtypeId?: number | null;
+  subtypeName?: string | null;
 };
 
 type CategoryOption = {
@@ -41,12 +45,23 @@ type Option = {
   label: string;
 };
 
+function disciplineLabel(row: FilledSheetRow): string {
+  if (row.disciplineName != null && row.disciplineName !== "") {
+    return row.disciplineName;
+  }
+  return "Unspecified";
+}
+
 export default function FilledSheetListPage() {
   const [sheets, setSheets] = useState<FilledSheetRow[]>([]);
   const [filtered, setFiltered] = useState<FilledSheetRow[]>([]);
   const [categories, setCategories] = useState<Option[]>([]);
   const [users, setUsers] = useState<Option[]>([]);
+  const [disciplineOptions, setDisciplineOptions] = useState<Option[]>([]);
+  const [subtypesRaw, setSubtypesRaw] = useState<Array<{ id: number; disciplineId: number; name: string }>>([]);
   const [categoryFilter, setCategoryFilter] = useState<Option | null>(null);
+  const [disciplineFilter, setDisciplineFilter] = useState<Option | null>(null);
+  const [subtypeFilter, setSubtypeFilter] = useState<Option | null>(null);
   const [userFilter, setUserFilter] = useState<Option | null>(null);
   const [dateFrom, setDateFrom] = useState<Date | null>(null);
   const [dateTo, setDateTo] = useState<Date | null>(null);
@@ -56,35 +71,43 @@ export default function FilledSheetListPage() {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const res = await fetch("/api/backend/filledsheets/reference-options", {
-          credentials: "include",
-        })
-        const data = await res.json();
+        const [filledRes, templateRes] = await Promise.all([
+          fetch("/api/backend/filledsheets/reference-options", { credentials: "include" }),
+          fetch("/api/backend/templates/reference-options", { credentials: "include" }),
+        ]);
+        const filledData = await filledRes.json();
+        const templateData = await templateRes.json();
 
-        // ✅ Properly typed and placed here:
-        if (Array.isArray(data.categories)) {
+        if (Array.isArray(filledData.categories)) {
           setCategories(
-            data.categories.map((c: CategoryOption) => ({
+            filledData.categories.map((c: CategoryOption) => ({
               value: c.CategoryID,
               label: c.CategoryName,
             }))
           );
         } else {
-          console.warn("⚠️ No categories found in response:", data);
           setCategories([]);
         }
 
-        if (Array.isArray(data.users)) {
+        if (Array.isArray(filledData.users)) {
           setUsers(
-            data.users.map((u: UserOption) => ({
+            filledData.users.map((u: UserOption) => ({
               value: u.UserID,
               label: `${u.FirstName} ${u.LastName}`,
             }))
           );
         } else {
-          console.warn("⚠️ No users found in response:", data);
           setUsers([]);
         }
+
+        if (Array.isArray(templateData.disciplines)) {
+          setDisciplineOptions(
+            templateData.disciplines.map((d: { id: number; name: string }) => ({ value: d.id, label: d.name }))
+          );
+        } else {
+          setDisciplineOptions([]);
+        }
+        setSubtypesRaw(Array.isArray(templateData.subtypes) ? templateData.subtypes : []);
       } catch (err) {
         console.error("⛔ Failed to fetch reference options", err);
       }
@@ -112,22 +135,35 @@ export default function FilledSheetListPage() {
     fetchSheets();
   }, []);
 
+  const subtypeOptions: Option[] =
+    disciplineFilter === null
+      ? subtypesRaw.map((s) => ({ value: s.id, label: s.name }))
+      : subtypesRaw
+          .filter((s) => s.disciplineId === disciplineFilter.value)
+          .map((s) => ({ value: s.id, label: s.name }));
+
   useEffect(() => {
     let temp = [...sheets];
     if (categoryFilter) {
-      temp = temp.filter(t => t.categoryId === categoryFilter.value);
+      temp = temp.filter((t) => t.categoryId === categoryFilter.value);
+    }
+    if (disciplineFilter) {
+      temp = temp.filter((t) => t.disciplineId === disciplineFilter.value);
+    }
+    if (subtypeFilter) {
+      temp = temp.filter((t) => t.subtypeId === subtypeFilter.value);
     }
     if (userFilter) {
-      temp = temp.filter(t => t.preparedById === userFilter.value);
+      temp = temp.filter((t) => t.preparedById === userFilter.value);
     }
     if (dateFrom) {
-      temp = temp.filter(t => new Date(t.revisionDate) >= dateFrom);
+      temp = temp.filter((t) => new Date(t.revisionDate) >= dateFrom);
     }
     if (dateTo) {
-      temp = temp.filter(t => new Date(t.revisionDate) <= dateTo);
+      temp = temp.filter((t) => new Date(t.revisionDate) <= dateTo);
     }
     setFiltered(temp);
-  }, [categoryFilter, userFilter, dateFrom, dateTo, sheets]);
+  }, [categoryFilter, disciplineFilter, subtypeFilter, userFilter, dateFrom, dateTo, sheets]);
 
   return (
     <SecurePage requiredPermission="DATASHEET_VIEW">
@@ -142,12 +178,29 @@ export default function FilledSheetListPage() {
             </Link>
           </div>
 
-          <div className="bg-white p-4 rounded shadow-md grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded shadow-md grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             <Select
               options={categories}
               value={categoryFilter}
               onChange={(selected) => setCategoryFilter(selected as Option | null)}
               placeholder="Filter by Category"
+              isClearable
+            />
+            <Select
+              options={disciplineOptions}
+              value={disciplineFilter}
+              onChange={(selected) => {
+                setDisciplineFilter(selected as Option | null);
+                setSubtypeFilter(null);
+              }}
+              placeholder="Filter by Discipline"
+              isClearable
+            />
+            <Select
+              options={subtypeOptions}
+              value={subtypeFilter}
+              onChange={(selected) => setSubtypeFilter(selected as Option | null)}
+              placeholder="Filter by Subtype"
               isClearable
             />
             <Select
@@ -167,6 +220,7 @@ export default function FilledSheetListPage() {
                 <tr>
                   <th className="px-4 py-2">📄 Sheet Name</th>
                   <th className="px-4 py-2">📝 Description</th>
+                  <th className="px-4 py-2">Discipline</th>
                   <th className="px-4 py-2">🏷 Category</th>
                   <th className="px-4 py-2">👤 Prepared By</th>
                   <th className="px-4 py-2">🗓 Revision Date</th>
@@ -180,6 +234,14 @@ export default function FilledSheetListPage() {
                       <Link href={`/datasheets/filled/${t.sheetId}`}>{t.sheetName}</Link>
                     </td>
                     <td className="px-4 py-2">{t.sheetDesc || '-'}</td>
+                    <td className="px-4 py-2">
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
+                        title={disciplineLabel(t)}
+                      >
+                        {disciplineLabel(t)}
+                      </span>
+                    </td>
                     <td className="px-4 py-2">{t.categoryName || '-'}</td>
                     <td className="px-4 py-2">{t.preparedByName || '-'}</td>
                     <td className="px-4 py-2">{t.revisionDate ? format(new Date(t.revisionDate), 'MMM dd, yyyy') : '-'}</td>
@@ -210,7 +272,7 @@ export default function FilledSheetListPage() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center py-4 text-gray-500">No filled datasheets found.</td>
+                    <td colSpan={7} className="text-center py-4 text-gray-500">No filled datasheets found.</td>
                   </tr>
                 )}
               </tbody>

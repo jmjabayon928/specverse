@@ -79,6 +79,9 @@ export const unifiedSheetSchema = z.object({
   clientId: z.number().gt(0, "Client is required"),
   projectId: z.number().gt(0, "Project is required"),
 
+  disciplineId: z.number().positive("Discipline is required").optional(),
+  subtypeId: z.number().positive().nullable().optional(),
+
   subsheets: z.array(subsheetSchema).min(1, "At least one subsheet is required"),
 });
 
