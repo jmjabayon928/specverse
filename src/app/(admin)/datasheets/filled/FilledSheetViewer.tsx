@@ -1,12 +1,14 @@
 // src/app/(admin)/datasheets/filled/FilledSheetViewer.tsx
 import React from "react";
-import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
+import type { UnifiedSheet, UnifiedSubsheet } from "@/domain/datasheets/sheetTypes";
+import type { InfoField } from "@/domain/datasheets/sheetTypes";
 import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 import { translations as labelTranslations } from "@/constants/translations";
 import { convertToUSC } from "@/utils/unitConversionTable";
 import OtherConversionsCell from "@/utils/OtherConversionsCell";
 import ChangeLogTable from "@/components/datasheets/ChangeLogTable";
 import { computeCompleteness, getSubsheetKey } from "@/utils/datasheetCompleteness";
+import type { SubsheetCompleteness } from "@/utils/datasheetCompleteness";
 import SectionCompletenessSummary from "@/components/datasheets/SectionCompletenessSummary";
 import SheetCompletenessBanner from "@/components/datasheets/SheetCompletenessBanner";
 
@@ -56,6 +58,131 @@ function toDisplay(v: unknown): string {
       return "-";
   }
 }
+
+// Memoized viewer row: only rerenders when field, unitSystem, or translatedLabel change
+interface ViewerFieldRowProps {
+  field: InfoField;
+  unitSystem: UnitSystem;
+  translatedLabel: string;
+}
+
+function ViewerFieldRowInner({ field, unitSystem, translatedLabel }: Readonly<ViewerFieldRowProps>) {
+  const numericValueOnly = formatFieldValue(
+    unitSystem,
+    String(field.value ?? ""),
+    field.uom,
+    false
+  );
+  const convertedUOM = getConvertedUOM(unitSystem, field.uom);
+  const baseUnitForAlternates =
+    unitSystem === "USC" ? (convertedUOM || field.uom || "") : (field.uom || "");
+
+  return (
+    <tr className="odd:bg-white even:bg-gray-50">
+      <td className="border px-2 py-1">
+        {field.required && <span className="text-red-500 font-bold mr-1">*</span>}
+        {translatedLabel}
+      </td>
+      <td className="border px-2 py-1">
+        {Array.isArray(field.options) && field.options.length > 0
+          ? field.options.join(", ")
+          : "-"}
+      </td>
+      <td className="border px-2 py-1">{numericValueOnly}</td>
+      <td className="border px-2 py-1">{convertedUOM || "-"}</td>
+      <td className="border px-2 py-1">
+        <OtherConversionsCell
+          numericValue={numericValueOnly}
+          unit={baseUnitForAlternates}
+          system={unitSystem}
+        />
+      </td>
+    </tr>
+  );
+}
+
+const ViewerFieldRow = React.memo(ViewerFieldRowInner);
+
+// Memoized subsheet section: only rerenders when subsheet, completeness, language, or unitSystem change
+interface SubsheetSectionProps {
+  subsheet: UnifiedSubsheet;
+  sectionCompleteness: SubsheetCompleteness | null | undefined;
+  language: string;
+  unitSystem: UnitSystem;
+  subsheetLabelMap: Record<string, string>;
+  fieldLabelMap: Record<string, string>;
+}
+
+function SubsheetSectionInner({
+  subsheet,
+  sectionCompleteness,
+  language,
+  unitSystem,
+  subsheetLabelMap,
+  fieldLabelMap,
+}: Readonly<SubsheetSectionProps>) {
+  const originalSubId = subsheet.originalId ?? subsheet.id;
+  const translatedSubName =
+    originalSubId !== undefined && originalSubId !== null
+      ? (subsheetLabelMap[String(originalSubId)] ?? subsheet.name)
+      : subsheet.name;
+
+  const totalFields = subsheet.fields.length;
+  const midpoint = Math.ceil(totalFields / 2);
+  const leftFields = subsheet.fields.slice(0, midpoint);
+  const rightFields = subsheet.fields.slice(midpoint);
+
+  const renderFieldGroup = (fieldGroup: InfoField[], side: "left" | "right") => (
+    <table key={`tbl-${originalSubId}-${side}`} className="w-full table-auto border text-sm">
+      <thead className="bg-gray-100">
+        <tr>
+          <th className="border px-2 py-1">{getUILabel("InfoLabel", language)}</th>
+          <th className="border px-2 py-1">{getUILabel("InfoOptions", language)}</th>
+          <th className="border px-2 py-1">{getUILabel("InfoValue", language)}</th>
+          <th className="border px-2 py-1">{getUILabel("InfoUOM", language)}</th>
+          <th className="border px-2 py-1">{getUILabel("OtherConversions", language) ?? "Other Conversions"}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {fieldGroup.map((field, index) => {
+          const originalFieldId = field.originalId ?? field.id;
+          const translatedLabel =
+            originalFieldId !== undefined && originalFieldId !== null
+              ? (fieldLabelMap[String(originalFieldId)] ?? field.label)
+              : field.label;
+          const baseId = field.id ?? originalFieldId ?? "x";
+          const rowKey = `field-${originalSubId}-${side}-${baseId}-${index}`;
+          return (
+            <ViewerFieldRow
+              key={rowKey}
+              field={field}
+              unitSystem={unitSystem}
+              translatedLabel={translatedLabel}
+            />
+          );
+        })}
+      </tbody>
+    </table>
+  );
+
+  return (
+    <fieldset className="border rounded p-4 mb-6">
+      <div className="text-xl font-semibold mb-4">{translatedSubName}</div>
+      {sectionCompleteness != null && (
+        <SectionCompletenessSummary
+          totalRequired={sectionCompleteness.totalRequired}
+          filledRequired={sectionCompleteness.filledRequired}
+        />
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {renderFieldGroup(leftFields, "left")}
+        {renderFieldGroup(rightFields, "right")}
+      </div>
+    </fieldset>
+  );
+}
+
+const SubsheetSection = React.memo(SubsheetSectionInner);
 
 /* ──────────────────────────────────────────────────────────────────────────
    Local view-only types for notes & attachments (to avoid using `any`)
@@ -120,16 +247,6 @@ const FilledSheetViewer: React.FC<Props> = ({
 }) => {
   const subsheetLabelMap = translations?.subsheets || {};
   const fieldLabelMap = translations?.labels || {};
-
-  function getTranslatedSubsheetName(subOriginalId: number | undefined, fallback: string) {
-    if (subOriginalId === undefined) return fallback;
-    return subsheetLabelMap?.[String(subOriginalId)] ?? fallback;
-  }
-
-  function getTranslatedFieldLabel(fieldOriginalId: number | undefined, fallback: string) {
-    if (fieldOriginalId === undefined) return fallback;
-    return fieldLabelMap?.[String(fieldOriginalId)] ?? fallback;
-  }
 
   // Access the optional arrays with STABLE refs to satisfy react-hooks/exhaustive-deps
   const sheetX = sheet as SheetWithExtras;
@@ -276,95 +393,17 @@ const FilledSheetViewer: React.FC<Props> = ({
       </fieldset>
 
       {/* Subsheet Sections */}
-      {sheet.subsheets.map((sub, subIndex) => {
-        const originalSubId = sub.originalId ?? sub.id;
-        const translatedSubName = getTranslatedSubsheetName(originalSubId, sub.name);
-        const totalFields = sub.fields.length;
-        const midpoint = Math.ceil(totalFields / 2);
-        const leftFields = sub.fields.slice(0, midpoint);
-        const rightFields = sub.fields.slice(midpoint);
-        const sectionComplete = completeness.bySubsheet[getSubsheetKey(sub, subIndex)];
-
-        return (
-          <fieldset key={`sub-${originalSubId}`} className="border rounded p-4 mb-6">
-            <div className="text-xl font-semibold mb-4">{translatedSubName}</div>
-            {sectionComplete != null && (
-              <SectionCompletenessSummary
-                totalRequired={sectionComplete.totalRequired}
-                filledRequired={sectionComplete.filledRequired}
-              />
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[leftFields, rightFields].map((fieldGroup, groupIndex) => {
-                const side = groupIndex === 0 ? "left" : "right"; // stable, not index
-                return (
-                  <table key={`tbl-${originalSubId}-${side}`} className="w-full table-auto border text-sm">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="border px-2 py-1">{getUILabel("InfoLabel", language)}</th>
-                        <th className="border px-2 py-1">{getUILabel("InfoOptions", language)}</th>
-                        <th className="border px-2 py-1">{getUILabel("InfoValue", language)}</th>
-                        <th className="border px-2 py-1">{getUILabel("InfoUOM", language)}</th>
-                        {/* 🆕 5th column */}
-                        <th className="border px-2 py-1">{getUILabel("OtherConversions", language) ?? "Other Conversions"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {fieldGroup.map((field, index) => {
-                        const originalFieldId = field.originalId ?? field.id;
-                        const translatedLabel = getTranslatedFieldLabel(originalFieldId, field.label);
-
-                        // Value to display WITHOUT unit (e.g., "10.5") taking into account SI/USC toggle
-                        const numericValueOnly = formatFieldValue(
-                          unitSystem,
-                          String(field.value ?? ""),
-                          field.uom,
-                          false
-                        );
-
-                        // Unit displayed in this row (already toggled if USC)
-                        const convertedUOM = getConvertedUOM(unitSystem, field.uom);
-
-                        // Base unit for same-system alternates: in SI, use the SI UOM; in USC, use the USC-converted UOM
-                        const baseUnitForAlternates =
-                          unitSystem === "USC" ? (convertedUOM || field.uom || "") : (field.uom || "");
-
-                        // 🔐 Collision-proof row key (prefer unique ids; include side + index as final tie-breaker)
-                        const baseId = field.id ?? originalFieldId ?? "x";
-                        const rowKey = `field-${originalSubId}-${side}-${baseId}-${index}`;
-
-                        return (
-                          <tr key={rowKey} className="odd:bg-white even:bg-gray-50">
-                            <td className="border px-2 py-1">
-                              {field.required && <span className="text-red-500 font-bold mr-1">*</span>}
-                              {translatedLabel}
-                            </td>
-                            <td className="border px-2 py-1">
-                              {Array.isArray(field.options) && field.options.length > 0
-                                ? field.options.join(", ")
-                                : "-"}
-                            </td>
-                            <td className="border px-2 py-1">{numericValueOnly}</td>
-                            <td className="border px-2 py-1">{convertedUOM || "-"}</td>
-                            {/* 🆕 Same-system alternates rendered here */}
-                            <td className="border px-2 py-1">
-                              <OtherConversionsCell
-                                numericValue={numericValueOnly}
-                                unit={baseUnitForAlternates}
-                                system={unitSystem}
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                );
-              })}
-            </div>
-          </fieldset>
-        );
-      })}
+      {sheet.subsheets.map((sub, subIndex) => (
+        <SubsheetSection
+          key={`sub-${sub.originalId ?? sub.id ?? subIndex}`}
+          subsheet={sub}
+          sectionCompleteness={completeness.bySubsheet[getSubsheetKey(sub, subIndex)]}
+          language={language}
+          unitSystem={unitSystem}
+          subsheetLabelMap={subsheetLabelMap}
+          fieldLabelMap={fieldLabelMap}
+        />
+      ))}
 
       {/* Notes — grouped by note type */}
       <fieldset className="border rounded p-4">
