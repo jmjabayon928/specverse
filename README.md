@@ -1,5 +1,7 @@
 # 📘 SpecVerse - Engineering Data & Estimation Platform
 
+[![CI](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml)
+
 SpecVerse is an all-in-one engineering datasheet and project estimation system tailored for EPC and industrial projects. It supports datasheet creation, equipment specification, multi-language exports, cost estimation, procurement tracking, and more.
 
 ---
