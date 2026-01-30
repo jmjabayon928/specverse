@@ -2,7 +2,44 @@
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import app from '../../src/backend/app'
-import { poolPromise, sql } from '../../src/backend/config/db'
+
+// Mock template service so suite is fully deterministic (no DB). List/reference + create/update/get/verify.
+jest.mock('../../src/backend/services/templateService', () => {
+  const actual =
+    jest.requireActual<typeof import('../../src/backend/services/templateService')>(
+      '../../src/backend/services/templateService'
+    )
+  return {
+    ...actual,
+    fetchAllTemplates: jest.fn().mockResolvedValue([]),
+    fetchTemplateReferenceOptions: jest.fn().mockResolvedValue({
+      categories: [{ CategoryID: 1, CategoryName: 'Test' }],
+      users: [{ UserID: 1, FirstName: 'Test', LastName: 'User' }],
+      disciplines: [
+        { id: 1, code: 'PIPING', name: 'PIPING' },
+        { id: 2, code: 'INSTRUMENTATION', name: 'INSTRUMENTATION' },
+      ],
+      subtypes: [
+        { id: 1, disciplineId: 1, code: 'Pressure Transmitter', name: 'Pressure Transmitter' },
+      ],
+    }),
+    createTemplate: jest.fn().mockResolvedValue(1),
+    updateTemplate: jest.fn().mockImplementation((sheetId: number) => Promise.resolve(sheetId)),
+    getTemplateDetailsById: jest.fn().mockImplementation((templateId: number) =>
+      Promise.resolve({
+        datasheet: {
+          sheetId: templateId,
+          disciplineId: 1,
+          disciplineName: 'PIPING',
+          subtypeId: null,
+          subtypeName: null,
+        },
+        translations: null,
+      })
+    ),
+    verifyTemplate: jest.fn().mockResolvedValue(undefined),
+  }
+})
 
 function createAuthCookie(permissions: string[]): string {
   const token = jwt.sign(
@@ -254,82 +291,61 @@ describe('Templates API', () => {
   it('POST → GET → PUT → VERIFY template (happy path)', async () => {
     const payload = await buildTemplatePayload()
 
-    // 1) CREATE (may 500 when DB constraints differ, e.g. Notifications/AreaID)
+    // 1) CREATE (mocked; no DB)
     const createRes = await request(app)
       .post('/api/backend/templates')
       .set('Cookie', [authCookie])
       .send(payload)
 
-    expect([200, 201, 500]).toContain(createRes.statusCode)
+    expect(createRes.statusCode).toBe(201)
     expect(typeof createRes.body).toBe('object')
-
-    if (createRes.statusCode === 500) {
-      return
-    }
-
-    const createdBody = createRes.body as {
-      sheetId?: number
-      SheetID?: number
-      id?: number
-    }
-
-    const sheetId =
-      createdBody.sheetId ?? createdBody.SheetID ?? createdBody.id
-
+    const createdBody = createRes.body as { sheetId?: number; SheetID?: number; id?: number }
+    const sheetId = createdBody.sheetId ?? createdBody.SheetID ?? createdBody.id
     expect(typeof sheetId).toBe('number')
 
-    try {
-      // 2) GET by id
-      const getRes = await request(app)
-        .get(`/api/backend/templates/${sheetId}`)
-        .set('Cookie', [authCookie])
+    // 2) GET by id (mocked)
+    const getRes = await request(app)
+      .get(`/api/backend/templates/${sheetId}`)
+      .set('Cookie', [authCookie])
 
-      expect(getRes.statusCode).toBe(200)
-      expect(typeof getRes.body).toBe('object')
-      const resolvedSheetId =
-        getRes.body.datasheet?.sheetId ??
-        getRes.body.sheetId ??
-        getRes.body.SheetID ??
-        getRes.body.id
-      expect(resolvedSheetId).toBe(sheetId)
-      if (getRes.body.datasheet) {
-        expect(
-          typeof getRes.body.datasheet.disciplineId === 'number' ||
-            getRes.body.datasheet.disciplineId === null ||
-            getRes.body.datasheet.disciplineId === undefined
-        ).toBe(true)
-      }
-
-      // 3) UPDATE name
-      const updatedName = 'API Test Template (Updated)'
-      const updateRes = await request(app)
-        .put(`/api/backend/templates/${sheetId}`)
-        .set('Cookie', [authCookie])
-        .send({
-          ...payload,
-          sheetName: updatedName,
-        })
-
-      expect(updateRes.statusCode).toBe(200)
-
-      // 4) VERIFY (happy path)
-      const verifyRes = await request(app)
-        .post(`/api/backend/templates/${sheetId}/verify`)
-        .set('Cookie', [authCookie])
-        .send({
-          action: 'verify',
-          rejectionComment: '',
-        })
-
-      expect(verifyRes.statusCode).toBe(200)
-    } finally {
-      // 5) Cleanup: remove created sheet to avoid polluting DB
-      const pool = await poolPromise
-      await pool
-        .request()
-        .input('sheetId', sql.Int, sheetId)
-        .query('DELETE FROM Sheets WHERE SheetID = @sheetId')
+    expect(getRes.statusCode).toBe(200)
+    expect(typeof getRes.body).toBe('object')
+    const resolvedSheetId =
+      getRes.body.datasheet?.sheetId ??
+      getRes.body.sheetId ??
+      getRes.body.SheetID ??
+      getRes.body.id
+    expect(resolvedSheetId).toBe(sheetId)
+    if (getRes.body.datasheet) {
+      expect(
+        typeof getRes.body.datasheet.disciplineId === 'number' ||
+          getRes.body.datasheet.disciplineId === null ||
+          getRes.body.datasheet.disciplineId === undefined
+      ).toBe(true)
     }
+
+    // 3) UPDATE name (mocked)
+    const updatedName = 'API Test Template (Updated)'
+    const updateRes = await request(app)
+      .put(`/api/backend/templates/${sheetId}`)
+      .set('Cookie', [authCookie])
+      .send({
+        ...payload,
+        sheetName: updatedName,
+      })
+
+    expect(updateRes.statusCode).toBe(200)
+
+    // 4) VERIFY (mocked)
+    const verifyRes = await request(app)
+      .post(`/api/backend/templates/${sheetId}/verify`)
+      .set('Cookie', [authCookie])
+      .send({
+        action: 'verify',
+        rejectionComment: '',
+      })
+
+    expect(verifyRes.statusCode).toBe(200)
   })
 
   it('POST /api/backend/templates should reject invalid body', async () => {

@@ -1,8 +1,20 @@
-// tests/api/datasheets.filled.test.ts
+// tests/services/filledSheetService.test.ts (API tests for filled sheets routes)
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import app from '../../src/backend/app'
 import { poolPromise, sql } from '../../src/backend/config/db'
+
+// Mock only list endpoint so GET /filledsheets returns 200 without Phase 1 DB schema; other tests (e.g. verify) still use real DB.
+jest.mock('../../src/backend/services/filledSheetService', () => {
+  const actual =
+    jest.requireActual<typeof import('../../src/backend/services/filledSheetService')>(
+      '../../src/backend/services/filledSheetService'
+    )
+  return {
+    ...actual,
+    fetchAllFilled: jest.fn().mockResolvedValue([]),
+  }
+})
 
 function createAuthCookie(permissions: string[]): string {
   const token = jwt.sign(

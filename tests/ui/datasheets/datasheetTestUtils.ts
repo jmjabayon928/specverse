@@ -2,6 +2,22 @@
 import type { UnifiedSheet } from '../../../src/domain/datasheets/sheetTypes'
 import type { Option } from '../../../src/domain/shared/commonTypes'
 
+export interface MockReferenceOptions {
+  disciplines: Array<{ id: number; code: string; name: string }>
+  subtypes: Array<{ id: number; disciplineId: number; code: string; name: string }>
+  categories: Array<{ id: number; name: string }>
+  users: Array<{ id: number; name: string }>
+}
+
+export function getMockReferenceOptions(): MockReferenceOptions {
+  return {
+    disciplines: [{ id: 1, code: 'D1', name: 'Discipline 1' }],
+    subtypes: [{ id: 1, disciplineId: 1, code: 'S1', name: 'Subtype 1' }],
+    categories: [],
+    users: [],
+  }
+}
+
 export function makeOptions(values: number[]): Option[] {
   return values.map((value) => ({
     value,

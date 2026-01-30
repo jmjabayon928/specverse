@@ -20,6 +20,12 @@ With SpecVerse’s dynamic template engine:
 
 This enables **true no-code datasheet configuration** — a huge time and cost saver for EPC and industrial firms.
 
+## Phase 1 – Multi-discipline datasheets
+
+SpecVerse now supports multiple engineering disciplines end-to-end using the same template-driven datasheet engine. Discipline and subtype are stored on templates and filled datasheets, surfaced consistently across list and detail views with filters and badges.
+
+Phase 1 introduces seeded disciplines (Piping and Instrumentation) and a Pressure Transmitter subtype, with an optional seed script that creates a realistic Instrumentation datasheet template for demonstration. This phase intentionally avoids schema redesign or engine changes, proving that the existing universal datasheet model supports cross-discipline use without specialization.
+
 ---
 
 ## 🧩 Core Modules

@@ -3,6 +3,18 @@ import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import app from '../../src/backend/app'
 
+// Mock filled sheet list so tests pass without Phase 1 DB schema (Disciplines/DatasheetSubtypes).
+jest.mock('../../src/backend/services/filledSheetService', () => {
+  const actual =
+    jest.requireActual<typeof import('../../src/backend/services/filledSheetService')>(
+      '../../src/backend/services/filledSheetService'
+    )
+  return {
+    ...actual,
+    fetchAllFilled: jest.fn().mockResolvedValue([]),
+  }
+})
+
 function createAuthCookie(permissions: string[]): string {
   const token = jwt.sign(
     {

@@ -3,7 +3,7 @@ import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import TemplateEditorForm from '../../../src/app/(admin)/datasheets/templates/[id]/edit/TemplateEditorForm'
-import { makeBasicUnifiedSheet, makeOptions } from './datasheetTestUtils'
+import { getMockReferenceOptions, makeBasicUnifiedSheet, makeOptions } from './datasheetTestUtils'
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -23,7 +23,23 @@ describe('TemplateEditorForm', () => {
   const projects = makeOptions([1])
 
   beforeEach(() => {
-    globalThis.fetch = jest.fn()
+    const fetchMock = jest.fn((url: string, init?: RequestInit) => {
+      if (url.includes('reference-options')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => getMockReferenceOptions(),
+        })
+      }
+      const putMatch = url.match(/^\/api\/backend\/templates\/(\d+)$/)
+      if (putMatch != null && init?.method === 'PUT') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ sheetId: Number(putMatch[1]) }),
+        })
+      }
+      return Promise.reject(new Error('Unexpected fetch: ' + url))
+    })
+    globalThis.fetch = fetchMock as typeof fetch
   })
 
   afterEach(() => {
@@ -75,11 +91,6 @@ describe('TemplateEditorForm', () => {
   it('submits a PUT request with fieldValues and updated sheetName on success', async () => {
     const sheet = makeBasicUnifiedSheet()
 
-    ;(globalThis.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ sheetId: sheet.sheetId }),
-    })
-
     render(
       <TemplateEditorForm
         defaultValues={sheet}
@@ -93,6 +104,10 @@ describe('TemplateEditorForm', () => {
       />
     )
 
+    await waitFor(() => {
+      expect(screen.getByText('Discipline 1')).toBeInTheDocument()
+    })
+
     const nameInput = screen.getByDisplayValue('Test Sheet')
     fireEvent.change(nameInput, { target: { value: 'Updated Template Name' } })
 
@@ -100,20 +115,23 @@ describe('TemplateEditorForm', () => {
     fireEvent.click(button)
 
     await waitFor(() => {
-      expect(globalThis.fetch).toHaveBeenCalled()
+      const putCall = (globalThis.fetch as jest.Mock).mock.calls.find(
+        (call: [string, RequestInit]) =>
+          call[0] === `/api/backend/templates/${sheet.sheetId}` && call[1]?.method === 'PUT'
+      )
+      expect(putCall).toBeDefined()
     })
 
-    const [url, options] = (globalThis.fetch as jest.Mock).mock.calls[0]
-
-    expect(url).toBe(`/api/backend/templates/${sheet.sheetId}`)
-
+    const putCall = (globalThis.fetch as jest.Mock).mock.calls.find(
+      (call: [string, RequestInit]) =>
+        call[0] === `/api/backend/templates/${sheet.sheetId}` && call[1]?.method === 'PUT'
+    ) as [string, RequestInit]
+    const [, options] = putCall
     expect(options).toMatchObject({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
     })
-
     const parsedBody = JSON.parse(options.body as string)
-
     expect(parsedBody.sheetName).toBe('Updated Template Name')
   })
 })
