@@ -48,6 +48,7 @@ import {
 } from '@/backend/services/templateService'
 
 import { AppError } from '@/backend/errors/AppError'
+import { parseLang } from '@/backend/utils/parseLang'
 
 /* ───────────────────────────────────────────
    Helpers
@@ -59,21 +60,6 @@ function asUser(req: Request): UserSession | null {
     return null
   }
   return maybeUser
-}
-
-function parseLang(q: unknown): string {
-  if (typeof q === 'string' && q.trim().length > 0) {
-    return q.trim()
-  }
-
-  if (Array.isArray(q)) {
-    const first = q[0]
-    if (typeof first === 'string' && first.trim().length > 0) {
-      return first.trim()
-    }
-  }
-
-  return 'eng'
 }
 
 function parseUom(q: unknown): 'SI' | 'USC' {

@@ -121,10 +121,11 @@ function parseUomParam(input: unknown): UomSystem | undefined {
   return undefined
 }
 
+/** Accepts 'en' or 'eng'; normalizes to 'eng' to match template/filled controllers. */
 function parseLangParam(input: unknown): LangCode | undefined {
   const asString = parseStringParam(input)
-  if (asString === 'en') {
-    return 'en'
+  if (asString === 'en' || asString === 'eng') {
+    return 'eng'
   }
 
   // extend when you add more locales
@@ -414,14 +415,10 @@ export const renderLayout: RequestHandler = async (req, res) => {
   const sheetId = sheetIdMaybe
 
   const uom: UomSystem = parseUomParam(req.query?.uom) ?? 'SI'
-  const lang: LangCode = parseLangParam(req.query?.lang) ?? 'en'
+  const lang: LangCode = parseLangParam(req.query?.lang) ?? 'eng'
 
   if (uom !== 'SI' && uom !== 'USC') {
     return res.status(400).json({ error: 'uom must be SI or USC' })
-  }
-
-  if (lang !== 'en') {
-    return res.status(400).json({ error: "lang currently supports 'en' only" })
   }
 
   try {

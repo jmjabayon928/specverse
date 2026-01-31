@@ -5,7 +5,6 @@ import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
-import { convertToUSC } from "@/utils/unitConversionTable";
 import { getLabel } from "@/utils/translationUtils";
 import { translations } from "@/constants/translations";
 import type { UnifiedSheet, UnifiedSubsheet } from "@/domain/datasheets/sheetTypes";
@@ -36,8 +35,6 @@ export async function generateDatasheetPDF(
     ? fs.readFileSync(logoPath).toString("base64")
     : "";
 
-  const isUSC = uom === "USC";
-
   const equipmentRows = `
     <tr><td><b>${getUI("equipmentName")}</b></td><td>${sheet.equipmentName}</td></tr>
     <tr><td><b>${getUI("equipmentTagNum")}</b></td><td>${sheet.equipmentTagNum}</td></tr>
@@ -50,8 +47,7 @@ export async function generateDatasheetPDF(
     const rows = subsheet.fields
       .map((field) => {
         const label = field.label;
-        const uomLabel =
-          isUSC && field.uom ? convertToUSC(field.uom, "0") || field.uom : field.uom || "";
+        const uomLabel = field.uom ?? "";
         const options = field.options?.join(", ") || "";
         const value = field.value ?? "";
         const requiredStar = field.required ? " <span style='color:red'>*</span>" : "";
@@ -149,10 +145,20 @@ export async function generateDatasheetExcel(
   if (!result) throw new Error(`Sheet with ID ${sheetId} not found.`);
   const sheet = result.datasheet;
 
+  const uiMap: Record<string, string> = Object.fromEntries(
+    Object.entries(translations).map(([key, value]) => [key, value[lang] ?? key])
+  );
+  const getUI = (key: string) => getLabel(key, uiMap);
+
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Datasheet");
 
-  worksheet.addRow(["Field Label", "UOM", "Options", "Value"]);
+  worksheet.addRow([
+    getUI("InfoLabel"),
+    getUI("InfoUOM"),
+    getUI("InfoOptions"),
+    getUI("InfoValue"),
+  ]);
 
   for (const subsheet of sheet.subsheets) {
     worksheet.addRow([subsheet.name]); // Subsheet title

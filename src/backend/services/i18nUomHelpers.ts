@@ -27,7 +27,7 @@ import { poolPromise } from "../config/db";
  * Public types
  * ========================================================================== */
 
-export type LangCode = "en";
+export type LangCode = "en" | "eng";
 
 /* ============================================================================
  * Parsing & number formatting
@@ -183,7 +183,7 @@ async function translationsTableExists(pool: ConnectionPool): Promise<boolean> {
   const result: IResult<{ exists: number }> = await pool
     .request()
     .query(`
-      SELECT CASE WHEN OBJECT_ID('dbo.InformationTemplateTranslations','U') IS NULL THEN 0 ELSE 1 END AS exists;
+      SELECT CASE WHEN OBJECT_ID('dbo.InfoTemplateTranslations','U') IS NULL THEN 0 ELSE 1 END AS exists;
     `);
   return result.recordset[0]?.exists === 1;
 }
@@ -191,7 +191,7 @@ async function translationsTableExists(pool: ConnectionPool): Promise<boolean> {
 /**
  * Prime the in-memory cache with labels for a set of template IDs.
  * Expected schema:
- *   dbo.InformationTemplateTranslations(
+ *   dbo.InfoTemplateTranslations(
  *     InfoTemplateID int NOT NULL,
  *     LangCode       nvarchar(16) NOT NULL,
  *     Label          nvarchar(max) NOT NULL
@@ -202,7 +202,7 @@ export async function primeTemplateLabelTranslations(
   templateIds: number[],
   lang: LangCode
 ): Promise<void> {
-  if (lang === "en") return;               // base language uses fallback
+  if (lang === "en" || lang === "eng") return;  // base language uses fallback
   if (templateIds.length === 0) return;
 
   const pool = await poolPromise;
@@ -226,7 +226,7 @@ export async function primeTemplateLabelTranslations(
 
   const rows: IResult<{ InfoTemplateID: number; Label: string }> = await req.query(`
     SELECT InfoTemplateID, Label
-    FROM dbo.InformationTemplateTranslations WITH (NOLOCK)
+    FROM dbo.InfoTemplateTranslations WITH (NOLOCK)
     WHERE LangCode = @lang AND InfoTemplateID IN (${clause});
   `);
 
@@ -245,7 +245,7 @@ export function getTranslatedFieldLabel(
   fallback: string,
   lang: LangCode = "en"
 ): string {
-  if (lang === "en" || infoTemplateId <= 0) return fallback;
+  if (lang === "en" || lang === "eng" || infoTemplateId <= 0) return fallback;
   const k = cacheKey(lang, infoTemplateId);
   const cached = labelCache.get(k);
   return cached ?? fallback;

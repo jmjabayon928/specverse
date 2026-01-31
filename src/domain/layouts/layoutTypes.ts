@@ -90,7 +90,7 @@ export interface LayoutBundle {
 
 // ===== Render contracts (server-composed preview/output) =====
 export type UomSystem = 'SI' | 'USC'
-export type LangCode = 'en'
+export type LangCode = 'en' | 'eng'
 
 export interface RenderField {
   infoTemplateId: number
