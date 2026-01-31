@@ -27,6 +27,8 @@ import {
 
   // utils / business rules
   doesEquipmentTagExist,
+  getFilledSheetTemplateId,
+  getLatestApprovedTemplateId,
 
   // attachments (canonical + legacy helpers)
   getAttachmentsForSheet,
@@ -138,6 +140,12 @@ const handleError = (next: NextFunction, err: unknown, fallbackMessage: string):
 
   if (err instanceof z.ZodError) {
     next(new AppError("Invalid request payload", 400))
+    return
+  }
+
+  if (err instanceof Error && err.message.startsWith("VALIDATION:")) {
+    const message = err.message.replace(/^VALIDATION:\s*/, "").trim()
+    next(new AppError(message || "Validation failed", 400))
     return
   }
 
@@ -422,10 +430,18 @@ export const cloneFilledSheetHandler: RequestHandler = async (req, res, next) =>
       return
     }
 
+    const sourceTemplateRow = await getFilledSheetTemplateId(sourceId)
+    if (!sourceTemplateRow?.TemplateID) {
+      next(new AppError("Source sheet is not a filled sheet or has no template.", 400))
+      return
+    }
+    const resolvedTemplateId = await getLatestApprovedTemplateId(sourceTemplateRow.TemplateID)
+
     const ctx = { userId: user.userId, route: req.originalUrl, method: req.method }
 
     const createInput: UnifiedSheet & { fieldValues: Record<string, string> } = {
       ...(body as unknown as UnifiedSheet),
+      templateId: resolvedTemplateId,
       equipmentTagNum,
       projectId,
       isTemplate: false,

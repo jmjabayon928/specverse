@@ -5,7 +5,8 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ZodError } from 'zod'
-import { unifiedSheetSchema } from '@/validation/sheetSchema'
+import { unifiedTemplateSchema } from '@/validation/sheetSchema'
+import { flattenSheetZodErrors } from '@/validation/flattenSheetErrors'
 import { renderInput, renderSelect, renderDate } from '@/components/ui/form/FormHelper'
 import SubsheetBuilder from '../../create/SubsheetBuilder'
 import type { UnifiedSheet, UnifiedSubsheet } from '@/domain/datasheets/sheetTypes'
@@ -20,46 +21,6 @@ type TemplateClonerFormProps = {
   clients: Option[]
   projects: Option[]
   session?: string
-}
-
-const fieldPathRegex = /^subsheets\.(\d+)\.fields\.(\d+)\.(.+)$/
-const subsheetPathRegex = /^subsheets\.(\d+)\.(.+)$/
-
-const flattenErrors = (error: ZodError): Record<string, string[]> => {
-  const flattened: Record<string, string[]> = {}
-
-  for (const issue of error.errors) {
-    if (issue.path === undefined || issue.path.length === 0) {
-      continue
-    }
-
-    const path = issue.path.join('.')
-
-    if (path.startsWith('subsheets.')) {
-      const fieldMatch = fieldPathRegex.exec(path)
-      if (fieldMatch) {
-        const [, subsheetIndexStr, templateIndexStr, field] = fieldMatch
-        const subsheetIndex = Number.parseInt(subsheetIndexStr, 10) + 1
-        const templateIndex = Number.parseInt(templateIndexStr, 10) + 1
-        const key = `Subsheet #${subsheetIndex} - Template #${templateIndex} - ${field}`
-        flattened[key] = [issue.message]
-        continue
-      }
-
-      const subsheetMatch = subsheetPathRegex.exec(path)
-      if (subsheetMatch) {
-        const [, subsheetIndexStr, field] = subsheetMatch
-        const subsheetIndex = Number.parseInt(subsheetIndexStr, 10) + 1
-        const key = `Subsheet #${subsheetIndex} - ${field}`
-        flattened[key] = [issue.message]
-        continue
-      }
-    }
-
-    flattened[path] = [issue.message]
-  }
-
-  return flattened
 }
 
 const buildManualErrors = (
@@ -210,10 +171,10 @@ export default function TemplateClonerForm(props: Readonly<TemplateClonerFormPro
 
   const handleSubmit = async () => {
     try {
-      const parseResult = unifiedSheetSchema.safeParse(datasheet)
+      const parseResult = unifiedTemplateSchema.safeParse(datasheet)
 
       if (!parseResult.success) {
-        setFormErrors(flattenErrors(parseResult.error))
+        setFormErrors(flattenSheetZodErrors(parseResult.error))
         return
       }
 
@@ -243,7 +204,7 @@ export default function TemplateClonerForm(props: Readonly<TemplateClonerFormPro
       router.push(`/datasheets/templates/${payload.sheetId}?success=cloned`)
     } catch (error) {
       if (error instanceof ZodError) {
-        setFormErrors(flattenErrors(error))
+        setFormErrors(flattenSheetZodErrors(error))
       } else {
         const message = error instanceof Error ? error.message : 'Create failed'
         setFormErrors({

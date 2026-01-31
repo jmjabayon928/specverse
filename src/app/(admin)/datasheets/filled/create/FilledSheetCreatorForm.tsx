@@ -5,10 +5,57 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import FilledSheetSubsheetForm from "./FilledSheetSubsheetForm";
 import { renderInput, renderSelect } from "@/components/ui/form/FormHelper";
-import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
+import type { UnifiedSheet, UnifiedSubsheet } from "@/domain/datasheets/sheetTypes";
 import type { Option } from "@/domain/shared/commonTypes";
 import { applySheetTranslations } from "@/utils/applySheetTranslations";
 import type { SheetTranslations } from "@/domain/i18n/translationTypes";
+
+type FieldErrorItem = {
+  infoTemplateId: number;
+  message: string;
+  optionsPreview?: string[];
+  optionsCount?: number;
+};
+
+function displayMessage(err: FieldErrorItem): string {
+  if (Array.isArray(err.optionsPreview) && err.optionsPreview.length > 0) {
+    const list = err.optionsPreview.join(', ');
+    const more =
+      err.optionsCount != null && err.optionsCount > err.optionsPreview.length
+        ? ` and ${err.optionsCount - err.optionsPreview.length} more`
+        : '';
+    return `Choose one of: ${list}${more}.`;
+  }
+  return err.message;
+}
+
+function mapFieldErrorsToFormErrors(
+  fieldErrors: FieldErrorItem[],
+  subsheets: UnifiedSubsheet[]
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const err of fieldErrors) {
+    const msg = displayMessage(err);
+    let found = false;
+    for (let i = 0; i < subsheets.length; i++) {
+      for (let j = 0; j < subsheets[i].fields.length; j++) {
+        const field = subsheets[i].fields[j];
+        if (field.id === err.infoTemplateId || field.originalId === err.infoTemplateId) {
+          const key = `Subsheet #${i + 1} - Template #${j + 1} - value`;
+          out[key] = [msg];
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+    if (!found) {
+      out["Unknown"] = out["Unknown"] ?? [];
+      out["Unknown"].push(msg);
+    }
+  }
+  return out;
+}
 
 interface Props {
   template: UnifiedSheet;
@@ -19,6 +66,21 @@ interface Props {
 // Hoisted to avoid deep-nesting warnings
 function toOptions(arr: { id: number; name: string }[] | undefined | null): Option[] {
   return Array.isArray(arr) ? arr.map((x) => ({ value: x.id, label: x.name })) : [];
+}
+
+// Filled reference-options returns categories as { CategoryID, CategoryName }; accept both shapes.
+function categoriesToOptions(
+  arr:
+    | { id: number; name: string }[]
+    | { CategoryID: number; CategoryName: string }[]
+    | undefined
+    | null
+): Option[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.map((c) => ({
+    value: 'id' in c ? c.id : c.CategoryID,
+    label: 'name' in c ? c.name : String(c.CategoryName ?? ''),
+  }));
 }
 
 export default function FilledSheetCreatorForm(props: Readonly<Props>) {
@@ -35,6 +97,7 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
   const [clients, setClients] = useState<Option[]>([]);
   const [projects, setProjects] = useState<Option[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (language === "eng" || !translations) {
@@ -53,7 +116,7 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
       setAreas(toOptions(data.areas));
       setManufacturers(toOptions(data.manufacturers));
       setSuppliers(toOptions(data.suppliers));
-      setCategories(toOptions(data.categories));
+      setCategories(categoriesToOptions(data.categories));
       setClients(toOptions(data.clients));
       setProjects(toOptions(data.projects));
     };
@@ -132,16 +195,36 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
         body: JSON.stringify(payload),
       });
 
-      const resultJson = await res.json();
+      const resultJson = await res.json().catch(() => ({}));
 
-      if (!res.ok || !resultJson.sheetId) {
-        throw new Error(resultJson.error || "Failed to create filled sheet");
+      if (!res.ok) {
+        if (res.status === 400 && Array.isArray(resultJson.fieldErrors)) {
+          const mapped = mapFieldErrorsToFormErrors(resultJson.fieldErrors, filledSheet.subsheets ?? []);
+          setFormErrors(mapped);
+          setSubmitError(null);
+          const firstKey = Object.keys(mapped)[0];
+          if (firstKey) {
+            requestAnimationFrame(() => {
+              document.querySelector(`[data-error-key="${CSS.escape(firstKey)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+          }
+          return;
+        }
+        setSubmitError(resultJson.error ?? "Failed to create filled sheet");
+        setFormErrors({});
+        return;
+      }
+
+      if (!resultJson.sheetId) {
+        setSubmitError(resultJson.error ?? "Failed to create filled sheet");
+        return;
       }
 
       router.push(`/datasheets/filled/${resultJson.sheetId}?success=created`);
     } catch (error) {
       console.error("❌ Submission failed:", error);
       setSubmitError((error as Error).message || "An error occurred while submitting the form.");
+      setFormErrors({});
     }
   }
 
@@ -202,6 +285,7 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
             subsheetIndex={i}
             fieldValues={fieldValues}
             onFieldValueChange={handleFieldValueChange}
+            formErrors={formErrors}
           />
         ))}
       </div>

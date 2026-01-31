@@ -402,6 +402,7 @@ const AppSidebar: React.FC = () => {
               alt="Logo"
               width={32}
               height={32}
+              className="w-8 h-8"
             />
           )}
         </Link>
