@@ -43,15 +43,27 @@ export default function EstimationForm({
 
   // ✅ Fetch project options
   useEffect(() => {
+    function toProjectList(raw: unknown): Project[] {
+      if (Array.isArray(raw)) return raw as Project[];
+      if (raw !== null && typeof raw === 'object') {
+        const o = raw as Record<string, unknown>;
+        if (Array.isArray(o.recordset)) return o.recordset as Project[];
+        if (Array.isArray(o.rows)) return o.rows as Project[];
+        if (Array.isArray(o.data)) return o.data as Project[];
+      }
+      return [];
+    }
+
     const fetchProjects = async () => {
       try {
         const res = await fetch(`${baseUrl}/api/projects`);
-        const data = await res.json();
-        setProjects(Array.isArray(data) ? data : data.recordset || []);
+        const data: unknown = await res.json();
+        const projectsList = toProjectList(data);
+        setProjects(projectsList);
 
         // ✅ Set selected project only after options are available
         if (defaultValues?.ProjectID) {
-          const match = data.find((p: Project) => p.ProjectID === defaultValues.ProjectID);
+          const match = projectsList.find((p) => p.ProjectID === defaultValues.ProjectID);
           if (match) {
             setValue('ProjectID', match.ProjectID);
           }
