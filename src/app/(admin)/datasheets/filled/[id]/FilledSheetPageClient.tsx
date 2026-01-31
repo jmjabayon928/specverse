@@ -20,6 +20,7 @@ interface Props {
   filledSheet: UnifiedSheet;
   defaultLanguage: string;
   defaultUnitSystem: "SI" | "USC";
+  initialTranslations?: SheetTranslations | null;
 }
 
 function getUILabel(key: string, language: string) {
@@ -32,13 +33,14 @@ const FilledSheetPageClient: React.FC<Props> = ({
   filledSheet,
   defaultLanguage,
   defaultUnitSystem,
+  initialTranslations = null,
 }) => {
   const router = useRouter();
 
   const [lang, setLang] = useState<string>(defaultLanguage);
   const [unitSystem, setUnitSystem] = useState<"SI" | "USC">(defaultUnitSystem);
   const [translatedSheet, setTranslatedSheet] = useState<UnifiedSheet>(filledSheet);
-  const [translations, setTranslations] = useState<SheetTranslations | null>(null);
+  const [translations, setTranslations] = useState<SheetTranslations | null>(initialTranslations ?? null);
 
   // 🔹 Safely read cookies on client only
   useEffect(() => {
@@ -62,12 +64,18 @@ const FilledSheetPageClient: React.FC<Props> = ({
     }
   }, []);
 
-  // 🔹 Refetch translations when lang or filledSheet changes
+  // 🔹 Refetch translations when lang or filledSheet changes; use initialTranslations when lang matches defaultLanguage
   useEffect(() => {
-    const fetchTranslations = async () => {
+    const run = async () => {
       if (lang === "eng") {
         setTranslatedSheet(filledSheet);
         setTranslations(null);
+        return;
+      }
+      if (lang === defaultLanguage && initialTranslations) {
+        const translated = applySheetTranslations(filledSheet, initialTranslations);
+        setTranslatedSheet(translated);
+        setTranslations(initialTranslations);
         return;
       }
 
@@ -82,18 +90,18 @@ const FilledSheetPageClient: React.FC<Props> = ({
         if (!res.ok) throw new Error("Failed to fetch sheet data");
 
         const result = await res.json();
-        const { datasheet, translations } = result;
-        const translated = applySheetTranslations(datasheet, translations);
+        const { datasheet, translations: nextTranslations } = result;
+        const translated = applySheetTranslations(datasheet, nextTranslations);
 
         setTranslatedSheet(translated);
-        setTranslations(translations);
+        setTranslations(nextTranslations);
       } catch (err) {
         console.error("🌐 Failed to fetch translated sheet:", err);
       }
     };
 
-    fetchTranslations();
-  }, [lang, sheetId, filledSheet]);
+    run();
+  }, [lang, defaultLanguage, sheetId, filledSheet, initialTranslations]);
 
   const handleLangChange = (newLang: string) => {
     document.cookie = `lang=${encodeURIComponent(newLang)}; path=/; max-age=31536000`;
