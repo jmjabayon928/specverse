@@ -48,6 +48,9 @@ const SI_TOKENS = new Set<string>([
   'kj/kg@c',
   'n/m2',
   'kg/m.s2',
+  'kn',
+  'cm2',
+  'mm2',
 ])
 
 const USC_TOKENS = new Set<string>([
@@ -82,6 +85,7 @@ const USC_TOKENS = new Set<string>([
   'ft2.f.hr/btu',
   'lb',
   'oz',
+  'lbf',
 ])
 
 /** Infer unit system from a normalized unit. */

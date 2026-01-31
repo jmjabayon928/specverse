@@ -20,6 +20,7 @@ export type QuantityKind =
   | 'specific_heat'
   | 'energy_per_mass_at_temp' // kJ/kg @ °C, BTU/lb @ °F (treated as one kind for UI)
   | 'force_per_area'          // fallback for N/m², kg/m·s² formatting
+  | 'force'                   // kN, lbf
 
 // Canonical normalizer used for UI inputs, table keys, and lookups.
 export function normalizeUnit(raw: string): string {
@@ -68,6 +69,9 @@ export function normalizeUnit(raw: string): string {
   // Collapse all whitespace
   result = result.replaceAll(/\s+/g, '')
 
+  // 2b) Caret superscripts: ^2 → 2, ^3 → 3
+  result = result.replace(/\^2/g, '2').replace(/\^3/g, '3')
+
   // 3) Common textual variants
   result = result
     .replace(/^l$/i, 'l')
@@ -104,6 +108,11 @@ export function normalizeUnit(raw: string): string {
   // 5) Strip annotations like "(a)", "(g)", "@c" from keys.
   //    Slash and dot structure is kept for quantity kind detection.
   result = result.replaceAll(/\(.*?\)/g, '')
+
+  // 6) Semantic alias: N/mm² ≡ MPa (1 N/mm² = 1 MPa). Normalize n/mm2 → mpa for table lookup.
+  if (result === 'n/mm2') {
+    return 'mpa'
+  }
 
   return result
 }
@@ -160,12 +169,17 @@ export const UNIT_KIND: Record<string, QuantityKind> = {
   lb: 'mass',
   oz: 'mass',
 
-  // pressure
+  // pressure (and stress: MPa, ksi, N/mm² → mpa)
   pa: 'pressure',
   kpa: 'pressure',
   mpa: 'pressure',
   bar: 'pressure',
   psi: 'pressure',
+  ksi: 'pressure',
+
+  // force
+  kn: 'force',
+  lbf: 'force',
 
   // temperature
   c: 'temperature',
@@ -284,7 +298,12 @@ export const SAME_SYSTEM_ALTERNATES: Record<string, readonly string[]> = {
   bar: ['pa', 'kpa', 'mpa', 'bar'],
 
   // pressure USC
-  psi: ['psi'],
+  psi: ['psi', 'ksi'],
+  ksi: ['ksi'],
+
+  // force SI / USC
+  kn: ['kn'],
+  lbf: ['lbf'],
 
   // temperature
   c: ['c', 'k'],

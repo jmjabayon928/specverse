@@ -33,7 +33,8 @@ const conversionTable: ConversionEntry[] = [
   { siUnit: 'kg/h', uscUnit: 'lb/h', convertToUSC: v => v * 2.20462, convertToSI: v => v / 2.20462 },
   { siUnit: 'kPa', uscUnit: 'psi', convertToUSC: v => v * 0.145038, convertToSI: v => v / 0.145038 },
   { siUnit: 'kPa(g)', uscUnit: 'psi(g)', convertToUSC: v => v * 0.145038, convertToSI: v => v / 0.145038 },
-  { siUnit: 'MPa', uscUnit: 'ksi', convertToUSC: v => v * 145.038, convertToSI: v => v / 145.038 },
+  // 1 MPa = 0.1450377377 ksi (1 ksi = 1000 psi, 1 MPa = 145.0377377 psi)
+  { siUnit: 'MPa', uscUnit: 'ksi', convertToUSC: v => v * 0.1450377377, convertToSI: v => v / 0.1450377377 },
   { siUnit: 'mPa.s', uscUnit: 'cP', convertToUSC: v => v * 1, convertToSI: v => v / 1 },
   { siUnit: 'W/m.K', uscUnit: 'BTU/(hr·ft·°F)', convertToUSC: v => v * 0.5778, convertToSI: v => v / 0.5778 },
   { siUnit: 'W/m2.K', uscUnit: 'BTU/(hr·ft²·°F)', convertToUSC: v => v * 0.1761, convertToSI: v => v / 0.1761 },
@@ -41,7 +42,8 @@ const conversionTable: ConversionEntry[] = [
   { siUnit: 'kJ/kg.K', uscUnit: 'BTU/lb·°F', convertToUSC: v => v * 0.238846, convertToSI: v => v / 0.238846 },
   { siUnit: 'kJ/kg @ °C', uscUnit: 'BTU/lb @ °F', convertToUSC: v => v * 0.4299, convertToSI: v => v / 0.4299 },
   { siUnit: 'kg/m3', uscUnit: 'lb/ft³', convertToUSC: v => v * 0.06243, convertToSI: v => v / 0.06243 },
-  { siUnit: 'kg/m.s2', uscUnit: 'N/m²', convertToUSC: v => v * 1, convertToSI: v => v / 1 },
+  // kg/m.s2 ≡ Pa (force/area); USC target is psi. 1 Pa = 0.0001450377377 psi
+  { siUnit: 'kg/m.s2', uscUnit: 'psi', convertToUSC: v => v * 0.0001450377377, convertToSI: v => v / 0.0001450377377 },
   { siUnit: 'km/h', uscUnit: 'mph', convertToUSC: v => v * 0.621371, convertToSI: v => v / 0.621371 },
   { siUnit: 'μm', uscUnit: 'mil', convertToUSC: v => v * 0.0393701, convertToSI: v => v / 0.0393701 },
   { siUnit: 'Nm³/h', uscUnit: 'scfh', convertToUSC: v => v * 35.3147, convertToSI: v => v / 35.3147 },
@@ -49,6 +51,14 @@ const conversionTable: ConversionEntry[] = [
   { siUnit: 'cP', uscUnit: 'lb/(ft·s)', convertToUSC: v => v * 0.000672, convertToSI: v => v / 0.000672 },
   { siUnit: 'kg·m', uscUnit: 'lb·ft', convertToUSC: v => v * 7.23301, convertToSI: v => v / 7.23301 },
   { siUnit: 'bar(g)', uscUnit: 'psi(g)', convertToUSC: v => v * 14.5038, convertToSI: v => v / 14.5038 },
+  // Force: 1 kN = 224.8089431 lbf
+  { siUnit: 'kN', uscUnit: 'lbf', convertToUSC: v => v * 224.8089431, convertToSI: v => v / 224.8089431 },
+  // Area
+  { siUnit: 'm²', uscUnit: 'ft²', convertToUSC: v => v * 10.7639104167, convertToSI: v => v / 10.7639104167 },
+  { siUnit: 'cm²', uscUnit: 'in²', convertToUSC: v => v * 0.15500031, convertToSI: v => v / 0.15500031 },
+  { siUnit: 'mm²', uscUnit: 'in²', convertToUSC: v => v * 0.0015500031, convertToSI: v => v / 0.0015500031 },
+  // Power: 1 W = 0.00134102209 hp
+  { siUnit: 'W', uscUnit: 'hp', convertToUSC: v => v * 0.00134102209, convertToSI: v => v / 0.00134102209 },
 ]
 
 // Determine whether two units can be converted using this table.
