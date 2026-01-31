@@ -219,18 +219,113 @@ export async function softDeleteInventoryItem(inventoryId: number) {
     .query(`UPDATE InventoryItems SET IsActive = 0 WHERE InventoryID = @InventoryID`);
 }
 
+const listSelectColumns = `
+  i.InventoryID AS inventoryId,
+  ii.ItemName AS sheetName,
+  i.Quantity AS quantity,
+  w.WarehouseName AS warehouseName,
+  CONVERT(varchar, i.LastUpdated, 126) AS lastUpdated,
+  c.CategoryName AS categoryName,
+  s.SuppName AS supplierName,
+  m.ManuName AS manufacturerName
+`;
+
+const listFromJoins = `
+  FROM Inventory i
+  JOIN InventoryItems ii ON i.InventoryID = ii.InventoryID
+  JOIN Warehouses w ON i.WarehouseID = w.WarehouseID
+  LEFT JOIN Categories c ON ii.CategoryID = c.CategoryID
+  LEFT JOIN Suppliers s ON ii.SupplierID = s.SuppID
+  LEFT JOIN Manufacturers m ON ii.ManufacturerID = m.ManuID
+`;
+
+export interface InventoryListFilters {
+  search?: string;
+  warehouseId?: number;
+  categoryId?: number;
+  suppId?: number;
+  manuId?: number;
+}
+
+function escapeLike(s: string): string {
+  return s.replace(/%/g, "[%]").replace(/_/g, "[_]");
+}
+
 export async function getInventoryList(): Promise<InventoryListItem[]> {
   const pool = await poolPromise;
   const result = await pool.request().query(`
-    SELECT 
-      i.InventoryID AS inventoryId,
-      ii.ItemName AS sheetName,
-      i.Quantity AS quantity,
-      w.WarehouseName AS warehouseName,
-      i.LastUpdated AS lastUpdated
-    FROM Inventory i
-	  JOIN InventoryItems ii ON i.InventoryID = ii.InventoryID
-    JOIN Warehouses w ON i.WarehouseID = w.WarehouseID
+    SELECT ${listSelectColumns}
+    ${listFromJoins}
   `);
-  return result.recordset;
+  return mapRecordsetToListItems(result.recordset);
+}
+
+function mapRecordsetToListItems(recordset: Record<string, unknown>[]): InventoryListItem[] {
+  return recordset.map((row) => ({
+    inventoryId: Number(row.inventoryId),
+    sheetName: String(row.sheetName ?? ""),
+    quantity: Number(row.quantity),
+    warehouseName: String(row.warehouseName ?? ""),
+    lastUpdated: row.lastUpdated != null ? String(row.lastUpdated) : "",
+    categoryName: row.categoryName != null ? String(row.categoryName) : null,
+    supplierName: row.supplierName != null ? String(row.supplierName) : null,
+    manufacturerName: row.manufacturerName != null ? String(row.manufacturerName) : null,
+  }));
+}
+
+export async function getInventoryListPaged(
+  filters: InventoryListFilters,
+  page: number,
+  pageSize: number
+): Promise<{ total: number; rows: InventoryListItem[] }> {
+  const pool = await poolPromise;
+  const request = pool.request();
+  const whereConditions: string[] = [];
+
+  if (filters.search !== undefined && filters.search.trim() !== "") {
+    const trimmed = filters.search.trim().slice(0, 200);
+    const escaped = escapeLike(trimmed);
+    request.input("Search", sql.NVarChar(201), `%${escaped}%`);
+    whereConditions.push("ii.ItemName LIKE @Search");
+  }
+  if (filters.warehouseId !== undefined) {
+    request.input("WarehouseID", sql.Int, filters.warehouseId);
+    whereConditions.push("i.WarehouseID = @WarehouseID");
+  }
+  if (filters.categoryId !== undefined) {
+    request.input("CategoryID", sql.Int, filters.categoryId);
+    whereConditions.push("ii.CategoryID = @CategoryID");
+  }
+  if (filters.suppId !== undefined) {
+    request.input("SupplierID", sql.Int, filters.suppId);
+    whereConditions.push("ii.SupplierID = @SupplierID");
+  }
+  if (filters.manuId !== undefined) {
+    request.input("ManufacturerID", sql.Int, filters.manuId);
+    whereConditions.push("ii.ManufacturerID = @ManufacturerID");
+  }
+
+  const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
+
+  const countResult = await request.query(`
+    SELECT COUNT(*) AS total
+    ${listFromJoins}
+    ${whereClause}
+  `);
+  const total = countResult.recordset[0]?.total ?? 0;
+
+  request.input("Offset", sql.Int, (page - 1) * pageSize);
+  request.input("PageSize", sql.Int, pageSize);
+
+  const dataResult = await request.query(`
+    SELECT ${listSelectColumns}
+    ${listFromJoins}
+    ${whereClause}
+    ORDER BY ii.ItemName, i.InventoryID
+    OFFSET @Offset ROWS
+    FETCH NEXT @PageSize ROWS ONLY
+  `);
+
+  const rows = mapRecordsetToListItems(dataResult.recordset as Record<string, unknown>[]);
+  return { total, rows };
 }

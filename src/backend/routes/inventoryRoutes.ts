@@ -2,10 +2,11 @@
 import express from "express";
 import {
   getInventoryList,
+  getInventoryListPaged,
   getInventoryItemById,
   createInventoryItem,
   updateInventoryItem,
-  softDeleteInventoryItem
+  softDeleteInventoryItem,
 } from "../database/inventoryQueries";
 
 import {
@@ -47,7 +48,7 @@ FIXED ROUTES
 // This endpoint is used to fetch reference data for dropdowns and other UI elements
 router.get("/reference-options", async (req, res) => {
   try {
-    const data = await fetchReferenceOptions(); // ✅ updated
+    const data = await fetchReferenceOptions();
     res.json({
       categories: data.categories.map((c: { id: number; name: string }) => ({
         categoryId: c.id,
@@ -61,6 +62,10 @@ router.get("/reference-options", async (req, res) => {
         suppId: s.id,
         suppName: s.name,
       })),
+      warehouses: data.warehouses.map((w: { id: number; name: string }) => ({
+        warehouseId: w.id,
+        warehouseName: w.name,
+      })),
     });
   } catch (err) {
     console.error("Error fetching reference options:", err);
@@ -68,13 +73,106 @@ router.get("/reference-options", async (req, res) => {
   }
 });
 
+const inventoryListQuerySchema = z.object({
+  page: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === null || val === "") return 1;
+        const num = Number(val);
+        return Number.isFinite(num) && num >= 1 ? num : 1;
+      },
+      z.number().int().min(1)
+    )
+    .default(1),
+  pageSize: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === null || val === "") return 20;
+        const num = Number(val);
+        return Number.isFinite(num) && num >= 1 && num <= 100 ? num : 20;
+      },
+      z.number().int().min(1).max(100)
+    )
+    .default(20),
+  search: z
+    .preprocess(
+      (val) =>
+        val === undefined || val === null || val === "" ? undefined : String(val).trim(),
+      z.string().max(200).optional()
+    )
+    .optional(),
+  warehouseId: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === null || val === "") return undefined;
+        const num = Number(val);
+        return Number.isFinite(num) && num > 0 ? num : undefined;
+      },
+      z.number().int().positive().optional()
+    )
+    .optional(),
+  categoryId: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === null || val === "") return undefined;
+        const num = Number(val);
+        return Number.isFinite(num) && num > 0 ? num : undefined;
+      },
+      z.number().int().positive().optional()
+    )
+    .optional(),
+  suppId: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === null || val === "") return undefined;
+        const num = Number(val);
+        return Number.isFinite(num) && num > 0 ? num : undefined;
+      },
+      z.number().int().positive().optional()
+    )
+    .optional(),
+  manuId: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === null || val === "") return undefined;
+        const num = Number(val);
+        return Number.isFinite(num) && num > 0 ? num : undefined;
+      },
+      z.number().int().positive().optional()
+    )
+    .optional(),
+});
+
 /*
 LIST ROUTES
 */
-// ✅ GET all items
+// GET all items (array when no pagination params; envelope when page or pageSize present)
 router.get("/", verifyToken, requirePermission("INVENTORY_VIEW"), async (req, res) => {
-  const data = await getInventoryList();
-  res.json(data);
+  const hasPagination =
+    req.query.page !== undefined || req.query.pageSize !== undefined;
+  if (!hasPagination) {
+    const data = await getInventoryList();
+    return res.json(data);
+  }
+  const parsed = inventoryListQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ message: "Invalid query parameters", errors: parsed.error.errors });
+  }
+  const { page, pageSize, search, warehouseId, categoryId, suppId, manuId } =
+    parsed.data;
+  const result = await getInventoryListPaged(
+    { search, warehouseId, categoryId, suppId, manuId },
+    page,
+    pageSize
+  );
+  return res.json({
+    page,
+    pageSize,
+    total: result.total,
+    rows: result.rows,
+  });
 });
 
 // ✅ POST create item

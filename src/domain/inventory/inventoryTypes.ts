@@ -85,8 +85,18 @@ export interface InventoryListItem {
   quantity: number
   warehouseName: string
   lastUpdated: string
+  categoryName?: string | null
+  supplierName?: string | null
+  manufacturerName?: string | null
 }
 
+// Envelope for paginated inventory list response.
+export interface InventoryListEnvelope {
+  page: number
+  pageSize: number
+  total: number
+  rows: InventoryListItem[]
+}
 
 // Records each stock movement
 export interface InventoryTransaction {

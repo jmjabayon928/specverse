@@ -8,14 +8,15 @@ import { poolPromise } from "@/backend/config/db";
 export async function fetchReferenceOptions() {
   const pool = await poolPromise;
 
-  const [areasRes, usersRes, manufacturersRes, suppliersRes, categoriesRes, clientsRes, projectsRes] = await Promise.all([
+  const [areasRes, usersRes, manufacturersRes, suppliersRes, categoriesRes, clientsRes, projectsRes, warehousesRes] = await Promise.all([
     pool.request().query(`SELECT AreaID, AreaName FROM Areas ORDER BY AreaName`),
     pool.request().query(`SELECT UserID, FirstName, LastName FROM Users ORDER BY FirstName`),
     pool.request().query(`SELECT ManuID, ManuName FROM Manufacturers ORDER BY ManuName`),
     pool.request().query(`SELECT SuppID, SuppName FROM Suppliers ORDER BY SuppName`),
     pool.request().query(`SELECT CategoryID, CategoryName FROM Categories ORDER BY CategoryName`),
     pool.request().query(`SELECT ClientID, ClientCode, ClientName, ClientLogo FROM Clients ORDER BY ClientCode`),
-    pool.request().query(`SELECT ProjectID, ProjNum, ProjName FROM Projects ORDER BY ProjNum`)
+    pool.request().query(`SELECT ProjectID, ProjNum, ProjName FROM Projects ORDER BY ProjNum`),
+    pool.request().query(`SELECT WarehouseID, WarehouseName FROM Warehouses ORDER BY WarehouseName`)
   ]);
 
   return {
@@ -47,6 +48,10 @@ export async function fetchReferenceOptions() {
     projects: projectsRes.recordset.map(row => ({
       id: Number(row.ProjectID),
       name: `${row.ProjNum} - ${row.ProjName}`
+    })),
+    warehouses: warehousesRes.recordset.map(row => ({
+      id: Number(row.WarehouseID),
+      name: row.WarehouseName
     }))
   };
 }
