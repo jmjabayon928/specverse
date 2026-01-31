@@ -568,9 +568,13 @@ export async function addSheetNote(args: {
 
   const pool = await poolPromise
   const tx = new sql.Transaction(pool)
-  await tx.begin()
+  let didBegin = false
+  let didCommit = false
 
   try {
+    await tx.begin()
+    didBegin = true
+
     const checkReq = new sql.Request(tx).input('SheetID', sql.Int, sheetId)
     const where = ensureTemplate === true
       ? 'WHERE SheetID=@SheetID AND IsTemplate=1'
@@ -614,6 +618,7 @@ export async function addSheetNote(args: {
     `)
 
     await tx.commit()
+    didCommit = true
 
     return {
       noteId: insRes.recordset[0].NoteID,
@@ -621,7 +626,13 @@ export async function addSheetNote(args: {
       createdAt: insRes.recordset[0].CreatedAt.toISOString(),
     }
   } catch (err) {
-    await tx.rollback()
+    if (didBegin && !didCommit) {
+      try {
+        await tx.rollback()
+      } catch (rollbackErr: unknown) {
+        console.error('rollback failed', rollbackErr)
+      }
+    }
     throw err
   }
 }
@@ -753,9 +764,13 @@ export async function addSheetAttachment(
 
   const pool = await poolPromise
   const tx = new sql.Transaction(pool)
-  await tx.begin()
+  let didBegin = false
+  let didCommit = false
 
   try {
+    await tx.begin()
+    didBegin = true
+
     await assertSheetExists(sheetId, ensureTemplate, tx)
 
     const aReq = new sql.Request(tx)
@@ -807,6 +822,7 @@ export async function addSheetAttachment(
     `)
 
     await tx.commit()
+    didCommit = true
 
     const fileUrl = `/api/backend/files/${encodeURIComponent(storedName)}`
 
@@ -825,7 +841,13 @@ export async function addSheetAttachment(
       fileUrl,
     }
   } catch (err) {
-    await tx.rollback()
+    if (didBegin && !didCommit) {
+      try {
+        await tx.rollback()
+      } catch (rollbackErr: unknown) {
+        console.error('rollback failed', rollbackErr)
+      }
+    }
     throw err
   }
 }
@@ -940,11 +962,12 @@ export async function createTemplate(
 ): Promise<number> {
   const pool = await poolPromise
   const tx = new sql.Transaction(pool)
-  let begun = false
+  let didBegin = false
+  let didCommit = false
 
   try {
     await tx.begin()
-    begun = true
+    didBegin = true
 
     const insertReq = applySheetInputsForInsert(tx.request(), data, userId)
     const sheetRs = await insertReq.query<{ SheetID: number }>(`
@@ -970,6 +993,7 @@ export async function createTemplate(
     await insertSubsheetTree(tx, sheetId, data)
 
     await tx.commit()
+    didCommit = true
 
     await insertAuditLog({
       PerformedBy: userId,
@@ -980,6 +1004,8 @@ export async function createTemplate(
       Method: 'POST',
       StatusCode: 201,
       Changes: JSON.stringify({ ...data, sheetId }),
+    }).catch((e: unknown) => {
+      console.error('insertAuditLog failed', e)
     })
 
     await notifyUsers({
@@ -989,18 +1015,17 @@ export async function createTemplate(
       message: `Template #${sheetId} was created by User #${userId}.`,
       category: 'Datasheet',
       createdBy: userId,
+    }).catch((e: unknown) => {
+      console.error('notifyUsers failed', e)
     })
 
     return sheetId
   } catch (err) {
-    if (begun) {
+    if (didBegin && !didCommit) {
       try {
         await tx.rollback()
       } catch (rollbackErr: unknown) {
-        // Ignore ENOTBEGUN when server already rolled back (e.g. after INSERT failure)
-        if (typeof rollbackErr === 'object' && rollbackErr !== null && 'code' in rollbackErr && (rollbackErr as { code: string }).code !== 'ENOTBEGUN') {
-          throw rollbackErr
-        }
+        console.error('rollback failed', rollbackErr)
       }
     }
     throw err
@@ -1014,9 +1039,12 @@ export async function updateTemplate(
 ): Promise<number> {
   const pool = await poolPromise
   const tx = new sql.Transaction(pool)
+  let didBegin = false
+  let didCommit = false
 
   try {
     await tx.begin()
+    didBegin = true
 
     const updateReq = applySheetInputsForUpdate(tx.request(), data, userId)
       .input('SheetID', sql.Int, sheetId)
@@ -1042,6 +1070,7 @@ export async function updateTemplate(
     await syncSubsheetTree(tx, sheetId, data)
 
     await tx.commit()
+    didCommit = true
 
     await notifyUsers({
       recipientRoleIds: [1, 2],
@@ -1050,11 +1079,19 @@ export async function updateTemplate(
       message: `Template #${sheetId} was updated by User #${userId}.`,
       category: 'Datasheet',
       createdBy: userId,
+    }).catch((e) => {
+      console.error('notifyUsers failed', e)
     })
 
     return sheetId
   } catch (err) {
-    await tx.rollback()
+    if (didBegin && !didCommit) {
+      try {
+        await tx.rollback()
+      } catch (rollbackErr: unknown) {
+        console.error('rollback failed', rollbackErr)
+      }
+    }
     throw err
   }
 }

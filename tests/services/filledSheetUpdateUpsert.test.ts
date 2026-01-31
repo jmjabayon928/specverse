@@ -51,8 +51,9 @@ jest.mock('../../src/backend/database/valueSetQueries', () => ({
   listValueSets: jest.fn(),
 }))
 
+const mockNotifyUsers = jest.fn().mockResolvedValue(undefined)
 jest.mock('../../src/backend/utils/notifyUsers', () => ({
-  notifyUsers: jest.fn().mockResolvedValue(undefined),
+  notifyUsers: (...args: unknown[]) => mockNotifyUsers(...args),
 }))
 
 import { updateFilledSheet } from '../../src/backend/services/filledSheetService'
@@ -167,5 +168,14 @@ describe('updateFilledSheet UPSERT behavior', () => {
     })
 
     expect(legacyUpdate).toBeDefined()
+  })
+
+  it('resolves with sheetId even when notifyUsers rejects (post-commit side effect non-fatal)', async () => {
+    mockNotifyUsers.mockRejectedValueOnce(new Error('notify failed'))
+    const result = await updateFilledSheet(1, minimalUnifiedSheet, 1, {
+      skipRevisionCreation: true,
+    })
+    expect(result).toEqual({ sheetId: 1 })
+    expect(mockNotifyUsers).toHaveBeenCalled()
   })
 })

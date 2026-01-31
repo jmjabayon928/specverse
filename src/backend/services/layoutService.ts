@@ -809,9 +809,13 @@ export async function saveSubsheetSlots(
   },
 ): Promise<void> {
   const transaction = new sql.Transaction(db)
-  await transaction.begin()
+  let didBegin = false
+  let didCommit = false
 
   try {
+    await transaction.begin()
+    didBegin = true
+
     const request = new sql.Request(transaction)
 
     await request
@@ -864,11 +868,14 @@ export async function saveSubsheetSlots(
     }
 
     await transaction.commit()
+    didCommit = true
   } catch (error) {
-    try {
-      await transaction.rollback()
-    } catch {
-      // swallow rollback errors
+    if (didBegin && !didCommit) {
+      try {
+        await transaction.rollback()
+      } catch (rollbackErr: unknown) {
+        console.error('rollback failed', rollbackErr)
+      }
     }
     throw error
   }
@@ -880,9 +887,13 @@ export async function saveLayoutBodySlots(
 ): Promise<void> {
   const db = await poolPromise
   const transaction = new sql.Transaction(db)
-  await transaction.begin()
+  let didBegin = false
+  let didCommit = false
 
   try {
+    await transaction.begin()
+    didBegin = true
+
     await new sql.Request(transaction)
       .input('layoutId', sql.Int, layoutId)
       .query(`
@@ -914,11 +925,14 @@ export async function saveLayoutBodySlots(
     }
 
     await transaction.commit()
+    didCommit = true
   } catch (error) {
-    try {
-      await transaction.rollback()
-    } catch {
-      // swallow rollback errors
+    if (didBegin && !didCommit) {
+      try {
+        await transaction.rollback()
+      } catch (rollbackErr: unknown) {
+        console.error('rollback failed', rollbackErr)
+      }
     }
     throw error
   }

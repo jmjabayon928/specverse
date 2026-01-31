@@ -197,17 +197,27 @@ export async function createFilledSheet(
    Helpers: transactions, coercers, validation
    ────────────────────────────────────────────────────────────── */
 
-async function runInTransaction<T>(fn: (tx: sql.Transaction) => Promise<T>): Promise<T> {
+export async function runInTransaction<T>(fn: (tx: sql.Transaction) => Promise<T>): Promise<T> {
   const pool = await poolPromise
   const tx = new sql.Transaction(pool)
+  let didBegin = false
+  let didCommit = false
 
   try {
     await tx.begin()
+    didBegin = true
     const out = await fn(tx)
     await tx.commit()
+    didCommit = true
     return out
   } catch (error) {
-    await tx.rollback()
+    if (didBegin && !didCommit) {
+      try {
+        await tx.rollback()
+      } catch (rollbackErr: unknown) {
+        console.error('rollback failed', rollbackErr)
+      }
+    }
     throw error
   }
 }
@@ -1129,9 +1139,12 @@ export const updateFilledSheet = async (
 ): Promise<{ sheetId: number }> => {
   const pool = await poolPromise
   const transaction = new sql.Transaction(pool)
+  let didBegin = false
+  let didCommit = false
 
   try {
     await transaction.begin()
+    didBegin = true
 
     const valueSetId = await ensureRequirementValueSet(sheetId, updatedBy)
     const status = await getValueSetStatus(valueSetId)
@@ -1359,7 +1372,7 @@ export const updateFilledSheet = async (
     if (!options?.skipRevisionCreation) {
       const snapshotStatus = input.status ?? 'Modified Draft'
       const snapshotJson = JSON.stringify(input)
-      
+
       await createRevision(transaction, {
         sheetId,
         snapshotJson,
@@ -1369,6 +1382,9 @@ export const updateFilledSheet = async (
       })
     }
 
+    await transaction.commit()
+    didCommit = true
+
     await notifyUsers({
       recipientRoleIds: [1, 2],
       sheetId,
@@ -1376,12 +1392,19 @@ export const updateFilledSheet = async (
       message: `Sheet #${sheetId} has been updated.`,
       category: 'Datasheet',
       createdBy: updatedBy,
+    }).catch((e: unknown) => {
+      console.error('notifyUsers failed', e)
     })
 
-    await transaction.commit()
     return { sheetId }
   } catch (error) {
-    await transaction.rollback()
+    if (didBegin && !didCommit) {
+      try {
+        await transaction.rollback()
+      } catch (rollbackErr: unknown) {
+        console.error('rollback failed', rollbackErr)
+      }
+    }
     throw error
   }
 }

@@ -199,9 +199,12 @@ export const restoreRevisionHandler: RequestHandler = async (req, res, next) => 
     // Create revision for the restored state (in its own transaction)
     const pool = await poolPromise
     const transaction = new sql.Transaction(pool)
+    let didBegin = false
+    let didCommit = false
 
     try {
       await transaction.begin()
+      didBegin = true
 
       const newRevisionId = await createRevision(transaction, {
         sheetId,
@@ -212,6 +215,7 @@ export const restoreRevisionHandler: RequestHandler = async (req, res, next) => 
       })
 
       await transaction.commit()
+      didCommit = true
 
       res.status(200).json({
         sheetId: updateResult.sheetId,
@@ -220,7 +224,13 @@ export const restoreRevisionHandler: RequestHandler = async (req, res, next) => 
         message: `Sheet restored from revision #${revision.revisionNumber}. New revision #${newRevisionId} created.`,
       })
     } catch (error) {
-      await transaction.rollback()
+      if (didBegin && !didCommit) {
+        try {
+          await transaction.rollback()
+        } catch (rollbackErr: unknown) {
+          console.error('rollback failed', rollbackErr)
+        }
+      }
       throw error
     }
   } catch (err: unknown) {
