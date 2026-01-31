@@ -206,10 +206,12 @@ const mapDisciplinesToOptions = (disciplines: DisciplineOption[]): SelectOption[
 const mapSubtypesToOptions = (subtypes: SubtypeOption[]): SelectOption[] =>
   subtypes.map((s) => ({ value: s.id, label: s.name }))
 
-function disciplineLabel(row: TemplateRow): string {
-  if (row.disciplineName != null && row.disciplineName !== '') {
-    return row.disciplineName
-  }
+function disciplineSubtypeLabel(row: TemplateRow): string {
+  const d = row.disciplineName != null && row.disciplineName !== '' ? row.disciplineName : null
+  const s = row.subtypeName != null && row.subtypeName !== '' ? row.subtypeName : null
+  if (d != null && s != null) return `${d} · ${s}`
+  if (d != null) return d
+  if (s != null) return s
   return 'Unspecified'
 }
 
@@ -365,9 +367,18 @@ const TemplateListPage = () => {
     return result
   }, [templates, categoryFilter, disciplineFilter, subtypeFilter, userFilter, dateFrom, dateTo])
 
+  const hasActiveFilters =
+    categoryFilter !== null ||
+    disciplineFilter !== null ||
+    subtypeFilter !== null ||
+    userFilter !== null ||
+    dateFrom !== null ||
+    dateTo !== null
+  const templatesToShow = hasActiveFilters ? filteredTemplates : templates
+
   if (process.env.NODE_ENV !== 'production') {
     // Helpful while wiring filters; safe to remove later
-    console.log('Loaded templates (filtered):', filteredTemplates)
+    console.log('Loaded templates (filtered):', templatesToShow)
   }
 
   return (
@@ -467,7 +478,7 @@ const TemplateListPage = () => {
                 <tr>
                   <th className='px-4 py-2'>📄 Template Name</th>
                   <th className='px-4 py-2'>📝 Description</th>
-                  <th className='px-4 py-2'>Discipline</th>
+                  <th className='px-4 py-2'>Discipline / Subtype</th>
                   <th className='px-4 py-2'>🏷 Category</th>
                   <th className='px-4 py-2'>👤 Prepared By</th>
                   <th className='px-4 py-2'>🗓 Revision Date</th>
@@ -476,7 +487,7 @@ const TemplateListPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredTemplates.map((template) => (
+                {templatesToShow.map((template) => (
                   <tr key={template.sheetId} className='border-t'>
                     <td className='px-4 py-2 text-blue-600 hover:underline'>
                       <Link href={`/datasheets/templates/${template.sheetId}`}>
@@ -489,9 +500,9 @@ const TemplateListPage = () => {
                     <td className='px-4 py-2'>
                       <span
                         className='inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800'
-                        title={disciplineLabel(template)}
+                        title={disciplineSubtypeLabel(template)}
                       >
-                        {disciplineLabel(template)}
+                        {disciplineSubtypeLabel(template)}
                       </span>
                     </td>
                     <td className='px-4 py-2'>
@@ -528,7 +539,7 @@ const TemplateListPage = () => {
                     </td>
                   </tr>
                 ))}
-                {filteredTemplates.length === 0 && (
+                {templatesToShow.length === 0 && (
                   <tr>
                     <td
                       colSpan={8}

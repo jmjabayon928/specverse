@@ -45,10 +45,12 @@ type Option = {
   label: string;
 };
 
-function disciplineLabel(row: FilledSheetRow): string {
-  if (row.disciplineName != null && row.disciplineName !== "") {
-    return row.disciplineName;
-  }
+function disciplineSubtypeLabel(row: FilledSheetRow): string {
+  const d = row.disciplineName != null && row.disciplineName !== "" ? row.disciplineName : null;
+  const s = row.subtypeName != null && row.subtypeName !== "" ? row.subtypeName : null;
+  if (d != null && s != null) return `${d} · ${s}`;
+  if (d != null) return d;
+  if (s != null) return s;
   return "Unspecified";
 }
 
@@ -220,7 +222,7 @@ export default function FilledSheetListPage() {
                 <tr>
                   <th className="px-4 py-2">📄 Sheet Name</th>
                   <th className="px-4 py-2">📝 Description</th>
-                  <th className="px-4 py-2">Discipline</th>
+                  <th className="px-4 py-2">Discipline / Subtype</th>
                   <th className="px-4 py-2">🏷 Category</th>
                   <th className="px-4 py-2">👤 Prepared By</th>
                   <th className="px-4 py-2">🗓 Revision Date</th>
@@ -237,9 +239,9 @@ export default function FilledSheetListPage() {
                     <td className="px-4 py-2">
                       <span
                         className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
-                        title={disciplineLabel(t)}
+                        title={disciplineSubtypeLabel(t)}
                       >
-                        {disciplineLabel(t)}
+                        {disciplineSubtypeLabel(t)}
                       </span>
                     </td>
                     <td className="px-4 py-2">{t.categoryName || '-'}</td>

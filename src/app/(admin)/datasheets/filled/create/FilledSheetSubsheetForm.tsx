@@ -138,15 +138,16 @@ function FilledSheetSubsheetFormInner(props: Readonly<Props>) {
           // String key for lookup: Editor/Cloner use Record<string, string>; Creator uses Record<number, string>; both work at runtime
           const value = (fieldValues as Record<string, string>)[String(field.id ?? field.originalId ?? index)] ?? "";
           return (
-            <FilledSheetFieldRow
-              key={String(field.id ?? field.originalId ?? index)}
-              field={field}
-              value={value}
-              errorMessage={errorMessage}
-              onFieldValueChange={onFieldValueChange}
-              subsheetIndex={subsheetIndex}
-              fieldIndex={index}
-            />
+            <div key={String(field.id ?? field.originalId ?? index)} data-error-key={errorKey}>
+              <FilledSheetFieldRow
+                field={field}
+                value={value}
+                errorMessage={errorMessage}
+                onFieldValueChange={onFieldValueChange}
+                subsheetIndex={subsheetIndex}
+                fieldIndex={index}
+              />
+            </div>
           );
         })}
       </div>

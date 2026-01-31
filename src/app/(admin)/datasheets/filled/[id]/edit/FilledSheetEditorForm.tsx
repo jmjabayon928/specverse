@@ -59,6 +59,54 @@ function flattenErrors(zodError: ZodError): Record<string, string[]> {
   return flattened
 }
 
+type FieldErrorItem = {
+  infoTemplateId: number
+  message: string
+  optionsPreview?: string[]
+  optionsCount?: number
+}
+
+function displayMessage(err: FieldErrorItem): string {
+  if (Array.isArray(err.optionsPreview) && err.optionsPreview.length > 0) {
+    const list = err.optionsPreview.join(', ')
+    const more =
+      err.optionsCount != null && err.optionsCount > err.optionsPreview.length
+        ? ` and ${err.optionsCount - err.optionsPreview.length} more`
+        : ''
+    return `Choose one of: ${list}${more}.`
+  }
+  return err.message
+}
+
+/** Map BE fieldErrors (infoTemplateId + message) to form error keys for inline display. Matches by field.id (edit) or field.originalId (clone). */
+function mapFieldErrorsToFormErrors(
+  fieldErrors: FieldErrorItem[],
+  subsheets: UnifiedSubsheet[]
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const err of fieldErrors) {
+    const msg = displayMessage(err)
+    let found = false
+    for (let i = 0; i < subsheets.length; i++) {
+      for (let j = 0; j < subsheets[i].fields.length; j++) {
+        const field = subsheets[i].fields[j]
+        if (field.id === err.infoTemplateId || field.originalId === err.infoTemplateId) {
+          const key = `Subsheet #${i + 1} - Template #${j + 1} - value`
+          out[key] = [msg]
+          found = true
+          break
+        }
+      }
+      if (found) break
+    }
+    if (!found) {
+      out['Unknown'] = out['Unknown'] ?? []
+      out['Unknown'].push(msg)
+    }
+  }
+  return out
+}
+
 function buildFieldValueMap(subsheets: UnifiedSubsheet[]): Record<string, string> {
   const result: Record<string, string> = {}
 
@@ -203,9 +251,21 @@ export default function FilledSheetEditorForm(
         body: JSON.stringify(payload),
       })
 
-      const resultJson = await res.json()
+      const resultJson = await res.json().catch(() => ({}))
       if (!res.ok) {
-        throw new Error(resultJson.error || 'Update failed')
+        if (res.status === 400 && Array.isArray(resultJson.fieldErrors)) {
+          const mapped = mapFieldErrorsToFormErrors(resultJson.fieldErrors, datasheet.subsheets)
+          setFormErrors(mapped)
+          const firstKey = Object.keys(mapped)[0]
+          if (firstKey) {
+            requestAnimationFrame(() => {
+              document.querySelector(`[data-error-key="${CSS.escape(firstKey)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+            })
+          }
+          return
+        }
+        setFormErrors({ Unknown: [resultJson.error ?? 'Update failed'] })
+        return
       }
 
       router.push(`/datasheets/filled/${resultJson.sheetId}?success=updated`)

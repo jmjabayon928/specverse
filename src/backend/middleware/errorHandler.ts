@@ -31,6 +31,10 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
   }
 
   // Backwards compatible shape: many clients expect `error`.
-  // New structured fields: `message` + `code`.
-  res.status(statusCode).json({ error: message, message, code })
+  // New structured fields: `message` + `code`. Include payload (e.g. fieldErrors) when present.
+  const body: Record<string, unknown> = { error: message, message, code }
+  if (err instanceof AppError && err.payload != null) {
+    Object.assign(body, err.payload)
+  }
+  res.status(statusCode).json(body)
 }

@@ -90,17 +90,17 @@ const AppHeader: React.FC = () => {
             {/* Cross Icon */}
           </button>
 
-          <Link href="/" className="lg:hidden">
+          <Link href="/" className="lg:hidden flex items-center">
             <Image
-              width={154}
+              width={32}
               height={32}
               className="dark:hidden"
               src="/images/logo/SpecVerse32x32.png"
               alt="Logo"
             />
             <Image
-              width={154}
-              height={32}
+              width={150}
+              height={40}
               className="hidden dark:block"
               src="/images/logo/SpecVerse150x40.png"
               alt="Logo"

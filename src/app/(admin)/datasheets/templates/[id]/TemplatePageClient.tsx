@@ -179,15 +179,12 @@ const TemplatePageClient: React.FC<Props> = ({
             <h3 className='text-sm text-gray-600'>
               {translatedTemplate?.sheetDesc2}
             </h3>
-            {(template.disciplineName != null && template.disciplineName !== '') ||
-            (template.subtypeName != null && template.subtypeName !== '') ? (
-              <p className='text-sm text-gray-500 mt-1'>
-                {template.disciplineName ?? 'Unspecified'}
-                {template.subtypeName != null && template.subtypeName !== ''
-                  ? ` · ${template.subtypeName}`
-                  : ''}
-              </p>
-            ) : null}
+            <p className='text-sm text-gray-500 mt-1'>
+              {(template.disciplineName != null && template.disciplineName !== '') ||
+              (template.subtypeName != null && template.subtypeName !== '')
+                ? `${template.disciplineName ?? 'Unspecified'}${template.subtypeName != null && template.subtypeName !== '' ? ` · ${template.subtypeName}` : ''}`
+                : '—'}
+            </p>
           </div>
         </div>
 

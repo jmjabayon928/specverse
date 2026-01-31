@@ -34,6 +34,7 @@ jest.mock('../../src/backend/database/permissionQueries', () => ({
 }))
 
 // Mock only list endpoint so GET /filledsheets returns 200 without Phase 1 DB schema; other tests (e.g. verify) still use real DB.
+// createFilledSheet is a jest.fn() so we can test VALIDATION error → 400 in one test.
 jest.mock('../../src/backend/services/filledSheetService', () => {
   const actual =
     jest.requireActual<typeof import('../../src/backend/services/filledSheetService')>(
@@ -42,6 +43,7 @@ jest.mock('../../src/backend/services/filledSheetService', () => {
   return {
     ...actual,
     fetchAllFilled: jest.fn().mockResolvedValue([]),
+    createFilledSheet: jest.fn(),
   }
 })
 
@@ -139,6 +141,63 @@ describe('Filled Sheets API', () => {
       .send(invalidPayload)
 
     expect(res.statusCode).toBeGreaterThanOrEqual(400)
+  })
+
+  it('POST /api/backend/filledsheets returns 400 with message when service throws VALIDATION error', async () => {
+    const filledSheetService = await import('../../src/backend/services/filledSheetService')
+    const createFilledSheet = filledSheetService.createFilledSheet as jest.Mock
+    const validationMessage = 'Missing required values for: Design Pressure'
+    createFilledSheet.mockRejectedValueOnce(new Error(`VALIDATION: ${validationMessage}`))
+
+    const res = await request(app)
+      .post('/api/backend/filledsheets')
+      .set('Cookie', [authCookie])
+      .send({
+        templateId: 1,
+        sheetName: 'Test',
+        equipmentName: 'E',
+        equipmentTagNum: 'T',
+        categoryId: 1,
+        clientId: 1,
+        projectId: 1,
+        fieldValues: {},
+      })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.body?.error).toContain(validationMessage)
+  })
+
+  it('POST /api/backend/filledsheets returns 400 with fieldErrors when service throws AppError with payload', async () => {
+    const { createFilledSheet } = await import('../../src/backend/services/filledSheetService')
+    const { AppError } = await import('../../src/backend/errors/AppError')
+    const createFilledSheetMock = createFilledSheet as jest.Mock
+    const fieldErrors = [
+      { infoTemplateId: 101, message: 'Enter a whole number.', label: 'Pressure' },
+    ]
+    createFilledSheetMock.mockRejectedValueOnce(
+      new AppError('Validation failed', 400, true, { fieldErrors })
+    )
+
+    const res = await request(app)
+      .post('/api/backend/filledsheets')
+      .set('Cookie', [authCookie])
+      .send({
+        templateId: 1,
+        sheetName: 'Test',
+        equipmentName: 'E',
+        equipmentTagNum: 'T',
+        categoryId: 1,
+        clientId: 1,
+        projectId: 1,
+        fieldValues: { '101': 'abc' },
+      })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.body?.fieldErrors).toBeDefined()
+    expect(Array.isArray(res.body.fieldErrors)).toBe(true)
+    expect(res.body.fieldErrors).toHaveLength(1)
+    expect(res.body.fieldErrors[0].message).toBe('Enter a whole number.')
+    expect(res.body.fieldErrors[0].infoTemplateId).toBe(101)
   })
 
   it('PUT /api/backend/filledsheets/:id should reject invalid id or body', async () => {

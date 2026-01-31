@@ -57,6 +57,7 @@ jest.mock('../../src/backend/utils/notifyUsers', () => ({
 }))
 
 import { updateFilledSheet } from '../../src/backend/services/filledSheetService'
+import { AppError } from '../../src/backend/errors/AppError'
 
 const minimalUnifiedSheet = {
   sheetName: 'Test',
@@ -103,8 +104,11 @@ describe('updateFilledSheet UPSERT behavior', () => {
     executedQueries.length = 0
     queryResponses.length = 0
     mockTransaction.request.mockImplementation(() => makeRequest())
-    // Response order: UPDATE Sheets, SELECT oldValues, SELECT existingRows, SELECT UOM, UPDATE InformationValues (legacy), INSERT ChangeLogs
+    // Response order: SELECT Status (lifecycle guard), [validateFilledValues] SELECT InformationTemplates (field meta), SELECT InformationTemplateOptions, UPDATE Sheets, SELECT oldValues, SELECT existingRows, SELECT UOM, UPDATE InformationValues (legacy), INSERT ChangeLogs
     queryResponses.push(
+      { recordset: [{ Status: 'Draft' }] },
+      { recordset: [{ InfoTemplateID: 1, Required: 0, Label: 'F1', InfoType: 'varchar' }] },
+      { recordset: [] },
       { rowsAffected: [1] },
       {
         recordset: [
@@ -177,5 +181,24 @@ describe('updateFilledSheet UPSERT behavior', () => {
     })
     expect(result).toEqual({ sheetId: 1 })
     expect(mockNotifyUsers).toHaveBeenCalled()
+  })
+})
+
+describe('updateFilledSheet lifecycle guards', () => {
+  beforeEach(() => {
+    executedQueries.length = 0
+    queryResponses.length = 0
+    mockTransaction.request.mockImplementation(() => makeRequest())
+  })
+
+  it('rejects with 409 when filled sheet status is Approved', async () => {
+    queryResponses.push({ recordset: [{ Status: 'Approved' }] })
+
+    const p = updateFilledSheet(1, minimalUnifiedSheet, 1)
+    await expect(p).rejects.toThrow(AppError)
+    await expect(p).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining('only be edited when status'),
+    })
   })
 })

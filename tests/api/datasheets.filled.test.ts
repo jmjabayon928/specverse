@@ -34,7 +34,7 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
   optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
 }))
 
-// Mock filled sheet list so tests pass without Phase 1 DB schema (Disciplines/DatasheetSubtypes).
+// Mock filled sheet list, detail, and reference-options so tests pass without DB.
 jest.mock('../../src/backend/services/filledSheetService', () => {
   const actual =
     jest.requireActual<typeof import('../../src/backend/services/filledSheetService')>(
@@ -43,6 +43,14 @@ jest.mock('../../src/backend/services/filledSheetService', () => {
   return {
     ...actual,
     fetchAllFilled: jest.fn().mockResolvedValue([]),
+    getFilledSheetDetailsById: jest.fn().mockResolvedValue(null),
+    fetchReferenceOptions: jest.fn().mockResolvedValue({
+      categories: [
+        { CategoryID: 1, CategoryName: 'Electrical' },
+        { CategoryID: 2, CategoryName: 'Mechanical' },
+      ],
+      users: [{ UserID: 1, FirstName: 'Test', LastName: 'User' }],
+    }),
   }
 })
 
@@ -124,6 +132,32 @@ describe('Filled Sheets API', () => {
     expect(row.subtypeName).toBe('Pressure Transmitter')
   })
 
+  it('GET /api/backend/filledsheets/:id returns datasheet with disciplineName and subtypeName', async () => {
+    const filledSheetService = await import('../../src/backend/services/filledSheetService')
+    const mockGetDetails = filledSheetService.getFilledSheetDetailsById as jest.Mock
+    mockGetDetails.mockResolvedValueOnce({
+      datasheet: {
+        sheetId: 123,
+        sheetName: 'F1',
+        disciplineId: 1,
+        disciplineName: 'PIPING',
+        subtypeId: 1,
+        subtypeName: 'Pressure Transmitter',
+      },
+      subsheets: [],
+    })
+
+    const res = await request(app)
+      .get('/api/backend/filledsheets/123')
+      .set('Cookie', [authCookie])
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toHaveProperty('datasheet')
+    const ds = res.body.datasheet as Record<string, unknown>
+    expect(ds.disciplineName).toBe('PIPING')
+    expect(ds.subtypeName).toBe('Pressure Transmitter')
+  })
+
   it('GET /api/backend/filledsheets returns null disciplineName/subtypeName when DisciplineID/SubtypeID are null', async () => {
     const filledSheetService = await import('../../src/backend/services/filledSheetService')
     const mockFetch = filledSheetService.fetchAllFilled as jest.Mock
@@ -158,7 +192,7 @@ describe('Filled Sheets API', () => {
     expect(row.subtypeName).toBeNull()
   })
 
-  it('GET /api/backend/filledsheets/reference-options should return 200 and an object', async () => {
+  it('GET /api/backend/filledsheets/reference-options should return 200 and categories with CategoryID/CategoryName for filled create dropdown', async () => {
     const res = await request(app)
       .get('/api/backend/filledsheets/reference-options')
       .set('Cookie', [authCookie])
@@ -166,6 +200,14 @@ describe('Filled Sheets API', () => {
     expect(res.statusCode).toBe(200)
     expect(typeof res.body).toBe('object')
     expect(res.body).not.toBeNull()
+    expect(Array.isArray(res.body.categories)).toBe(true)
+    if (res.body.categories.length > 0) {
+      const first = res.body.categories[0] as Record<string, unknown>
+      expect(first).toHaveProperty('CategoryID')
+      expect(first).toHaveProperty('CategoryName')
+      expect(typeof first.CategoryID).toBe('number')
+      expect(typeof first.CategoryName).toBe('string')
+    }
   })
 
   it('GET /api/backend/filledsheets/check-equipment-tag should show exists=false for fake tag', async () => {

@@ -26,10 +26,31 @@ export const infoFieldSchema = z
     }
   });
 
+/**
+ * Template builder variant: validates field structure (label, infoType, required, options)
+ * but does NOT require value when required=true. Used for template create/clone only.
+ */
+export const infoFieldTemplateSchema = z.object({
+  id: z.number().optional(),
+  label: z.string().min(1, "Field label is required"),
+  infoType: z.enum(["int", "decimal", "varchar"]),
+  uom: z.string().optional(),
+  sortOrder: z.number(),
+  required: z.boolean(),
+  options: z.array(z.string()).optional(),
+  value: z.union([z.string(), z.number(), z.null()]).optional(),
+});
+
 export const subsheetSchema = z.object({
   id: z.number().optional(),
   name: z.string().min(1, "Subsheet name is required"),
   fields: z.array(infoFieldSchema).min(1, "At least 1 field is required"),
+});
+
+export const subsheetTemplateSchema = z.object({
+  id: z.number().optional(),
+  name: z.string().min(1, "Subsheet name is required"),
+  fields: z.array(infoFieldTemplateSchema).min(1, "At least 1 field is required"),
 });
 
 export const unifiedSheetSchema = z.object({
@@ -83,6 +104,15 @@ export const unifiedSheetSchema = z.object({
   subtypeId: z.number().positive().nullable().optional(),
 
   subsheets: z.array(subsheetSchema).min(1, "At least one subsheet is required"),
+});
+
+/**
+ * Template create/clone variant: same as unifiedSheetSchema but subsheets use
+ * subsheetTemplateSchema (no value required when required=true). Use for template
+ * builder only; filled sheets keep using unifiedSheetSchema.
+ */
+export const unifiedTemplateSchema = unifiedSheetSchema.extend({
+  subsheets: z.array(subsheetTemplateSchema).min(1, "At least one subsheet is required"),
 });
 
 export const fullTemplateSchema = unifiedSheetSchema;

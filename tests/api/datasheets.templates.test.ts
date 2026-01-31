@@ -330,6 +330,32 @@ describe('Templates API', () => {
     expect(row.subtypeName).toBe('Pressure Transmitter')
   })
 
+  it('GET /api/backend/templates/:id returns datasheet with disciplineName and subtypeName', async () => {
+    const templateService = await import('../../src/backend/services/templateService')
+    const mockGetDetails = templateService.getTemplateDetailsById as jest.Mock
+    mockGetDetails.mockResolvedValueOnce({
+      datasheet: {
+        sheetId: 1,
+        sheetName: 'T1',
+        disciplineId: 1,
+        disciplineName: 'PIPING',
+        subtypeId: 1,
+        subtypeName: 'Pressure Transmitter',
+      },
+      translations: null,
+    })
+
+    const res = await request(app)
+      .get('/api/backend/templates/1')
+      .set('Cookie', [authCookie])
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toHaveProperty('datasheet')
+    const ds = res.body.datasheet as Record<string, unknown>
+    expect(ds.disciplineName).toBe('PIPING')
+    expect(ds.subtypeName).toBe('Pressure Transmitter')
+  })
+
   it('GET /api/backend/templates returns null disciplineName/subtypeName when DisciplineID/SubtypeID are null', async () => {
     const templateService = await import('../../src/backend/services/templateService')
     const mockFetch = templateService.fetchAllTemplates as jest.Mock

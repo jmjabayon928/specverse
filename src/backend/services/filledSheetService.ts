@@ -164,10 +164,43 @@ export async function createFilledSheet(
   return runInTransaction(async tx => {
     const templateIdNum = validateTopLevel(data)
 
+    const templateMetaResult = await tx.request()
+      .input('TemplateID', sql.Int, templateIdNum)
+      .query<{ Status: string; IsLatest: number; IsTemplate: number }>(`
+        SELECT Status, CAST(IsLatest AS INT) AS IsLatest, CAST(IsTemplate AS INT) AS IsTemplate
+        FROM Sheets WHERE SheetID = @TemplateID
+      `)
+    const templateMeta = templateMetaResult.recordset[0]
+    if (!templateMeta) {
+      throw new AppError('Template not found.', 400)
+    }
+    if (templateMeta.IsTemplate !== 1) {
+      throw new AppError('Filled sheets can only be created from a template. The given sheet is not a template.', 400)
+    }
+    if (templateMeta.Status !== 'Approved') {
+      throw new AppError(
+        `Filled sheets can only be created from an approved template. Template status: ${templateMeta.Status}.`,
+        409
+      )
+    }
+    if (templateMeta.IsLatest !== 1) {
+      throw new AppError(
+        'Filled sheets can only be created from the latest version of the template.',
+        409
+      )
+    }
+
     const templateRows = await fetchTemplateFields(tx, templateIdNum)
     const fieldMap = buildTemplateFieldMap(templateRows)
 
-    validateRequiredTemplateValues(fieldMap, data.fieldValues)
+    const infoTemplateIds = templateRows.map(r => r.InfoTemplateID)
+    const optionsMap = await fetchOptionsForInfoTemplateIds(tx, infoTemplateIds)
+    const fieldMetaByInfoTemplateId = buildFieldMetaByInfoTemplateId(templateRows, optionsMap)
+    const valuesKeyedByTemplateId = buildValuesKeyedByTemplateId(data, templateRows)
+    const valueErrors = validateFilledValues(fieldMetaByInfoTemplateId, valuesKeyedByTemplateId)
+    if (valueErrors.length > 0) {
+      throw new AppError('Validation failed', 400, true, { fieldErrors: valueErrors })
+    }
 
     const templateSheetRow = await tx.request()
       .input('TemplateID', sql.Int, templateIdNum)
@@ -277,21 +310,136 @@ function validateTopLevel(data: UnifiedSheet): number {
   return templateIdNumber
 }
 
+type TemplateFieldRow = {
+  InfoTemplateID: number
+  Required: boolean | number
+  UOM: string | null
+  OrderIndex: number
+  SubName: string
+  Label?: string | null
+  InfoType?: string | null
+}
+
 async function fetchTemplateFields(
   tx: sql.Transaction,
   templateId: number
-) {
+): Promise<TemplateFieldRow[]> {
   const rs = await tx.request()
     .input('TemplateID', sql.Int, templateId)
     .query(`
-      SELECT t.InfoTemplateID, t.Required, t.UOM, t.OrderIndex, s.SubName, t.Label
+      SELECT t.InfoTemplateID, t.Required, t.UOM, t.OrderIndex, s.SubName, t.Label, t.InfoType
       FROM InformationTemplates t
       JOIN Subsheets s ON t.SubID = s.SubID
       WHERE s.SheetID = @TemplateID
       ORDER BY s.OrderIndex, t.OrderIndex
     `)
 
-  return rs.recordset ?? []
+  return (rs.recordset ?? []) as TemplateFieldRow[]
+}
+
+async function fetchOptionsForInfoTemplateIds(
+  tx: sql.Transaction,
+  infoTemplateIds: number[]
+): Promise<Record<number, string[]>> {
+  if (infoTemplateIds.length === 0) return {}
+
+  const request = tx.request()
+  for (let i = 0; i < infoTemplateIds.length; i += 1) {
+    request.input(`id${i}`, sql.Int, infoTemplateIds[i])
+  }
+  const placeholders = infoTemplateIds.map((_, i) => `@id${i}`).join(', ')
+  const rs = await request.query(`
+    SELECT InfoTemplateID, OptionValue, SortOrder
+    FROM InformationTemplateOptions
+    WHERE InfoTemplateID IN (${placeholders})
+    ORDER BY InfoTemplateID, SortOrder
+  `)
+
+  const map: Record<number, string[]> = {}
+  for (const row of rs.recordset ?? []) {
+    const id = (row as { InfoTemplateID: number; OptionValue: string; SortOrder: number }).InfoTemplateID
+    const val = (row as { InfoTemplateID: number; OptionValue: string; SortOrder: number }).OptionValue
+    if (!map[id]) map[id] = []
+    map[id].push(val)
+  }
+  return map
+}
+
+function buildFieldMetaByInfoTemplateId(
+  rows: TemplateFieldRow[],
+  optionsMap: Record<number, string[]>
+): Record<number, FilledFieldMeta> {
+  const map: Record<number, FilledFieldMeta> = {}
+  for (const row of rows) {
+    map[row.InfoTemplateID] = {
+      required: row.Required === true || row.Required === 1,
+      label: row.Label ?? null,
+      infoType: (row.InfoType ?? 'varchar').toString(),
+      options: optionsMap[row.InfoTemplateID] ?? [],
+    }
+  }
+  return map
+}
+
+/**
+ * Build values keyed by template InfoTemplateID from create payload.
+ * Supports both create-from-template (fieldValues keyed by template ID) and clone (fieldValues keyed by source sheet ID) by matching payload subsheets/fields by SubName and OrderIndex.
+ */
+function buildValuesKeyedByTemplateId(
+  data: UnifiedSheet & { fieldValues: Record<string, string> },
+  templateRows: TemplateFieldRow[]
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  const subsheets = data.subsheets ?? []
+
+  for (const row of templateRows) {
+    const sub = subsheets.find(s => (s.name ?? '').trim() === (row.SubName ?? '').trim())
+    const field = sub?.fields?.[row.OrderIndex]
+    const raw = field != null
+      ? data.fieldValues[String(field.id)] ?? data.fieldValues[String(field.originalId)] ?? data.fieldValues[String(row.OrderIndex)]
+      : data.fieldValues[String(row.InfoTemplateID)] ?? data.fieldValues[String(row.OrderIndex)]
+    out[String(row.InfoTemplateID)] = typeof raw === 'string' ? raw : (raw != null ? String(raw) : '')
+  }
+
+  return out
+}
+
+/** Fetch field meta (InfoType, options, required, label) for given InfoTemplateIDs (e.g. filled sheet field IDs). */
+async function fetchFieldMetaByInfoTemplateIds(
+  tx: sql.Transaction,
+  infoTemplateIds: number[]
+): Promise<Record<number, FilledFieldMeta>> {
+  if (infoTemplateIds.length === 0) return {}
+
+  const request = tx.request()
+  for (let i = 0; i < infoTemplateIds.length; i += 1) {
+    request.input(`id${i}`, sql.Int, infoTemplateIds[i])
+  }
+  const placeholders = infoTemplateIds.map((_, i) => `@id${i}`).join(', ')
+  const rs = await request.query(`
+    SELECT InfoTemplateID, Required, Label, InfoType
+    FROM InformationTemplates
+    WHERE InfoTemplateID IN (${placeholders})
+  `)
+
+  const rows = (rs.recordset ?? []) as Array<{
+    InfoTemplateID: number
+    Required: boolean | number
+    Label?: string | null
+    InfoType?: string | null
+  }>
+  const optionsMap = await fetchOptionsForInfoTemplateIds(tx, infoTemplateIds)
+
+  const map: Record<number, FilledFieldMeta> = {}
+  for (const row of rows) {
+    map[row.InfoTemplateID] = {
+      required: row.Required === true || row.Required === 1,
+      label: row.Label ?? null,
+      infoType: (row.InfoType ?? 'varchar').toString(),
+      options: optionsMap[row.InfoTemplateID] ?? [],
+    }
+  }
+  return map
 }
 
 function buildTemplateFieldMap(
@@ -321,36 +469,114 @@ function buildTemplateFieldMap(
   return map
 }
 
-function validateRequiredTemplateValues(
-  fieldMap: Record<string, Record<number, { required: boolean; uom: string | null; label?: string | null }>>,
+/* ──────────────────────────────────────────────────────────────
+   Filled value validation: type + options (BE authoritative)
+   ────────────────────────────────────────────────────────────── */
+
+/** Parse numeric string (allows commas, sign, decimals). Returns null if invalid. */
+function parseNumericBackend(value: string): number | null {
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return null
+  const cleaned = trimmed.replaceAll(/(?<=\d)[, ](?=\d{3}\b)/g, '')
+  const re = /^[+-]?(?:\d+|\d+\.\d+|\.\d+)$/
+  if (!re.test(cleaned)) return null
+  const n = Number(cleaned)
+  return Number.isFinite(n) ? n : null
+}
+
+/** Parse as integer only; rejects decimals. */
+function parseIntegerBackend(value: string): number | null {
+  const n = parseNumericBackend(value)
+  if (n == null) return null
+  return Number.isInteger(n) ? n : null
+}
+
+export type FilledFieldMeta = {
+  required: boolean
+  label: string | null
+  infoType: string
+  options: string[]
+}
+
+export type FilledValueError = {
+  infoTemplateId: number
+  message: string
+  label?: string | null
+  optionsPreview?: string[]
+  optionsCount?: number
+}
+
+/**
+ * Validate filled sheet values: required, int/decimal type, options membership.
+ * Returns list of errors; empty if valid.
+ */
+export function validateFilledValues(
+  fieldMetaByInfoTemplateId: Record<number, FilledFieldMeta>,
   values: Record<string, string>
-): void {
-  const missing: string[] = []
+): FilledValueError[] {
+  const errors: FilledValueError[] = []
 
-  for (const [subName, entries] of Object.entries(fieldMap)) {
-    for (const [orderStr, meta] of Object.entries(entries)) {
-      if (!meta.required) {
-        continue
+  for (const [idStr, meta] of Object.entries(fieldMetaByInfoTemplateId)) {
+    const infoTemplateId = Number(idStr)
+    if (!Number.isInteger(infoTemplateId)) continue
+
+    const raw = values[idStr] ?? values[String(infoTemplateId)] ?? ''
+    const trimmed = typeof raw === 'string' ? raw.trim() : String(raw).trim()
+
+    if (meta.required && trimmed === '') {
+      errors.push({
+        infoTemplateId,
+        message: 'This field is required.',
+        label: meta.label,
+      })
+      continue
+    }
+
+    if (trimmed === '') continue
+
+    const infoType = (meta.infoType ?? 'varchar').toLowerCase()
+
+    if (infoType === 'int') {
+      const parsed = parseIntegerBackend(trimmed)
+      if (parsed === null) {
+        errors.push({
+          infoTemplateId,
+          message: 'Enter a whole number.',
+          label: meta.label,
+        })
       }
+      continue
+    }
 
-      const order = Number(orderStr)
-      const keyByOriginal = String(getOriginalInfoTemplateIdKey(subName, order))
-      const raw = values?.[keyByOriginal] ?? values?.[orderStr]
+    if (infoType === 'decimal') {
+      const parsed = parseNumericBackend(trimmed)
+      if (parsed === null) {
+        errors.push({
+          infoTemplateId,
+          message: 'Enter a number.',
+          label: meta.label,
+        })
+      }
+      continue
+    }
 
-      if (isBlank(raw)) {
-        const label = meta.label || `${subName} / Field #${order}`
-        missing.push(label)
+    if (Array.isArray(meta.options) && meta.options.length > 0) {
+      const optionsTrimmed = meta.options.map(o => String(o).trim())
+      const allowed = new Set(optionsTrimmed)
+      if (!allowed.has(trimmed)) {
+        const optionsPreview = optionsTrimmed.slice(0, 5)
+        errors.push({
+          infoTemplateId,
+          message: 'Choose a valid option.',
+          label: meta.label,
+          optionsPreview: optionsPreview.length > 0 ? optionsPreview : undefined,
+          optionsCount: meta.options.length,
+        })
       }
     }
   }
 
-  if (missing.length > 0) {
-    throw new Error(`VALIDATION: Missing required values for: ${missing.join(', ')}`)
-  }
-}
-
-function getOriginalInfoTemplateIdKey(_subName: string, orderIndex: number): number {
-  return orderIndex
+  return errors
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -633,6 +859,85 @@ export async function getFilledSheetTemplateId(sheetId: number) {
     .query('SELECT TemplateID FROM Sheets WHERE SheetID = @SheetID')
 
   return result.recordset[0]
+}
+
+/**
+ * Resolve the latest approved template in the chain for a given source template ID.
+ * Used by clone so the new filled sheet binds to the latest approved template, not the source's TemplateID.
+ * Deterministic: if source is Approved and IsLatest=1 return it; else resolve latest in chain by ParentSheetID/IsLatest.
+ * Throws AppError 409 if 0 or >1 templates match (or cycle, or non-template).
+ */
+export async function getLatestApprovedTemplateId(sourceTemplateId: number): Promise<number> {
+  const pool = await poolPromise
+  type TemplateRow = { SheetID: number; Status: string; IsLatest: number; IsTemplate: number; ParentSheetID: number | null }
+
+  const sourceResult = await pool
+    .request()
+    .input('SheetID', sql.Int, sourceTemplateId)
+    .query<TemplateRow>(`
+      SELECT SheetID, Status, CAST(IsLatest AS INT) AS IsLatest, CAST(IsTemplate AS INT) AS IsTemplate, ParentSheetID
+      FROM Sheets
+      WHERE SheetID = @SheetID AND IsTemplate = 1
+    `)
+  const sourceRow = sourceResult.recordset[0]
+  if (!sourceRow) {
+    throw new AppError('Template not found or sheet is not a template.', 409)
+  }
+  if (sourceRow.Status === 'Approved' && sourceRow.IsLatest === 1) {
+    return sourceRow.SheetID
+  }
+
+  const chain = new Set<number>([sourceTemplateId])
+  let currentBatch: number[] = [sourceTemplateId]
+
+  while (currentBatch.length > 0) {
+    const nextBatch: number[] = []
+    for (const parentId of currentBatch) {
+      const childResult = await pool
+        .request()
+        .input('ParentSheetID', sql.Int, parentId)
+        .query<{ SheetID: number }>(`
+          SELECT SheetID FROM Sheets WHERE ParentSheetID = @ParentSheetID AND IsTemplate = 1
+        `)
+      for (const row of childResult.recordset ?? []) {
+        if (chain.has(row.SheetID)) {
+          throw new AppError(
+            'No latest approved template found in template chain (cycle detected).',
+            409
+          )
+        }
+        chain.add(row.SheetID)
+        nextBatch.push(row.SheetID)
+      }
+    }
+    currentBatch = nextBatch
+  }
+
+  if (chain.size === 0) {
+    throw new AppError('No latest approved template in chain.', 409)
+  }
+  const chainIds = Array.from(chain).join(',')
+  const latestResult = await pool
+    .request()
+    .input('ChainIds', sql.VarChar(4000), chainIds)
+    .query<{ SheetID: number }>(`
+      SELECT SheetID FROM Sheets
+      WHERE IsTemplate = 1
+        AND Status = 'Approved'
+        AND CAST(IsLatest AS INT) = 1
+        AND SheetID IN (SELECT CAST(LTRIM(RTRIM(value)) AS INT) FROM STRING_SPLIT(@ChainIds, ',') WHERE LEN(LTRIM(RTRIM(value))) > 0)
+    `)
+  const rows = latestResult.recordset ?? []
+  if (rows.length === 0) {
+    throw new AppError('No latest approved template in chain.', 409)
+  }
+  if (rows.length > 1) {
+    throw new AppError(
+      'Multiple latest approved templates in chain; cannot resolve deterministically.',
+      409
+    )
+  }
+  return rows[0].SheetID
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -1131,6 +1436,9 @@ function buildUnifiedSheetFromRow(row: RawSheetRow): UnifiedSheet {
    Update flow for filled sheets (values + change log)
    ────────────────────────────────────────────────────────────── */
 
+const FILLED_EDITABLE_STATUSES = ['Draft', 'Modified Draft', 'Rejected'] as const
+const FILLED_VERIFIABLE_STATUSES = ['Draft', 'Modified Draft'] as const
+
 export const updateFilledSheet = async (
   sheetId: number,
   input: UnifiedSheet,
@@ -1138,6 +1446,24 @@ export const updateFilledSheet = async (
   options?: { skipRevisionCreation?: boolean }
 ): Promise<{ sheetId: number }> => {
   const pool = await poolPromise
+
+  const sheetStatusResult = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<{ Status: string }>(`
+      SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 0
+    `)
+  const sheetRow = sheetStatusResult.recordset[0]
+  if (!sheetRow) {
+    throw new AppError('Filled sheet not found', 404)
+  }
+  if (!FILLED_EDITABLE_STATUSES.includes(sheetRow.Status as (typeof FILLED_EDITABLE_STATUSES)[number])) {
+    throw new AppError(
+      `Filled sheet can only be edited when status is Draft, Modified Draft, or Rejected. Current status: ${sheetRow.Status}.`,
+      409
+    )
+  }
+
   const transaction = new sql.Transaction(pool)
   let didBegin = false
   let didCommit = false
@@ -1153,6 +1479,22 @@ export const updateFilledSheet = async (
         `Cannot update values: ValueSet status is ${status ?? 'unknown'}. Only Draft can be edited.`,
         409
       )
+    }
+
+    const updateTemplateIds: number[] = []
+    const updateValues: Record<string, string> = {}
+    for (const subsheet of input.subsheets) {
+      for (const field of subsheet.fields) {
+        if (field.id != null) {
+          updateTemplateIds.push(field.id)
+          updateValues[String(field.id)] = String(field.value ?? '')
+        }
+      }
+    }
+    const updateFieldMeta = await fetchFieldMetaByInfoTemplateIds(transaction, updateTemplateIds)
+    const updateValueErrors = validateFilledValues(updateFieldMeta, updateValues)
+    if (updateValueErrors.length > 0) {
+      throw new AppError('Validation failed', 400, true, { fieldErrors: updateValueErrors })
     }
 
     const request = transaction.request()
@@ -1420,6 +1762,24 @@ export async function verifyFilledSheet(
   verifierId: number
 ) {
   const pool = await poolPromise
+
+  const statusResult = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<{ Status: string }>(`
+      SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 0
+    `)
+  const row = statusResult.recordset[0]
+  if (!row) {
+    throw new AppError('Filled sheet not found', 404)
+  }
+  if (!FILLED_VERIFIABLE_STATUSES.includes(row.Status as (typeof FILLED_VERIFIABLE_STATUSES)[number])) {
+    throw new AppError(
+      `Filled sheet can only be verified or rejected when status is Draft or Modified Draft. Current status: ${row.Status}.`,
+      409
+    )
+  }
+
   const status = action === 'verify' ? 'Verified' : 'Rejected'
 
   const userResult = await pool
@@ -1503,13 +1863,22 @@ export async function approveFilledSheet(sheetId: number, approvedById: number):
       SET Status = @Status,
           ApprovedByID = @ApprovedByID,
           ApprovedByDate = @ApprovedByDate
-      WHERE SheetID = @SheetID AND IsTemplate = 0
+      WHERE SheetID = @SheetID AND IsTemplate = 0 AND Status = 'Verified'
     `)
 
   const updatedCount = updateResult.rowsAffected[0] ?? 0
   if (updatedCount === 0) {
-    console.warn(`No filled sheet found or updated for SheetID: ${sheetId}`)
-    throw new Error('Filled sheet not found or already approved.')
+    const currentResult = await pool.request()
+      .input('SheetID', sql.Int, sheetId)
+      .query<{ Status: string }>(`SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 0`)
+    const current = currentResult.recordset[0]
+    if (!current) {
+      throw new AppError('Filled sheet not found', 404)
+    }
+    throw new AppError(
+      `Filled sheet can only be approved when status is Verified. Current status: ${current.Status}.`,
+      409
+    )
   }
 
   const creatorResult = await pool.request()

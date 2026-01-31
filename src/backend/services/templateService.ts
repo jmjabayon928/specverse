@@ -5,6 +5,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import { poolPromise, sql } from '../config/db'
+import { AppError } from '../errors/AppError'
 
 import type {
   UnifiedSheet,
@@ -329,13 +330,17 @@ async function insertSubsheetTree(
 ): Promise<void> {
   for (let i = 0; i < data.subsheets.length; i += 1) {
     const sub = data.subsheets[i]
+    const templateSubId =
+      typeof sub.originalId === 'number' && Number.isFinite(sub.originalId)
+        ? sub.originalId
+        : null
 
     const subRs = await tx
       .request()
       .input('SubName', sql.VarChar(150), nv(sub.name))
       .input('SheetID', sql.Int, sheetId)
       .input('OrderIndex', sql.Int, i)
-      .input('TemplateSubID', sql.Int, iv(sub.originalId ?? sub.id))
+      .input('TemplateSubID', sql.Int, templateSubId)
       .query<{ SubID: number }>(`
         INSERT INTO SubSheets (SubName, SheetID, OrderIndex, TemplateSubID)
         OUTPUT INSERTED.SubID
@@ -1032,12 +1037,33 @@ export async function createTemplate(
   }
 }
 
+const TEMPLATE_EDITABLE_STATUSES = ['Draft', 'Modified Draft', 'Rejected'] as const
+const TEMPLATE_VERIFIABLE_STATUSES = ['Draft', 'Modified Draft'] as const
+
 export async function updateTemplate(
   sheetId: number,
   data: UnifiedSheet,
   userId: number
 ): Promise<number> {
   const pool = await poolPromise
+
+  const statusResult = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<{ Status: string }>(`
+      SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 1
+    `)
+  const row = statusResult.recordset[0]
+  if (!row) {
+    throw new AppError('Template not found', 404)
+  }
+  if (!TEMPLATE_EDITABLE_STATUSES.includes(row.Status as (typeof TEMPLATE_EDITABLE_STATUSES)[number])) {
+    throw new AppError(
+      `Template can only be edited when status is Draft, Modified Draft, or Rejected. Current status: ${row.Status}.`,
+      409
+    )
+  }
+
   const tx = new sql.Transaction(pool)
   let didBegin = false
   let didCommit = false
@@ -1371,6 +1397,24 @@ export async function verifyTemplate(
   verifiedById: number
 ): Promise<void> {
   const pool = await poolPromise
+
+  const statusResult = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<{ Status: string }>(`
+      SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 1
+    `)
+  const row = statusResult.recordset[0]
+  if (!row) {
+    throw new AppError('Template not found', 404)
+  }
+  if (!TEMPLATE_VERIFIABLE_STATUSES.includes(row.Status as (typeof TEMPLATE_VERIFIABLE_STATUSES)[number])) {
+    throw new AppError(
+      `Template can only be verified or rejected when status is Draft or Modified Draft. Current status: ${row.Status}.`,
+      409
+    )
+  }
+
   const status = action === 'verify' ? 'Verified' : 'Rejected'
 
   const userResult = await pool
@@ -1468,12 +1512,22 @@ export async function approveTemplate(
       SET Status = @Status,
           ApprovedByID = @ApprovedByID,
           ApprovedByDate = @ApprovedByDate
-      WHERE SheetID = @SheetID
+      WHERE SheetID = @SheetID AND IsTemplate = 1 AND Status = 'Verified'
     `)
 
   if (updateResult.rowsAffected[0] === 0) {
-    // keep behavior: throw on missing
-    throw new Error('Sheet not found or already updated.')
+    const currentResult = await pool
+      .request()
+      .input('SheetID', sql.Int, sheetId)
+      .query<{ Status: string }>(`SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 1`)
+    const current = currentResult.recordset[0]
+    if (!current) {
+      throw new AppError('Template not found', 404)
+    }
+    throw new AppError(
+      `Template can only be approved when status is Verified. Current status: ${current.Status}.`,
+      409
+    )
   }
 
   const creatorResult = await pool
