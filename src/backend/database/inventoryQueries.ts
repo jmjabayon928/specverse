@@ -223,6 +223,7 @@ const listSelectColumns = `
   i.InventoryID AS inventoryId,
   ii.ItemName AS sheetName,
   i.Quantity AS quantity,
+  ii.ReorderLevel AS reorderLevel,
   w.WarehouseName AS warehouseName,
   CONVERT(varchar, i.LastUpdated, 126) AS lastUpdated,
   c.CategoryName AS categoryName,
@@ -261,16 +262,23 @@ export async function getInventoryList(): Promise<InventoryListItem[]> {
 }
 
 function mapRecordsetToListItems(recordset: Record<string, unknown>[]): InventoryListItem[] {
-  return recordset.map((row) => ({
-    inventoryId: Number(row.inventoryId),
-    sheetName: String(row.sheetName ?? ""),
-    quantity: Number(row.quantity),
-    warehouseName: String(row.warehouseName ?? ""),
-    lastUpdated: row.lastUpdated != null ? String(row.lastUpdated) : "",
-    categoryName: row.categoryName != null ? String(row.categoryName) : null,
-    supplierName: row.supplierName != null ? String(row.supplierName) : null,
-    manufacturerName: row.manufacturerName != null ? String(row.manufacturerName) : null,
-  }));
+  return recordset.map((row) => {
+    const cat = row.categoryName ?? row.CategoryName;
+    const supp = row.supplierName ?? row.SuppName;
+    const manu = row.manufacturerName ?? row.ManuName;
+    const reorder = row.reorderLevel ?? row.ReorderLevel;
+    return {
+      inventoryId: Number(row.inventoryId),
+      sheetName: String(row.sheetName ?? ""),
+      quantity: Number(row.quantity),
+      reorderLevel: reorder != null ? Number(reorder) : null,
+      warehouseName: String(row.warehouseName ?? ""),
+      lastUpdated: row.lastUpdated != null ? String(row.lastUpdated) : "",
+      categoryName: cat != null ? String(cat) : null,
+      supplierName: supp != null ? String(supp) : null,
+      manufacturerName: manu != null ? String(manu) : null,
+    };
+  });
 }
 
 export async function getInventoryListPaged(

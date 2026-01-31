@@ -17,6 +17,7 @@ export default function InventoryListTable({ inventory, onSelectItem }: Props) {
           <tr>
             <th className="border px-4 py-2 text-left">Item</th>
             <th className="border px-4 py-2 text-left">Quantity</th>
+            <th className="border px-4 py-2 text-left">Reorder Level</th>
             <th className="border px-4 py-2 text-left">Warehouse</th>
             <th className="border px-4 py-2 text-left">Category</th>
             <th className="border px-4 py-2 text-left">Supplier</th>
@@ -24,23 +25,38 @@ export default function InventoryListTable({ inventory, onSelectItem }: Props) {
           </tr>
         </thead>
         <tbody>
-          {inventory.map((item, index) => (
-            <tr
-              key={item.inventoryId ?? `fallback-${index}`}
-              className="cursor-pointer hover:bg-gray-50 transition"
-              onClick={() => onSelectItem(item.inventoryId)}
-            >
-              <td className="border px-4 py-2">{item.sheetName}</td>
-              <td className="border px-4 py-2">{item.quantity}</td>
-              <td className="border px-4 py-2">{item.warehouseName}</td>
-              <td className="border px-4 py-2">{item.categoryName ?? "—"}</td>
-              <td className="border px-4 py-2">{item.supplierName ?? "—"}</td>
-              <td className="border px-4 py-2">{item.manufacturerName ?? "—"}</td>
-            </tr>
-          ))}
+          {inventory.map((item, index) => {
+            const isLowStock =
+              item.reorderLevel != null &&
+              typeof item.quantity === "number" &&
+              item.quantity < item.reorderLevel;
+            return (
+              <tr
+                key={item.inventoryId ?? `fallback-${index}`}
+                className="cursor-pointer hover:bg-gray-50 transition"
+                onClick={() => onSelectItem(item.inventoryId)}
+              >
+                <td className="border px-4 py-2">{item.sheetName}</td>
+                <td
+                  className={
+                    isLowStock ? "border px-4 py-2 text-red-600" : "border px-4 py-2"
+                  }
+                >
+                  {item.quantity}
+                </td>
+                <td className="border px-4 py-2">
+                  {item.reorderLevel != null ? item.reorderLevel : "—"}
+                </td>
+                <td className="border px-4 py-2">{item.warehouseName}</td>
+                <td className="border px-4 py-2">{item.categoryName ?? "—"}</td>
+                <td className="border px-4 py-2">{item.supplierName ?? "—"}</td>
+                <td className="border px-4 py-2">{item.manufacturerName ?? "—"}</td>
+              </tr>
+            );
+          })}
           {inventory.length === 0 && (
             <tr>
-              <td colSpan={6} className="border px-4 py-2 text-center text-gray-500">
+              <td colSpan={7} className="border px-4 py-2 text-center text-gray-500">
                 No inventory items found.
               </td>
             </tr>

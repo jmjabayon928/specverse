@@ -88,6 +88,7 @@ export interface InventoryListItem {
   categoryName?: string | null
   supplierName?: string | null
   manufacturerName?: string | null
+  reorderLevel?: number | null
 }
 
 // Envelope for paginated inventory list response.
