@@ -8,21 +8,23 @@ import InventoryTabLink from "@/components/inventory/InventoryTabLink";
 import InventoryTabContent from "@/components/inventory/InventoryTabContent";
 
 interface InventoryPageProps {
-  params: { id: string };
-  searchParams: { tab?: string };
+  params: Promise<{ id?: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }
 
 export default async function InventoryDetailPage(
   { params, searchParams }: Readonly<InventoryPageProps>
 ) {
-  const itemId = Number(params.id ?? "0");
-  if (isNaN(itemId)) return notFound();
+  const { id } = await params;
+  const itemId = Number(id ?? "0");
+  if (Number.isNaN(itemId)) return notFound();
 
   const item = await getInventoryItemById(itemId);
   if (!item) return notFound();
 
   const { categories, suppliers, manufacturers } = await fetchReferenceOptions();
-  const activeTab = searchParams?.tab ?? "overview";
+  const resolvedSearchParams = await searchParams;
+  const activeTab = resolvedSearchParams.tab ?? "overview";
 
   return (
     <div className="p-4">

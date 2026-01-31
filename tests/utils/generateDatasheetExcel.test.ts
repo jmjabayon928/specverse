@@ -3,6 +3,10 @@ import ExcelJS from 'exceljs'
 import { generateDatasheetExcel } from '../../src/utils/generateDatasheetExcel'
 import type { UnifiedSheet } from '../../src/domain/datasheets/sheetTypes'
 
+jest.mock('../../src/backend/services/sheetLogsService', () => ({
+  fetchSheetLogsMerged: jest.fn().mockResolvedValue([]),
+}))
+
 describe('generateDatasheetExcel USC conversion', () => {
   it('converts SI values to USC units when uom=USC', async () => {
     const sheet: UnifiedSheet = {

@@ -2,10 +2,12 @@ import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import express from 'express'
 import cookieParser from 'cookie-parser'
+import type { Request, Response, NextFunction } from 'express'
+import { AppError } from '../../src/backend/errors/AppError'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
-globalThis.setImmediate ??= ((fn: (...args: any[]) => void, ...args: any[]) =>
-  setTimeout(fn, 0, ...args)) as any
+globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
+  setTimeout(fn, 0, ...args)) as unknown as typeof setImmediate
 
 function createAuthCookie(permissions: string[]): string {
   const token = jwt.sign(
@@ -25,6 +27,27 @@ function createAuthCookie(permissions: string[]): string {
 }
 
 process.env.JWT_SECRET ??= 'secret'
+
+const mockAuthUser = {
+  userId: 1,
+  roleId: 1,
+  role: 'Admin',
+  permissions: ['DATASHEET_VIEW'] as string[],
+}
+
+jest.mock('../../src/backend/middleware/authMiddleware', () => ({
+  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+    if (!token) {
+      next(new AppError('Unauthorized - No token', 401))
+      return
+    }
+    req.user = { ...mockAuthUser }
+    next()
+  },
+  requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+  optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
+}))
 
 jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),

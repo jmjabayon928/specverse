@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import SheetHeaderBar from "@/components/datasheets/SheetHeaderBar";
+import ContextSelector from "@/components/datasheets/filled/ContextSelector";
 import FilledSheetActions from "@/components/datasheets/filled/FilledSheetActions";
 import FilledSheetViewer from "../FilledSheetViewer";
 import { translations as labelTranslations } from "@/constants/translations";
@@ -176,15 +177,17 @@ const FilledSheetPageClient: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Viewer */}
-      <FilledSheetViewer
-        sheet={translatedSheet}
-        translations={translations}
-        language={lang}
-        unitSystem={unitSystem}
-        onAddNote={handleAddNote}
-        onAddAttachment={handleAddAttachment}
-      />
+      {/* Context selector (Requirement | Offered | As-Built) + viewer */}
+      <ContextSelector sheetId={sheetId} onRequirementView={() => {}}>
+        <FilledSheetViewer
+          sheet={translatedSheet}
+          translations={translations}
+          language={lang}
+          unitSystem={unitSystem}
+          onAddNote={handleAddNote}
+          onAddAttachment={handleAddAttachment}
+        />
+      </ContextSelector>
     </div>
   );
 };

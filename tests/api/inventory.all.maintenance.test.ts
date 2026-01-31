@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import express from "express";
 import cookieParser from "cookie-parser";
 import { errorHandler } from "../../src/backend/middleware/errorHandler";
+import { AppError } from "../../src/backend/errors/AppError";
 
 process.env.JWT_SECRET ??= "secret";
 
@@ -22,6 +23,26 @@ const mockGetAllInventoryMaintenanceLogs =
 
 jest.mock("../../src/backend/database/permissionQueries", () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),
+}));
+
+const mockAuthUser = {
+  userId: 1,
+  roleId: 1,
+  role: "Admin",
+  permissions: ["INVENTORY_MAINTENANCE_VIEW"] as string[],
+};
+
+jest.mock("../../src/backend/middleware/authMiddleware", () => ({
+  verifyToken: (req: express.Request, _res: express.Response, next: express.NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      next(new AppError("Unauthorized - No token", 401));
+      return;
+    }
+    req.user = { ...mockAuthUser };
+    next();
+  },
+  requirePermission: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
 }));
 
 function createAuthCookie(): string {

@@ -2,10 +2,12 @@ import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import express from 'express'
 import cookieParser from 'cookie-parser'
+import type { Request, Response, NextFunction } from 'express'
+import { AppError } from '../../src/backend/errors/AppError'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
-globalThis.setImmediate ??= ((fn: (...args: any[]) => void, ...args: any[]) =>
-  setTimeout(fn, 0, ...args)) as any
+globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
+  setTimeout(fn, 0, ...args)) as unknown as typeof setImmediate
 
 function createAuthCookie(permissions: string[]): string {
   const token = jwt.sign(
@@ -26,6 +28,27 @@ function createAuthCookie(permissions: string[]): string {
 
 process.env.JWT_SECRET ??= 'secret'
 
+const mockAuthUser = {
+  userId: 1,
+  roleId: 1,
+  role: 'Admin',
+  permissions: ['DATASHEET_EDIT'] as string[],
+}
+
+jest.mock('../../src/backend/middleware/authMiddleware', () => ({
+  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+    if (!token) {
+      next(new AppError('Unauthorized - No token', 401))
+      return
+    }
+    req.user = { ...mockAuthUser }
+    next()
+  },
+  requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+  optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
+}))
+
 jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),
 }))
@@ -33,7 +56,7 @@ jest.mock('../../src/backend/database/permissionQueries', () => ({
 const insertAuditLogMock = jest.fn().mockResolvedValue(undefined)
 
 jest.mock('../../src/backend/database/auditQueries', () => ({
-  insertAuditLog: (...args: any[]) => insertAuditLogMock(...args),
+  insertAuditLog: (...args: unknown[]) => insertAuditLogMock(...args),
   getAuditLogsForRecord: jest.fn().mockResolvedValue([]),
 }))
 
@@ -42,37 +65,36 @@ jest.mock('../../src/backend/controllers/filledSheetController', () => ({
   getAllFilled: (_req: unknown, res: { json: (body: unknown) => void }) => res.json([]),
   getReferenceOptions: (_req: unknown, res: { json: (body: unknown) => void }) => res.json({}),
   getFilledSheetById: (_req: unknown, res: { json: (body: unknown) => void }) => res.json({}),
-  createFilledSheetHandler: (_req: unknown, res: { status: (c: number) => any; json: (b: any) => void }) =>
+  createFilledSheetHandler: (_req: unknown, res: { status: (c: number) => { json: (b: unknown) => void }; json: (b: unknown) => void }) =>
     res.status(201).json({ sheetId: 1 }),
   updateFilledSheetHandler: (_req: unknown, res: { json: (body: unknown) => void }) => res.json({ ok: true }),
   verifyFilledSheetHandler: (_req: unknown, res: { json: (body: unknown) => void }) => res.json({ ok: true }),
   approveFilledSheetHandler: (_req: unknown, res: { json: (body: unknown) => void }) => res.json({ ok: true }),
   cloneFilledSheetHandler: (_req: unknown, res: { json: (body: unknown) => void }) => res.json({ sheetId: 2 }),
-  uploadFilledSheetAttachmentHandler: (_req: unknown, res: { status: (c: number) => any; json: (b: any) => void }) =>
+  uploadFilledSheetAttachmentHandler: (_req: unknown, res: { status: (c: number) => { json: (b: unknown) => void }; json: (b: unknown) => void }) =>
     res.status(201).json({}),
-  listFilledSheetAttachmentsHandler: (_req: unknown, res: { json: (b: any) => void }) => res.json([]),
-  deleteFilledSheetAttachmentHandler: (_req: unknown, res: { status: (c: number) => any; send: () => void }) =>
+  listFilledSheetAttachmentsHandler: (_req: unknown, res: { json: (b: unknown) => void }) => res.json([]),
+  deleteFilledSheetAttachmentHandler: (_req: unknown, res: { status: (c: number) => { send: () => void }; send: () => void }) =>
     res.status(204).send(),
-  listFilledSheetNotesHandler: (_req: unknown, res: { json: (b: any) => void }) => res.json([]),
-  createFilledSheetNoteHandler: (_req: unknown, res: { status: (c: number) => any; json: (b: any) => void }) =>
+  listFilledSheetNotesHandler: (_req: unknown, res: { json: (b: unknown) => void }) => res.json([]),
+  createFilledSheetNoteHandler: (_req: unknown, res: { status: (c: number) => { json: (b: unknown) => void }; json: (b: unknown) => void }) =>
     res.status(201).json({}),
-  updateFilledSheetNoteHandler: (_req: unknown, res: { json: (b: any) => void }) => res.json({}),
-  deleteFilledSheetNoteHandler: (_req: unknown, res: { status: (c: number) => any; send: () => void }) =>
+  updateFilledSheetNoteHandler: (_req: unknown, res: { json: (b: unknown) => void }) => res.json({}),
+  deleteFilledSheetNoteHandler: (_req: unknown, res: { status: (c: number) => { send: () => void }; send: () => void }) =>
     res.status(204).send(),
-  exportFilledSheetPDF: (_req: unknown, res: { status: (c: number) => any; send: (b: any) => void }) =>
+  exportFilledSheetPDF: (_req: unknown, res: { status: (c: number) => { send: (b: unknown) => void }; send: (b: unknown) => void }) =>
     res.status(200).send('pdf'),
-  exportFilledSheetExcel: (_req: unknown, res: { status: (c: number) => any; send: (b: any) => void }) =>
+  exportFilledSheetExcel: (_req: unknown, res: { status: (c: number) => { send: (b: unknown) => void }; send: (b: unknown) => void }) =>
     res.status(200).send('xlsx'),
-  checkEquipmentTag: (_req: unknown, res: { json: (b: any) => void }) => res.json({ ok: true }),
+  checkEquipmentTag: (_req: unknown, res: { json: (b: unknown) => void }) => res.json({ ok: true }),
 }))
 
 jest.mock('multer', () => {
-  const multer = (() => ({
+  const m = () => ({
     single: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-  })) as any
-
-  multer.diskStorage = () => ({})
-  return multer
+  })
+  ;(m as unknown as { diskStorage: () => Record<string, unknown> }).diskStorage = () => ({})
+  return m
 })
 
 function buildTestApp() {

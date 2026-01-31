@@ -1,7 +1,38 @@
 // tests/api/datasheets.filled.test.ts
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
+import type { Request, Response, NextFunction } from 'express'
+import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
+
+// Mock auth so no real DB (permissionQueries) runs.
+const mockAuthUser = {
+  userId: 1,
+  roleId: 1,
+  role: 'Admin',
+  permissions: [
+    'DATASHEET_VIEW',
+    'DATASHEET_EDIT',
+    'DATASHEET_VERIFY',
+    'DATASHEET_APPROVE',
+    'DATASHEET_ATTACHMENT_UPLOAD',
+    'DATASHEET_NOTE_EDIT',
+  ] as string[],
+}
+
+jest.mock('../../src/backend/middleware/authMiddleware', () => ({
+  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+    if (!token) {
+      next(new AppError('Unauthorized - No token', 401))
+      return
+    }
+    req.user = { ...mockAuthUser }
+    next()
+  },
+  requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+  optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
+}))
 
 // Mock filled sheet list so tests pass without Phase 1 DB schema (Disciplines/DatasheetSubtypes).
 jest.mock('../../src/backend/services/filledSheetService', () => {

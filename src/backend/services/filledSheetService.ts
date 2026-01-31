@@ -3,8 +3,15 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { poolPromise, sql } from '../config/db'
 import { insertAuditLog } from '../database/auditQueries'
+import {
+  getValueSetId,
+  ensureRequirementValueSet,
+  ensureRequirementValueSetInTransaction,
+  getValueSetStatus,
+} from '../database/valueSetQueries'
 import { notifyUsers } from '../utils/notifyUsers'
 import { createRevision } from '../database/sheetRevisionQueries'
+import { AppError } from '../errors/AppError'
 import type {
   InfoField,
   SheetStatus,
@@ -177,7 +184,8 @@ export async function createFilledSheet(
     }
 
     const sheetId = await insertSheet(tx, dataWithDiscipline, context.userId, templateIdNum)
-    await cloneSubsheetsAndFields(tx, sheetId, dataWithDiscipline, fieldMap)
+    const valueSetId = await ensureRequirementValueSetInTransaction(tx, sheetId, context.userId)
+    await cloneSubsheetsAndFields(tx, sheetId, dataWithDiscipline, fieldMap, valueSetId)
 
     await writeAuditAndNotify(sheetId, dataWithDiscipline, context)
 
@@ -409,7 +417,8 @@ async function cloneSubsheetsAndFields(
   tx: sql.Transaction,
   sheetId: number,
   data: UnifiedSheet & { fieldValues: Record<string, string> },
-  fieldMap: Record<string, Record<number, { required: boolean; uom: string | null; label?: string | null }>>
+  fieldMap: Record<string, Record<number, { required: boolean; uom: string | null; label?: string | null }>>,
+  valueSetId: number
 ): Promise<void> {
   for (let i = 0; i < data.subsheets.length; i += 1) {
     const subsheet = data.subsheets[i]
@@ -444,7 +453,8 @@ async function cloneSubsheetsAndFields(
 
       const raw = data.fieldValues[String(originalId)]
       if (!isBlank(raw)) {
-        await insertInfoValue(tx, newInfoId, sheetId, String(raw))
+        const uom = enrichedField.uom ?? ''
+        await insertInfoValue(tx, newInfoId, sheetId, String(raw), valueSetId, uom)
       }
     }
   }
@@ -520,8 +530,23 @@ async function insertInfoValue(
   tx: sql.Transaction,
   infoTemplateId: number,
   sheetId: number,
-  value: string
+  value: string,
+  valueSetId?: number | null,
+  uom?: string | null
 ): Promise<void> {
+  if (valueSetId != null) {
+    await tx.request()
+      .input('InfoTemplateID', sql.Int, infoTemplateId)
+      .input('SheetID', sql.Int, sheetId)
+      .input('InfoValue', sql.VarChar(sql.MAX), value)
+      .input('ValueSetID', sql.Int, valueSetId)
+      .input('UOM', sql.NVarChar(50), uom ?? '')
+      .query(`
+        INSERT INTO InformationValues (InfoTemplateID, SheetID, InfoValue, ValueSetID, UOM)
+        VALUES (@InfoTemplateID, @SheetID, @InfoValue, @ValueSetID, @UOM);
+      `)
+    return
+  }
   await tx.request()
     .input('InfoTemplateID', sql.Int, infoTemplateId)
     .input('SheetID', sql.Int, sheetId)
@@ -656,10 +681,45 @@ export async function getFilledSheetDetailsById(
 
   const datasheet: UnifiedSheet = buildUnifiedSheetFromRow(row)
 
-  const templatesResult = await pool.request()
-    .input('SheetID', sql.Int, sheetId)
-    .input('TemplateID', sql.Int, row.TemplateID)
-    .query(`
+  const requirementValueSetId = await getValueSetId(sheetId, 'Requirement', null)
+  const templatesResult =
+    requirementValueSetId != null
+      ? await pool.request()
+          .input('SheetID', sql.Int, sheetId)
+          .input('TemplateID', sql.Int, row.TemplateID)
+          .input('ValueSetID', sql.Int, requirementValueSetId)
+          .query(`
+      SELECT 
+        sub.SubID,
+        sub.SubName,
+        t.InfoTemplateID,
+        t.Label,
+        t.InfoType,
+        t.UOM,
+        t.Required,
+        t.OrderIndex AS SortOrder,
+        ivTop.InfoValue AS Value,
+        COALESCE(ivTop.UOM, t.UOM) AS UOM,
+        ts.SubID AS TemplateSubID,
+        t.TemplateInfoTemplateID AS TemplateInfoTemplateID
+      FROM Subsheets sub
+      INNER JOIN InformationTemplates t ON sub.SubID = t.SubID
+      OUTER APPLY (
+        SELECT TOP 1 iv.InfoValue, iv.UOM
+        FROM InformationValues iv
+        WHERE iv.InfoTemplateID = t.InfoTemplateID
+          AND (iv.ValueSetID = @ValueSetID OR (iv.ValueSetID IS NULL AND iv.SheetID = @SheetID))
+        ORDER BY CASE WHEN iv.ValueSetID IS NOT NULL THEN 0 ELSE 1 END
+      ) ivTop
+      LEFT JOIN Subsheets ts ON ts.SheetID = @TemplateID AND ts.SubName = sub.SubName
+      LEFT JOIN InformationTemplates tt ON tt.SubID = ts.SubID AND tt.OrderIndex = t.OrderIndex
+      WHERE sub.SheetID = @SheetID
+      ORDER BY sub.OrderIndex, t.OrderIndex;
+    `)
+      : await pool.request()
+          .input('SheetID', sql.Int, sheetId)
+          .input('TemplateID', sql.Int, row.TemplateID)
+          .query(`
       SELECT 
         sub.SubID,
         sub.SubName,
@@ -1073,6 +1133,15 @@ export const updateFilledSheet = async (
   try {
     await transaction.begin()
 
+    const valueSetId = await ensureRequirementValueSet(sheetId, updatedBy)
+    const status = await getValueSetStatus(valueSetId)
+    if (status !== 'Draft') {
+      throw new AppError(
+        `Cannot update values: ValueSet status is ${status ?? 'unknown'}. Only Draft can be edited.`,
+        409
+      )
+    }
+
     const request = transaction.request()
 
     request.input('SheetID', sheetId)
@@ -1146,50 +1215,123 @@ export const updateFilledSheet = async (
 
     const oldValuesResult = await transaction.request()
       .input('SheetID', sql.Int, sheetId)
+      .input('ValueSetID', sql.Int, valueSetId)
       .query(`
-        SELECT IV.InfoTemplateID, IV.InfoValue, IT.Label, IT.UOM
+        SELECT IV.InfoTemplateID, IV.InfoValue, IV.ValueSetID, IT.Label, IT.UOM
         FROM InformationValues IV
         JOIN InformationTemplates IT ON IV.InfoTemplateID = IT.InfoTemplateID
-        WHERE SheetID = @SheetID
+        WHERE IV.SheetID = @SheetID AND (IV.ValueSetID = @ValueSetID OR IV.ValueSetID IS NULL)
       `)
 
     const oldValuesMap = new Map<number, { value: string; label: string; uom: string | null }>()
-
-    for (const row of oldValuesResult.recordset) {
-      oldValuesMap.set(row.InfoTemplateID, {
-        value: row.InfoValue,
-        label: row.Label,
-        uom: row.UOM,
-      })
+    const rowsWithValueSetFirst = [...oldValuesResult.recordset].sort(
+      (a, b) => (a.ValueSetID != null ? 0 : 1) - (b.ValueSetID != null ? 0 : 1)
+    )
+    for (const row of rowsWithValueSetFirst) {
+      if (!oldValuesMap.has(row.InfoTemplateID)) {
+        oldValuesMap.set(row.InfoTemplateID, {
+          value: row.InfoValue,
+          label: row.Label,
+          uom: row.UOM,
+        })
+      }
     }
 
-    await transaction.request()
+    const existingRowsResult = await transaction.request()
       .input('SheetID', sql.Int, sheetId)
-      .query(`
-        DELETE FROM InformationValues WHERE SheetID = @SheetID
+      .input('ValueSetID', sql.Int, valueSetId)
+      .query<{ InfoTemplateID: number; ValueSetID: number | null }>(`
+        SELECT InfoTemplateID, ValueSetID
+        FROM InformationValues
+        WHERE SheetID = @SheetID AND (ValueSetID = @ValueSetID OR ValueSetID IS NULL)
       `)
 
-    const insertedTemplateIds = new Set<number>()
+    const existingRowKind = new Map<number, 'valueSet' | 'legacy'>()
+    for (const row of existingRowsResult.recordset) {
+      if (row.ValueSetID != null && row.ValueSetID === valueSetId) {
+        existingRowKind.set(row.InfoTemplateID, 'valueSet')
+      }
+    }
+    for (const row of existingRowsResult.recordset) {
+      if (row.ValueSetID == null && !existingRowKind.has(row.InfoTemplateID)) {
+        existingRowKind.set(row.InfoTemplateID, 'legacy')
+      }
+    }
+
+    const templateIds = new Set<number>()
+    for (const subsheet of input.subsheets) {
+      for (const field of subsheet.fields) {
+        if (field.id != null) templateIds.add(field.id)
+      }
+    }
+    const templateIdsToUom = new Map<number, string | null>()
+    if (templateIds.size > 0) {
+      const templateIdsArr = Array.from(templateIds)
+      const uomReq = transaction.request()
+      for (let i = 0; i < templateIdsArr.length; i += 1) {
+        uomReq.input(`p${i}`, sql.Int, templateIdsArr[i])
+      }
+      const uomRes = await uomReq.query<{ InfoTemplateID: number; UOM: string | null }>(`
+        SELECT InfoTemplateID, UOM FROM InformationTemplates
+        WHERE InfoTemplateID IN (${templateIdsArr.map((_, i) => `@p${i}`).join(',')})
+      `)
+      for (const r of uomRes.recordset) {
+        templateIdsToUom.set(r.InfoTemplateID, r.UOM ?? null)
+      }
+    }
+
+    const processedTemplateIds = new Set<number>()
 
     for (const subsheet of input.subsheets) {
       for (const field of subsheet.fields) {
         const templateId = field.id
 
-        if (!templateId || insertedTemplateIds.has(templateId)) {
+        if (!templateId || processedTemplateIds.has(templateId)) {
           continue
         }
 
-        insertedTemplateIds.add(templateId)
+        processedTemplateIds.add(templateId)
         const newValue = field.value ?? ''
+        const uomFromTemplate = templateIdsToUom.get(templateId) ?? null
+        const uomStr = uomFromTemplate ?? ''
 
-        await transaction.request()
-          .input('InfoTemplateID', sql.Int, templateId)
-          .input('SheetID', sql.Int, sheetId)
-          .input('InfoValue', sql.VarChar(sql.MAX), newValue)
-          .query(`
-            INSERT INTO InformationValues (InfoTemplateID, SheetID, InfoValue)
-            VALUES (@InfoTemplateID, @SheetID, @InfoValue)
-          `)
+        const kind = existingRowKind.get(templateId)
+
+        if (kind === 'valueSet') {
+          await transaction.request()
+            .input('ValueSetID', sql.Int, valueSetId)
+            .input('InfoTemplateID', sql.Int, templateId)
+            .input('InfoValue', sql.VarChar(sql.MAX), newValue)
+            .input('UOM', sql.NVarChar(50), uomStr)
+            .query(`
+              UPDATE InformationValues
+              SET InfoValue = @InfoValue, UOM = @UOM
+              WHERE ValueSetID = @ValueSetID AND InfoTemplateID = @InfoTemplateID
+            `)
+        } else if (kind === 'legacy') {
+          await transaction.request()
+            .input('SheetID', sql.Int, sheetId)
+            .input('InfoTemplateID', sql.Int, templateId)
+            .input('InfoValue', sql.VarChar(sql.MAX), newValue)
+            .input('UOM', sql.NVarChar(50), uomStr)
+            .input('ValueSetID', sql.Int, valueSetId)
+            .query(`
+              UPDATE InformationValues
+              SET InfoValue = @InfoValue, UOM = @UOM, ValueSetID = @ValueSetID
+              WHERE SheetID = @SheetID AND InfoTemplateID = @InfoTemplateID AND ValueSetID IS NULL
+            `)
+        } else {
+          await transaction.request()
+            .input('InfoTemplateID', sql.Int, templateId)
+            .input('SheetID', sql.Int, sheetId)
+            .input('InfoValue', sql.VarChar(sql.MAX), newValue)
+            .input('ValueSetID', sql.Int, valueSetId)
+            .input('UOM', sql.NVarChar(50), uomStr)
+            .query(`
+              INSERT INTO InformationValues (InfoTemplateID, SheetID, InfoValue, ValueSetID, UOM)
+              VALUES (@InfoTemplateID, @SheetID, @InfoValue, @ValueSetID, @UOM)
+            `)
+        }
 
         const previous = oldValuesMap.get(templateId)
         if (previous && previous.value !== newValue) {

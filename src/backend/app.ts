@@ -23,7 +23,7 @@ import inventoryRoutes from './routes/inventoryRoutes'
 import estimationRoutes from './routes/estimationRoutes'
 import templateRoutes from './routes/templateRoutes'
 import filledSheetRoutes from './routes/filledSheetRoutes'
-import sheetLogsRoutes from './routes/sheetLogsRoutes'
+import sheetRoutes from './routes/sheetRoutes'
 import projectsRoutes from './routes/projectsRoutes'
 import authRoutes from './routes/authRoutes'
 import notificationRoutes from './routes/notificationRoutes'
@@ -69,7 +69,7 @@ app.use('/api/backend/inventory', inventoryRoutes)
 app.use('/api/backend/estimation', estimationRoutes)
 app.use('/api/backend/templates', templateRoutes)
 app.use('/api/backend/filledsheets', filledSheetRoutes)
-app.use('/api/backend/sheets', sheetLogsRoutes)
+app.use('/api/backend/sheets', sheetRoutes)
 app.use('/api/backend/projects', projectsRoutes)
 app.use('/api/languages', languageRoutes)
 app.use('/api/backend/auth', authRoutes)

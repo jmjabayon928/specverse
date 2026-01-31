@@ -76,9 +76,23 @@ export default function FilledSheetActions(props: Readonly<FilledSheetActionsPro
     status === approvedStatus && hasPermission(user, 'DATASHEET_EXPORT')
 
   const canViewRevisions = hasPermission(user, 'DATASHEET_VIEW')
+  const canViewCompare = hasPermission(user, 'DATASHEET_VIEW')
 
   return (
     <div className={`flex flex-wrap items-center ${gapClass}`}>
+      {canViewCompare && (
+        <IconTooltip label='Compare Requirement / Offered / As-Built'>
+          <button
+            type='button'
+            onClick={() => router.push(`/datasheets/filled/${sheet.sheetId}/compare`)}
+            title='Compare'
+          >
+            <span className='px-2 py-1 text-sm text-blue-600 hover:text-blue-800 border border-blue-200 rounded'>
+              Compare
+            </span>
+          </button>
+        </IconTooltip>
+      )}
       {canViewRevisions && (
         <IconTooltip label='View revision history'>
           <button
