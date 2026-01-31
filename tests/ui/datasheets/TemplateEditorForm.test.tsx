@@ -138,4 +138,53 @@ describe('TemplateEditorForm', () => {
     const parsedBody = JSON.parse(options.body as string)
     expect(parsedBody.sheetName).toBe('Updated Template Name')
   })
+
+  it('does not show subsheet value-required error when subsheet has required field with no value', async () => {
+    const user = userEvent.setup()
+    const sheet = makeBasicUnifiedSheet()
+    // Simulate template edit payload: required field with no value (like getTemplateDetailsById)
+    const sheetWithRequiredNoValue = {
+      ...sheet,
+      subsheets: [
+        {
+          ...sheet.subsheets[0],
+          fields: [
+            {
+              ...sheet.subsheets[0].fields[0],
+              required: true,
+              value: undefined as string | number | null | undefined,
+            },
+          ],
+        },
+      ],
+    }
+
+    render(
+      <TemplateEditorForm
+        defaultValues={sheetWithRequiredNoValue}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+        session={null as never}
+      />
+    )
+
+    await waitForReferenceOptionsLoaded(screen)
+
+    const button = screen.getByRole('button', { name: /save changes/i })
+    await user.click(button)
+
+    await waitFor(() => {
+      const putCall = (globalThis.fetch as jest.Mock).mock.calls.find(
+        (call: [string, RequestInit]) =>
+          call[0] === `/api/backend/templates/${sheet.sheetId}` && call[1]?.method === 'PUT'
+      )
+      expect(putCall).toBeDefined()
+    })
+
+    expect(screen.queryByText(/Subsheet #1 - Template #1 - value/)).not.toBeInTheDocument()
+  })
 })

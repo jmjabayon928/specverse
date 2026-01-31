@@ -11,11 +11,12 @@ export const metadata: Metadata = {
 };
 
 interface PageProps {
-  readonly params: Readonly<{ id: string }>;
+  readonly params: Promise<Readonly<{ id: string }>>;
 }
 
 export default async function FilledApprovePage({ params }: Readonly<PageProps>) {
-  const sheetId = parseInt(params.id ?? "0", 10);
+  const { id } = await params;
+  const sheetId = parseInt(id ?? "0", 10);
   if (!sheetId || isNaN(sheetId)) return notFound();
 
   const sessionUser = await requireAuth();

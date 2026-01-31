@@ -1035,7 +1035,7 @@ export async function updateTemplate(
           PID = @PID, InstallDwg = @InstallDwg, CodeStd = @CodeStd,
           CategoryID = @CategoryID, ClientID = @ClientID, ProjectID = @ProjectID,
           DisciplineID = @DisciplineID, SubtypeID = @SubtypeID,
-          ModifiedByID = @ModifiedByID, ModifiedDate = SYSDATETIME()
+          ModifiedByID = @ModifiedByID, ModifiedByDate = SYSDATETIME()
       WHERE SheetID = @SheetID AND IsTemplate = 1
     `)
 

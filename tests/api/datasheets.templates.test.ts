@@ -33,11 +33,21 @@ jest.mock('../../src/backend/database/permissionQueries', () => ({
 }))
 
 // Mock template service so suite is fully deterministic (no DB). List/reference + create/update/get/verify.
+// templateStore (inside mock) allows PUT test to simulate persistence: updateTemplate merges into store, getTemplateDetailsById returns it.
 jest.mock('../../src/backend/services/templateService', () => {
   const actual =
     jest.requireActual<typeof import('../../src/backend/services/templateService')>(
       '../../src/backend/services/templateService'
     )
+  const templateStore: Record<number, Record<string, unknown>> = {}
+  const defaultDatasheet = (templateId: number): Record<string, unknown> => ({
+    sheetId: templateId,
+    sheetName: 'Original Template Name',
+    disciplineId: 1,
+    disciplineName: 'PIPING',
+    subtypeId: null,
+    subtypeName: null,
+  })
   return {
     ...actual,
     fetchAllTemplates: jest.fn().mockResolvedValue([]),
@@ -53,19 +63,25 @@ jest.mock('../../src/backend/services/templateService', () => {
       ],
     }),
     createTemplate: jest.fn().mockResolvedValue(1),
-    updateTemplate: jest.fn().mockImplementation((sheetId: number) => Promise.resolve(sheetId)),
-    getTemplateDetailsById: jest.fn().mockImplementation((templateId: number) =>
-      Promise.resolve({
-        datasheet: {
-          sheetId: templateId,
-          disciplineId: 1,
-          disciplineName: 'PIPING',
-          subtypeId: null,
-          subtypeName: null,
-        },
-        translations: null,
-      })
+    updateTemplate: jest.fn().mockImplementation(
+      (sheetId: number, data: Record<string, unknown>, userId: number) => {
+        const existing = templateStore[sheetId] ?? defaultDatasheet(sheetId)
+        templateStore[sheetId] = {
+          ...existing,
+          ...data,
+          modifiedById: userId,
+          modifiedByDate: new Date().toISOString(),
+        }
+        return Promise.resolve(sheetId)
+      }
     ),
+    getTemplateDetailsById: jest.fn().mockImplementation((templateId: number) => {
+      const stored = templateStore[templateId]
+      const datasheet = stored
+        ? { ...defaultDatasheet(templateId), ...stored }
+        : defaultDatasheet(templateId)
+      return Promise.resolve({ datasheet, translations: null })
+    }),
     verifyTemplate: jest.fn().mockResolvedValue(undefined),
   }
 })
@@ -520,6 +536,36 @@ describe('Templates API', () => {
       .send(payloadWithoutDiscipline)
 
     expect(res.statusCode).toBe(400)
+  })
+
+  it('PUT /api/backend/templates/:id returns 200 and sheetId when update succeeds', async () => {
+    const templateId = 1045
+    const getRes1 = await request(app)
+      .get(`/api/backend/templates/${templateId}`)
+      .set('Cookie', [authCookie])
+
+    expect(getRes1.statusCode).toBe(200)
+    const basePayload = getRes1.body.datasheet as Record<string, unknown>
+    const updatedSheetName = `${String(basePayload.sheetName ?? '')} (updated)`
+    const putPayload = { ...basePayload, sheetName: updatedSheetName }
+
+    const putRes = await request(app)
+      .put(`/api/backend/templates/${templateId}`)
+      .set('Cookie', [authCookie])
+      .send(putPayload)
+
+    expect(putRes.statusCode).toBe(200)
+    expect(putRes.body).toMatchObject({ sheetId: templateId })
+
+    const getRes2 = await request(app)
+      .get(`/api/backend/templates/${templateId}`)
+      .set('Cookie', [authCookie])
+
+    expect(getRes2.statusCode).toBe(200)
+    expect(getRes2.body.datasheet).toMatchObject({ sheetName: updatedSheetName })
+    if (getRes2.body.datasheet?.modifiedById != null) {
+      expect(getRes2.body.datasheet.modifiedById).toBe(mockAuthUser.userId)
+    }
   })
 
   it('PUT /api/backend/templates/:id should reject invalid id or body', async () => {

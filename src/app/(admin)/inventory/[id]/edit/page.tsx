@@ -4,13 +4,12 @@ import { fetchReferenceOptions } from '@/backend/database/ReferenceQueries';
 import InventoryFormClient from '@/components/inventory/InventoryFormClient';
 
 interface InventoryEditPageProps {
-  params: {
-    id: string;
-  };
+  params: Promise<{ id: string }>;
 }
 
 export default async function InventoryEditPage({ params }: Readonly<InventoryEditPageProps>) {
-  const itemId = parseInt(params.id);
+  const { id } = await params;
+  const itemId = parseInt(id);
   if (isNaN(itemId)) return notFound();
 
   const item = await getInventoryItemById(itemId);

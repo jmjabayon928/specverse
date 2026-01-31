@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ZodError } from 'zod'
-import { unifiedSheetSchema } from '@/validation/sheetSchema'
+import { templateEditMetadataSchema } from '@/validation/sheetSchema'
 import { renderInput, renderSelect, renderDate } from '@/components/ui/form/FormHelper'
 import SubsheetBuilder from '../../create/SubsheetBuilder'
 import type { UnifiedSheet, UnifiedSubsheet } from '@/domain/datasheets/sheetTypes'
@@ -60,30 +60,6 @@ const flattenErrors = (error: ZodError): Record<string, string[]> => {
   }
 
   return flattened
-}
-
-const buildManualErrors = (validated: UnifiedSheet): Record<string, string[]> => {
-  const manualErrors: Record<string, string[]> = {}
-
-  if (validated.subsheets.length === 0) {
-    manualErrors['Subsheet(s)'] = ['At least one subsheet is required.']
-    return manualErrors
-  }
-
-  let index = 0
-  for (const subsheet of validated.subsheets) {
-    const displayIndex = index + 1
-
-    if (subsheet.fields.length === 0) {
-      manualErrors[`Subsheet #${displayIndex}`] = [
-        'At least one information template is required in this subsheet.',
-      ]
-    }
-
-    index += 1
-  }
-
-  return manualErrors
 }
 
 export default function TemplateEditorForm(props: Readonly<TemplateEditorFormProps>) {
@@ -150,28 +126,27 @@ export default function TemplateEditorForm(props: Readonly<TemplateEditorFormPro
 
   const handleSubmit = async () => {
     try {
-      const parseResult = unifiedSheetSchema.safeParse(datasheet)
+      const parseResult = templateEditMetadataSchema.safeParse(datasheet)
 
       if (!parseResult.success) {
         setFormErrors(flattenErrors(parseResult.error))
         return
       }
 
-      const validated = parseResult.data
-      const manualErrors = buildManualErrors(validated)
-
-      if (Object.keys(manualErrors).length > 0) {
-        setFormErrors(manualErrors)
+      // Template edit: metadata-only validation. No subsheet/structure checks.
+      // Send full datasheet so backend receives unchanged subsheet structure.
+      const sheetId = datasheet.sheetId
+      if (sheetId === undefined) {
+        setFormErrors({ Unknown: ['Sheet ID is required.'] })
         return
       }
 
-      const sheetId = validated.sheetId
       const response = await fetch(`/api/backend/templates/${sheetId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(validated),
+        body: JSON.stringify(datasheet),
       })
 
       const payload = await response.json()

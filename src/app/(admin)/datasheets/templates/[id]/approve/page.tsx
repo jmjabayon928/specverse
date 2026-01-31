@@ -16,7 +16,7 @@ type TemplateApprovePageParams = Readonly<{
 }>
 
 type TemplateApprovePageProps = Readonly<{
-  params: TemplateApprovePageParams
+  params: Promise<TemplateApprovePageParams>
 }>
 
 const parseTemplateId = (rawId: string | undefined): number => {
@@ -30,7 +30,8 @@ const parseTemplateId = (rawId: string | undefined): number => {
 }
 
 const TemplateApprovePage = async (props: TemplateApprovePageProps) => {
-  const templateId = parseTemplateId(props.params?.id)
+  const { id } = await props.params
+  const templateId = parseTemplateId(id)
 
   if (Number.isNaN(templateId)) {
     notFound()

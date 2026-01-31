@@ -10,13 +10,14 @@ import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
 import { mapToUnifiedSheet } from "@/utils/templateViewMapper";
 
 interface PageProps {
-  readonly params: Readonly<{ id: string }>;
+  readonly params: Promise<Readonly<{ id: string }>>;
 }
 
 export default async function FilledClonePage(
   { params }: Readonly<PageProps>
 ) {
-  const sheetId = Number(params?.id ?? "0");
+  const { id } = await params;
+  const sheetId = Number(id ?? "0");
   if (!sheetId || isNaN(sheetId)) return notFound();
 
   const [sessionCookie, referenceData, filledData] = await Promise.all([

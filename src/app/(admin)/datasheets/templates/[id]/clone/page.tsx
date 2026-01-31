@@ -14,7 +14,7 @@ type TemplateClonePageParams = Readonly<{
 }>
 
 type TemplateClonePageProps = Readonly<{
-  params: TemplateClonePageParams
+  params: Promise<TemplateClonePageParams>
 }>
 
 const parseTemplateId = (rawId: string | undefined): number => {
@@ -28,7 +28,8 @@ const parseTemplateId = (rawId: string | undefined): number => {
 }
 
 const TemplateClonePage = async (props: TemplateClonePageProps) => {
-  const templateId = parseTemplateId(props.params?.id)
+  const { id } = await props.params
+  const templateId = parseTemplateId(id)
 
   if (Number.isNaN(templateId)) {
     notFound()

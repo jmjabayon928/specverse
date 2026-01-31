@@ -14,7 +14,7 @@ type TemplateEditPageParams = Readonly<{
 }>
 
 type TemplateEditPageProps = Readonly<{
-  params: TemplateEditPageParams
+  params: Promise<TemplateEditPageParams>
 }>
 
 const parseTemplateId = (rawId: string | undefined): number => {
@@ -28,7 +28,8 @@ const parseTemplateId = (rawId: string | undefined): number => {
 }
 
 const TemplateEditPage = async (props: TemplateEditPageProps) => {
-  const templateId = parseTemplateId(props.params?.id)
+  const { id } = await props.params
+  const templateId = parseTemplateId(id)
 
   if (Number.isNaN(templateId)) {
     notFound()

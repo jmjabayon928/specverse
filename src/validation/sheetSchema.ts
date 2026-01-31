@@ -86,3 +86,59 @@ export const unifiedSheetSchema = z.object({
 });
 
 export const fullTemplateSchema = unifiedSheetSchema;
+
+/**
+ * Metadata-only schema for template edit. Validates only top-level Sheets-level
+ * fields (header metadata). Does NOT validate subsheets or InfoField.value.
+ * Used by TemplateEditorForm so save is not blocked by read-only subsheet structure.
+ */
+export const templateEditMetadataSchema = z.object({
+  sheetId: z.number().optional(),
+  sheetName: z.string().min(1, "Sheet Name is required"),
+  sheetDesc: z.string().min(1, "Description is required"),
+  sheetDesc2: z.string().optional(),
+
+  clientDocNum: z.number().gt(0, "Client Doc # is required"),
+  clientProjectNum: z.number().gt(0, "Client Project # is required"),
+  companyDocNum: z.number().gt(0, "Company Doc # is required"),
+  companyProjectNum: z.number().gt(0, "Company Project # is required"),
+
+  areaId: z.number().gt(0, "Area is required"),
+  packageName: z.string().min(1, "Package Name is required"),
+  revisionNum: z.number(),
+  revisionDate: z.string(),
+  preparedById: z.number(),
+  preparedByDate: z.string(),
+
+  status: z.enum(["Draft", "Rejected", "Modified Draft", "Verified", "Approved"]).optional(),
+  verifiedById: z.number().nullable().optional(),
+  verifiedDate: z.string().nullable().optional(),
+  approvedById: z.number().nullable().optional(),
+  approvedDate: z.string().nullable().optional(),
+  approvalComment: z.string().optional(),
+  isLatest: z.boolean().optional(),
+  isTemplate: z.boolean().optional(),
+  autoCADImport: z.boolean().optional(),
+
+  itemLocation: z.string().min(1, "Item Location is required"),
+  requiredQty: z.number().gt(0),
+  equipmentName: z.string().min(1, "Equipment Name is required"),
+  equipmentTagNum: z.string().min(1, "Equipment Tag Number is required"),
+  serviceName: z.string().min(1, "Service Name is required"),
+  manuId: z.number().gt(0, "Manufacturer is required"),
+  suppId: z.number().gt(0, "Supplier is required"),
+  installPackNum: z.string().optional(),
+  equipSize: z.number(),
+  modelNum: z.string().optional(),
+  driver: z.string().optional(),
+  locationDwg: z.string().optional(),
+  pid: z.number().optional(),
+  installDwg: z.string().optional(),
+  codeStd: z.string().optional(),
+  categoryId: z.number().gt(0, "Category is required"),
+  clientId: z.number().gt(0, "Client is required"),
+  projectId: z.number().gt(0, "Project is required"),
+
+  disciplineId: z.number().positive("Discipline is required").optional(),
+  subtypeId: z.number().positive().nullable().optional(),
+});
