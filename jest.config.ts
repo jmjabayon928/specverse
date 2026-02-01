@@ -59,6 +59,7 @@ const config: Config = {
       ],
       ...commonConfig,
       moduleNameMapper: {
+        '^react-hot-toast$': '<rootDir>/tests/__mocks__/react-hot-toast.ts',
         '^@/backend/config/db$': '<rootDir>/tests/__mocks__/backend-db.ts',
         ...commonConfig.moduleNameMapper,
       },

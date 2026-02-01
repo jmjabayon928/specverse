@@ -17,6 +17,14 @@ type InfoTemplateBuilderProps = {
   onFieldsChange: (fields: InfoField[]) => void
   isEditMode: boolean
   formErrors?: Record<string, string[]>
+  /** When provided, called after field add so parent can persist. */
+  onAddField?: (field: InfoField) => void | Promise<void>
+  /** When provided, called after field edit so parent can persist. */
+  onUpdateField?: (fieldIndex: number, field: InfoField) => void | Promise<void>
+  /** When provided, called after field delete so parent can persist. */
+  onDeleteField?: (fieldIndex: number) => void | Promise<void>
+  /** When provided, called after field reorder so parent can persist. */
+  onReorderFields?: (fields: InfoField[]) => void | Promise<void>
 }
 
 const buildFieldError = (
@@ -76,7 +84,17 @@ const moveField = (fields: InfoField[], index: number, direction: number): InfoF
 }
 
 export default function InfoTemplateBuilder(props: Readonly<InfoTemplateBuilderProps>) {
-  const { subsheet, subsheetIndex, onFieldsChange, isEditMode, formErrors = {} } = props
+  const {
+    subsheet,
+    subsheetIndex,
+    onFieldsChange,
+    isEditMode,
+    formErrors = {},
+    onAddField,
+    onUpdateField,
+    onDeleteField,
+    onReorderFields,
+  } = props
 
   const fields = useMemo(() => subsheet.fields ?? [], [subsheet.fields])
 
@@ -115,6 +133,8 @@ export default function InfoTemplateBuilder(props: Readonly<InfoTemplateBuilderP
     })
 
     onFieldsChange(updatedFields)
+    const updated = updatedFields[index]
+    if (updated != null) void onUpdateField?.(index, updated)
   }
 
   const handleFieldChange = <K extends keyof InfoField>(
@@ -126,19 +146,29 @@ export default function InfoTemplateBuilder(props: Readonly<InfoTemplateBuilderP
       [key]: value,
     })
     onFieldsChange(updatedFields)
+    const updated = updatedFields[index]
+    if (updated != null) void onUpdateField?.(index, updated)
   }
 
   const handleAddField = () => {
     const newField = createEmptyField(fields.length)
-    onFieldsChange([...fields, newField])
+    if (onAddField) {
+      // Parent (e.g. TemplateEditorForm) will call API and add to state on success; avoid double-add.
+      void onAddField(newField)
+    } else {
+      onFieldsChange([...fields, newField])
+    }
   }
 
   const handleDeleteField = (index: number) => {
     onFieldsChange(removeFieldAt(fields, index))
+    void onDeleteField?.(index)
   }
 
   const handleMoveField = (index: number, direction: number) => {
-    onFieldsChange(moveField(fields, index, direction))
+    const next = moveField(fields, index, direction)
+    onFieldsChange(next)
+    void onReorderFields?.(next)
   }
 
   return (

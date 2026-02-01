@@ -222,7 +222,7 @@ export default function NotificationDropdown() {
                               height={40}
                               src={
                                 note.senderProfilePic ||
-                                "/images/user/user-default.png"
+                                "/users/jeff.jpg"
                               }
                               alt="User"
                               className="w-full overflow-hidden rounded-full"

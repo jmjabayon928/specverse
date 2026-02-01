@@ -3,7 +3,9 @@ import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom'
+import toast from 'react-hot-toast'
 import TemplateEditorForm from '../../../src/app/(admin)/datasheets/templates/[id]/edit/TemplateEditorForm'
+import { structureErrorToast } from '../../../src/utils/structureErrorToast'
 import {
   getMockReferenceOptions,
   makeBasicUnifiedSheet,
@@ -186,5 +188,22 @@ describe('TemplateEditorForm', () => {
     })
 
     expect(screen.queryByText(/Subsheet #1 - Template #1 - value/)).not.toBeInTheDocument()
+  })
+
+  it('structureErrorToast shows first issue message and (+N more) when body has issues', () => {
+    structureErrorToast(
+      {
+        issues: [
+          { message: 'Enter a whole number' },
+          { message: 'Second' },
+        ],
+      },
+      'Fallback'
+    )
+
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledWith(
+      'Invalid field update: Enter a whole number (+1 more)'
+    )
   })
 })

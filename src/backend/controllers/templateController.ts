@@ -39,6 +39,16 @@ import {
   // datasheet builder
   fetchTemplateStructure,
 
+  // template structure (subsheets + fields)
+  createSubsheet,
+  updateSubsheet,
+  deleteSubsheet,
+  reorderSubsheets,
+  createField,
+  updateField,
+  deleteField,
+  reorderFields,
+
   // export
   exportTemplatePDF as exportTemplatePDFService,
   exportTemplateExcel as exportTemplateExcelService,
@@ -127,7 +137,14 @@ const handleError = (next: NextFunction, err: unknown, fallbackMessage: string):
   }
 
   if (err instanceof z.ZodError) {
-    next(new AppError('Invalid request payload', 400))
+    next(
+      new AppError('Invalid request payload', 400, true, {
+        issues: err.errors.map((e) => ({
+          path: e.path.length > 0 ? e.path.join('.') : undefined,
+          message: e.message,
+        })),
+      })
+    )
     return
   }
 
@@ -151,6 +168,52 @@ const noteParamsSchema = z.object({
 const attachmentParamsSchema = z.object({
   id: z.string().optional(),
   attachmentId: z.string().optional(),
+})
+
+const structureSubIdParamsSchema = z.object({
+  id: z.string().optional(),
+  subId: z.string().optional(),
+})
+
+const structureFieldIdParamsSchema = z.object({
+  id: z.string().optional(),
+  subId: z.string().optional(),
+  fieldId: z.string().optional(),
+})
+
+const createSubsheetBodySchema = z.object({
+  subName: z.string().min(1),
+})
+
+const updateSubsheetBodySchema = z.object({
+  subName: z.string().min(1).optional(),
+})
+
+const reorderSubsheetsBodySchema = z.object({
+  order: z.array(z.object({ subId: z.number().int().positive(), orderIndex: z.number().int().min(0) })),
+})
+
+const infoTypeSchema = z.enum(['int', 'decimal', 'varchar'])
+
+const createFieldBodySchema = z.object({
+  label: z.string().min(1),
+  infoType: infoTypeSchema.default('varchar'),
+  uom: z.string().optional(),
+  required: z.boolean().default(false),
+  options: z.array(z.string()).optional(),
+})
+
+const updateFieldBodySchema = z.object({
+  label: z.string().min(1).optional(),
+  infoType: infoTypeSchema.optional(),
+  uom: z.string().optional(),
+  required: z.boolean().optional(),
+  options: z.array(z.string()).optional(),
+  orderIndex: z.number().int().min(0).optional(),
+})
+
+const reorderFieldsBodySchema = z.object({
+  order: z.array(z.object({ fieldId: z.number().int().positive(), orderIndex: z.number().int().min(0) })),
 })
 
 // allow extra fields, but ensure fieldValues (if present) is a string map
@@ -333,6 +396,216 @@ export const updateTemplateHandler: RequestHandler = async (req, res, next) => {
     res.status(200).json({ sheetId: updatedId })
   } catch (err: unknown) {
     handleError(next, err, 'Failed to update template')
+  }
+}
+
+/* ───────────────────────────────────────────
+   Template structure (subsheets + fields)
+   ─────────────────────────────────────────── */
+
+export const createSubsheetHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const user = asUser(req)
+    if (user?.userId == null) {
+      next(new AppError('Unauthorized', 401))
+      return
+    }
+    const parsedParams = idParamsSchema.parse(req.params)
+    const sheetId = parseId(parsedParams.id)
+    if (sheetId == null) {
+      next(new AppError('Invalid template ID', 400))
+      return
+    }
+    const body = createSubsheetBodySchema.parse(req.body ?? {})
+    const result = await createSubsheet(sheetId, body.subName, user.userId)
+    res.status(201).json(result)
+    return
+  } catch (err: unknown) {
+    handleError(next, err, 'Failed to create subsheet')
+  }
+}
+
+export const updateSubsheetHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const user = asUser(req)
+    if (user?.userId == null) {
+      next(new AppError('Unauthorized', 401))
+      return
+    }
+    const parsedParams = structureSubIdParamsSchema.parse(req.params)
+    const sheetId = parseId(parsedParams.id)
+    const subId = parseId(parsedParams.subId)
+    if (sheetId == null || subId == null) {
+      next(new AppError('Invalid template or subsheet ID', 400))
+      return
+    }
+    const body = updateSubsheetBodySchema.parse(req.body ?? {})
+    const result = await updateSubsheet(sheetId, subId, body, user.userId)
+    res.status(200).json(result)
+    return
+  } catch (err: unknown) {
+    handleError(next, err, 'Failed to update subsheet')
+  }
+}
+
+export const deleteSubsheetHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const user = asUser(req)
+    if (user?.userId == null) {
+      next(new AppError('Unauthorized', 401))
+      return
+    }
+    const parsedParams = structureSubIdParamsSchema.parse(req.params)
+    const sheetId = parseId(parsedParams.id)
+    const subId = parseId(parsedParams.subId)
+    if (sheetId == null || subId == null) {
+      next(new AppError('Invalid template or subsheet ID', 400))
+      return
+    }
+    const result = await deleteSubsheet(sheetId, subId, user.userId)
+    res.status(200).json(result)
+    return
+  } catch (err: unknown) {
+    handleError(next, err, 'Failed to delete subsheet')
+  }
+}
+
+export const reorderSubsheetsHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const user = asUser(req)
+    if (user?.userId == null) {
+      next(new AppError('Unauthorized', 401))
+      return
+    }
+    const parsedParams = idParamsSchema.parse(req.params)
+    const sheetId = parseId(parsedParams.id)
+    if (sheetId == null) {
+      next(new AppError('Invalid template ID', 400))
+      return
+    }
+    const body = reorderSubsheetsBodySchema.parse(req.body ?? {})
+    const result = await reorderSubsheets(sheetId, body.order, user.userId)
+    res.status(200).json(result)
+    return
+  } catch (err: unknown) {
+    handleError(next, err, 'Failed to reorder subsheets')
+  }
+}
+
+export const createFieldHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const user = asUser(req)
+    if (user?.userId == null) {
+      next(new AppError('Unauthorized', 401))
+      return
+    }
+    const parsedParams = structureSubIdParamsSchema.parse(req.params)
+    const sheetId = parseId(parsedParams.id)
+    const subId = parseId(parsedParams.subId)
+    if (sheetId == null || subId == null) {
+      next(new AppError('Invalid template or subsheet ID', 400))
+      return
+    }
+    const body = createFieldBodySchema.parse(req.body ?? {})
+    const result = await createField(
+      sheetId,
+      subId,
+      {
+        label: body.label,
+        infoType: body.infoType as 'int' | 'decimal' | 'varchar',
+        uom: body.uom,
+        required: body.required,
+        options: body.options,
+      },
+      user.userId
+    )
+    res.status(201).json(result)
+    return
+  } catch (err: unknown) {
+    handleError(next, err, 'Failed to create field')
+  }
+}
+
+export const updateFieldHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const user = asUser(req)
+    if (user?.userId == null) {
+      next(new AppError('Unauthorized', 401))
+      return
+    }
+    const parsedParams = structureFieldIdParamsSchema.parse(req.params)
+    const sheetId = parseId(parsedParams.id)
+    const subId = parseId(parsedParams.subId)
+    const fieldId = parseId(parsedParams.fieldId)
+    if (sheetId == null || subId == null || fieldId == null) {
+      next(new AppError('Invalid template, subsheet, or field ID', 400))
+      return
+    }
+    const body = updateFieldBodySchema.parse(req.body ?? {})
+    const result = await updateField(
+      sheetId,
+      subId,
+      fieldId,
+      {
+        label: body.label,
+        infoType: body.infoType as 'int' | 'decimal' | 'varchar' | undefined,
+        uom: body.uom,
+        required: body.required,
+        options: body.options,
+        orderIndex: body.orderIndex,
+      },
+      user.userId
+    )
+    res.status(200).json(result)
+    return
+  } catch (err: unknown) {
+    handleError(next, err, 'Failed to update field')
+  }
+}
+
+export const deleteFieldHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const user = asUser(req)
+    if (user?.userId == null) {
+      next(new AppError('Unauthorized', 401))
+      return
+    }
+    const parsedParams = structureFieldIdParamsSchema.parse(req.params)
+    const sheetId = parseId(parsedParams.id)
+    const subId = parseId(parsedParams.subId)
+    const fieldId = parseId(parsedParams.fieldId)
+    if (sheetId == null || subId == null || fieldId == null) {
+      next(new AppError('Invalid template, subsheet, or field ID', 400))
+      return
+    }
+    const result = await deleteField(sheetId, subId, fieldId, user.userId)
+    res.status(200).json(result)
+    return
+  } catch (err: unknown) {
+    handleError(next, err, 'Failed to delete field')
+  }
+}
+
+export const reorderFieldsHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const user = asUser(req)
+    if (user?.userId == null) {
+      next(new AppError('Unauthorized', 401))
+      return
+    }
+    const parsedParams = structureSubIdParamsSchema.parse(req.params)
+    const sheetId = parseId(parsedParams.id)
+    const subId = parseId(parsedParams.subId)
+    if (sheetId == null || subId == null) {
+      next(new AppError('Invalid template or subsheet ID', 400))
+      return
+    }
+    const body = reorderFieldsBodySchema.parse(req.body ?? {})
+    const result = await reorderFields(sheetId, subId, body.order, user.userId)
+    res.status(200).json(result)
+    return
+  } catch (err: unknown) {
+    handleError(next, err, 'Failed to reorder fields')
   }
 }
 

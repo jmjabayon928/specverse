@@ -334,6 +334,14 @@ export default function TemplateViewer(props: Readonly<Props>) {
           {getUILabel('Equipment Details', language)}
         </div>
         <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+          <div>
+            <label className='font-medium text-sm text-gray-700'>
+              Discipline · Subtype
+            </label>
+            <div className='bg-gray-100 text-gray-900 rounded px-3 py-2'>
+              {[data.disciplineName, data.subtypeName].filter(Boolean).join(' · ') || '—'}
+            </div>
+          </div>
           {[
             'equipmentName',
             'equipmentTagNum',

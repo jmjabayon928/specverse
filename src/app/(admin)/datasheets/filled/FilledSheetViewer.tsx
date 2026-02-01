@@ -369,6 +369,14 @@ const FilledSheetViewer: React.FC<Props> = ({
           {getUILabel("Equipment Details", language)}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="font-medium text-sm text-gray-700">
+              Discipline · Subtype
+            </label>
+            <div className="bg-gray-100 text-gray-900 rounded px-3 py-2">
+              {[sheet.disciplineName, sheet.subtypeName].filter(Boolean).join(' · ') || '—'}
+            </div>
+          </div>
           {[
             "equipmentName", "equipmentTagNum", "serviceName", "requiredQty", "itemLocation",
             "manuName", "suppName", "installPackNum", "equipSize", "modelNum",

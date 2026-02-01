@@ -2,13 +2,16 @@
 
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ZodError } from 'zod'
+import toast from 'react-hot-toast'
 import { templateEditMetadataSchema } from '@/validation/sheetSchema'
+import { structureErrorToast, type StructureErrorBody } from '@/utils/structureErrorToast'
 import { renderInput, renderSelect, renderDate } from '@/components/ui/form/FormHelper'
+import { Modal } from '@/components/ui/modal'
 import SubsheetBuilder from '../../create/SubsheetBuilder'
-import type { UnifiedSheet, UnifiedSubsheet } from '@/domain/datasheets/sheetTypes'
+import type { UnifiedSheet, UnifiedSubsheet, InfoField } from '@/domain/datasheets/sheetTypes'
 import type { Option } from '@/domain/shared/commonTypes'
 
 type TemplateEditorFormProps = {
@@ -80,6 +83,7 @@ export default function TemplateEditorForm(props: Readonly<TemplateEditorFormPro
   const [formErrors, setFormErrors] = useState<Record<string, string[]>>({})
   const [disciplineOptions, setDisciplineOptions] = useState<Option[]>([])
   const [subtypesRaw, setSubtypesRaw] = useState<Array<{ id: number; disciplineId: number; name: string }>>([])
+  const [deleteSubsheetIndex, setDeleteSubsheetIndex] = useState<number | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -117,12 +121,256 @@ export default function TemplateEditorForm(props: Readonly<TemplateEditorFormPro
           .map((s) => ({ value: s.id, label: s.name }))
       : []
 
-  const handleSubsheetsChange = (subsheets: UnifiedSubsheet[]) => {
-    setDatasheet((previous) => ({
-      ...previous,
-      subsheets,
-    }))
-  }
+  const sheetId = datasheet.sheetId
+  const subsheets = useMemo(() => datasheet.subsheets ?? [], [datasheet.subsheets])
+
+  const handleSubsheetsChange = useCallback(
+    (next: UnifiedSubsheet[]) => {
+      setDatasheet((prev) => ({ ...prev, subsheets: next }))
+    },
+    []
+  )
+
+  const api = useCallback(
+    (path: string, options?: RequestInit) => {
+      if (sheetId == null) return Promise.reject(new Error('No sheet ID'))
+      return fetch(`/api/backend/templates/${sheetId}${path}`, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        ...options,
+      })
+    },
+    [sheetId]
+  )
+
+  const handleRenameSubsheet = useCallback(
+    async (index: number, name: string) => {
+      const sub = subsheets[index]
+      const subId = sub?.originalId ?? sub?.id
+      if (subId == null || sheetId == null) return
+      try {
+        const res = await api(`/subsheets/${subId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ subName: name }),
+        })
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as StructureErrorBody
+          structureErrorToast(data, 'Failed to rename subsheet')
+        }
+      } catch {
+        toast.error('Failed to rename subsheet')
+      }
+    },
+    [api, subsheets, sheetId]
+  )
+
+  const handleReorderSubsheets = useCallback(
+    async (next: UnifiedSubsheet[]) => {
+      if (sheetId == null) return
+      const order = next.map((s, i) => ({
+        subId: s.originalId ?? s.id ?? 0,
+        orderIndex: i,
+      })).filter((o) => o.subId > 0)
+      if (order.length === 0) return
+      try {
+        const res = await api('/subsheets/order', {
+          method: 'PUT',
+          body: JSON.stringify({ order }),
+        })
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as StructureErrorBody
+          structureErrorToast(data, 'Failed to reorder subsheets')
+        }
+      } catch {
+        toast.error('Failed to reorder subsheets')
+      }
+    },
+    [api, sheetId]
+  )
+
+  const handleDeleteSubsheet = useCallback((index: number) => {
+    setDeleteSubsheetIndex(index)
+  }, [])
+
+  const confirmDeleteSubsheet = useCallback(async () => {
+    const index = deleteSubsheetIndex
+    if (index == null || sheetId == null) {
+      setDeleteSubsheetIndex(null)
+      return
+    }
+    const sub = subsheets[index]
+    const subId = sub?.originalId ?? sub?.id
+    if (subId == null) {
+      setDeleteSubsheetIndex(null)
+      return
+    }
+    try {
+      const res = await api(`/subsheets/${subId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as StructureErrorBody
+        structureErrorToast(data, 'Failed to delete subsheet')
+        setDeleteSubsheetIndex(null)
+        return
+      }
+      setDatasheet((prev) => ({
+        ...prev,
+        subsheets: prev.subsheets?.filter((_, i) => i !== index) ?? [],
+      }))
+      toast.success('Subsheet deleted')
+    } catch {
+      toast.error('Failed to delete subsheet')
+    }
+    setDeleteSubsheetIndex(null)
+  }, [deleteSubsheetIndex, sheetId, subsheets, api])
+
+  const handleAddSubsheet = useCallback(async () => {
+    if (sheetId == null) return
+    try {
+      const res = await api('/subsheets', {
+        method: 'POST',
+        body: JSON.stringify({ subName: 'New Subsheet' }),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as StructureErrorBody
+        structureErrorToast(data, 'Failed to add subsheet')
+        return
+      }
+      const data = (await res.json()) as { subId: number; subName: string; orderIndex: number }
+      setDatasheet((prev) => ({
+        ...prev,
+        subsheets: [...(prev.subsheets ?? []), { originalId: data.subId, name: data.subName, fields: [] }],
+      }))
+    } catch {
+      toast.error('Failed to add subsheet')
+    }
+  }, [api, sheetId])
+
+  const handleAddField = useCallback(
+    async (subsheetIndex: number, field: InfoField) => {
+      const sub = subsheets[subsheetIndex]
+      const subId = sub?.originalId ?? sub?.id
+      if (subId == null || sheetId == null) return
+      try {
+        const res = await api(`/subsheets/${subId}/fields`, {
+          method: 'POST',
+          body: JSON.stringify({
+            label: field.label || 'Field',
+            infoType: field.infoType ?? 'varchar',
+            uom: field.uom ?? '',
+            required: field.required ?? false,
+            options: field.options ?? [],
+          }),
+        })
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as StructureErrorBody
+          structureErrorToast(data, 'Failed to add field')
+          return
+        }
+        const data = (await res.json()) as { fieldId: number; label: string; infoType: string; uom: string; required: boolean; orderIndex: number; options: string[] }
+        setDatasheet((prev) => {
+          const next = [...(prev.subsheets ?? [])]
+          const subCopy = { ...next[subsheetIndex], fields: [...(next[subsheetIndex]?.fields ?? [])] }
+          subCopy.fields.push({
+            originalId: data.fieldId,
+            id: data.fieldId,
+            label: data.label,
+            infoType: data.infoType as InfoField['infoType'],
+            uom: data.uom,
+            required: data.required,
+            sortOrder: data.orderIndex,
+            options: data.options ?? [],
+          })
+          next[subsheetIndex] = subCopy
+          return { ...prev, subsheets: next }
+        })
+      } catch {
+        toast.error('Failed to add field')
+      }
+    },
+    [api, subsheets, sheetId]
+  )
+
+  const handleUpdateField = useCallback(
+    async (subsheetIndex: number, fieldIndex: number, field: InfoField) => {
+      const sub = subsheets[subsheetIndex]
+      const subId = sub?.originalId ?? sub?.id
+      const fieldId = field.originalId ?? field.id
+      if (subId == null || fieldId == null || sheetId == null) return
+      try {
+        const res = await api(`/subsheets/${subId}/fields/${fieldId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            label: field.label,
+            infoType: field.infoType,
+            uom: field.uom ?? '',
+            required: field.required,
+            options: field.options ?? [],
+            orderIndex: field.sortOrder,
+          }),
+        })
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as StructureErrorBody
+          structureErrorToast(data, 'Failed to update field')
+        }
+      } catch {
+        toast.error('Failed to update field')
+      }
+    },
+    [api, subsheets, sheetId]
+  )
+
+  const handleDeleteField = useCallback(
+    async (subsheetIndex: number, fieldIndex: number) => {
+      const sub = subsheets[subsheetIndex]
+      const subId = sub?.originalId ?? sub?.id
+      const field = sub?.fields?.[fieldIndex]
+      const fieldId = field?.originalId ?? field?.id
+      if (subId == null || fieldId == null || sheetId == null) return
+      try {
+        const res = await api(`/subsheets/${subId}/fields/${fieldId}`, { method: 'DELETE' })
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as StructureErrorBody
+          structureErrorToast(data, 'Failed to delete field')
+          return
+        }
+        setDatasheet((prev) => {
+          const next = [...(prev.subsheets ?? [])]
+          const subCopy = { ...next[subsheetIndex], fields: [...(next[subsheetIndex]?.fields ?? [])] }
+          subCopy.fields.splice(fieldIndex, 1)
+          next[subsheetIndex] = subCopy
+          return { ...prev, subsheets: next }
+        })
+      } catch {
+        toast.error('Failed to delete field')
+      }
+    },
+    [api, subsheets, sheetId]
+  )
+
+  const handleReorderFields = useCallback(
+    async (subsheetIndex: number, fields: InfoField[]) => {
+      const sub = subsheets[subsheetIndex]
+      const subId = sub?.originalId ?? sub?.id
+      if (subId == null || sheetId == null) return
+      const order = fields
+        .map((f, i) => ({ fieldId: f.originalId ?? f.id, orderIndex: i }))
+        .filter((o): o is { fieldId: number; orderIndex: number } => typeof o.fieldId === 'number')
+      if (order.length === 0) return
+      try {
+        const res = await api(`/subsheets/${subId}/fields/order`, {
+          method: 'PUT',
+          body: JSON.stringify({ order }),
+        })
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as StructureErrorBody
+          structureErrorToast(data, 'Failed to reorder fields')
+        }
+      } catch {
+        toast.error('Failed to reorder fields')
+      }
+    },
+    [api, subsheets, sheetId]
+  )
 
   const handleSubmit = async () => {
     try {
@@ -406,22 +654,53 @@ export default function TemplateEditorForm(props: Readonly<TemplateEditorFormPro
 
       <fieldset className='border border-gray-300 rounded p-4'>
         <legend className='text-md font-semibold px-2'>Subsheet Templates</legend>
-        
-        <div className='p-4 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 rounded mb-4'>
-          <p className='text-sm font-medium'>
-            Template structure editing is temporarily disabled. You can edit metadata above, but subsheet and field structure changes will not be saved yet.
-          </p>
-        </div>
 
         <SubsheetBuilder
-          subsheets={datasheet.subsheets}
+          subsheets={subsheets}
           onChange={handleSubsheetsChange}
           formErrors={formErrors}
           mode='edit'
           previewMode={false}
-          readOnly={true}
+          readOnly={false}
+          onRenameSubsheet={handleRenameSubsheet}
+          onReorderSubsheets={handleReorderSubsheets}
+          onDeleteSubsheet={handleDeleteSubsheet}
+          onAddSubsheet={handleAddSubsheet}
+          onAddField={handleAddField}
+          onUpdateField={handleUpdateField}
+          onDeleteField={handleDeleteField}
+          onReorderFields={handleReorderFields}
         />
       </fieldset>
+
+      <Modal
+        isOpen={deleteSubsheetIndex !== null}
+        onClose={() => setDeleteSubsheetIndex(null)}
+        showCloseButton={true}
+      >
+        <div className='p-6 max-w-md'>
+          <h3 className='text-lg font-semibold text-gray-900 mb-2'>Delete subsheet?</h3>
+          <p className='text-sm text-gray-600 mb-4'>
+            This will delete the subsheet and all fields inside it. This cannot be undone.
+          </p>
+          <div className='flex gap-2 justify-end'>
+            <button
+              type='button'
+              onClick={() => setDeleteSubsheetIndex(null)}
+              className='px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+            >
+              Cancel
+            </button>
+            <button
+              type='button'
+              onClick={() => void confirmDeleteSubsheet()}
+              className='px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700'
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <div className='flex justify-end'>
         <button

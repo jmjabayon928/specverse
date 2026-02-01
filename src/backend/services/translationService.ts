@@ -93,13 +93,5 @@ export async function getSheetTranslations(sheetId: number, lang: string): Promi
     options[key].push(row.OptionValue);
   }
 
-  console.log("🔤 Translations returned:");
-  console.log("sheet:", sheet);
-  console.log("subsheets:", subsheets);
-  console.log("labels:", labels);
-  console.log("options:", options);
-
-  console.log("🌐 getSheetTranslations → sheetId:", sheetId, "| baseSheetId:", baseSheetId);
-
   return { sheet, subsheets, labels, options };
 }

@@ -17,6 +17,15 @@ import {
   verifyTemplateHandler,
   approveTemplateHandler,
   cloneTemplateHandler,
+  // template structure (subsheets + fields)
+  createSubsheetHandler,
+  updateSubsheetHandler,
+  deleteSubsheetHandler,
+  reorderSubsheetsHandler,
+  createFieldHandler,
+  updateFieldHandler,
+  deleteFieldHandler,
+  reorderFieldsHandler,
   // notes
   listTemplateNotesHandler,
   createTemplateNoteHandler,
@@ -77,8 +86,62 @@ router.get(
 )
 
 // ───────────────────────────────────────────
-// Single template
+// Single template (structure routes first so :id/subsheets/* match)
 // ───────────────────────────────────────────
+
+// Subsheet order (bulk)
+router.put(
+  '/:id/subsheets/order',
+  verifyToken,
+  requirePermission('DATASHEET_EDIT'),
+  reorderSubsheetsHandler,
+)
+
+// Subsheet CRUD
+router.post(
+  '/:id/subsheets',
+  verifyToken,
+  requirePermission('DATASHEET_EDIT'),
+  createSubsheetHandler,
+)
+router.patch(
+  '/:id/subsheets/:subId',
+  verifyToken,
+  requirePermission('DATASHEET_EDIT'),
+  updateSubsheetHandler,
+)
+router.delete(
+  '/:id/subsheets/:subId',
+  verifyToken,
+  requirePermission('DATASHEET_EDIT'),
+  deleteSubsheetHandler,
+)
+
+// Field CRUD (under subsheet)
+router.post(
+  '/:id/subsheets/:subId/fields',
+  verifyToken,
+  requirePermission('DATASHEET_EDIT'),
+  createFieldHandler,
+)
+router.put(
+  '/:id/subsheets/:subId/fields/order',
+  verifyToken,
+  requirePermission('DATASHEET_EDIT'),
+  reorderFieldsHandler,
+)
+router.patch(
+  '/:id/subsheets/:subId/fields/:fieldId',
+  verifyToken,
+  requirePermission('DATASHEET_EDIT'),
+  updateFieldHandler,
+)
+router.delete(
+  '/:id/subsheets/:subId/fields/:fieldId',
+  verifyToken,
+  requirePermission('DATASHEET_EDIT'),
+  deleteFieldHandler,
+)
 
 // Get template details by ID
 router.get(

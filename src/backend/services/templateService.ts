@@ -421,6 +421,480 @@ async function syncSubsheetTree(
 }
 
 // ───────────────────────────────────────────
+// Template structure editing guard
+// ───────────────────────────────────────────
+
+const TEMPLATE_EDITABLE_STATUSES = ['Draft', 'Modified Draft', 'Rejected'] as const
+
+/**
+ * Throws if template is missing, not a template, not editable (status), or user not allowed.
+ * Call before any structure mutation. Mirrors updateTemplate status check and frontend creator policy.
+ * - 404: sheet not found
+ * - 400: sheet is not a template (IsTemplate != 1)
+ * - 403: user is not the template creator (PreparedByID !== userId when set)
+ * - 409: status not Draft/Modified Draft/Rejected
+ */
+export async function assertTemplateStructureEditable(
+  sheetId: number,
+  userId: number
+): Promise<void> {
+  const pool = await poolPromise
+  const statusResult = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<{ Status: string; IsTemplate: boolean | number; PreparedByID: number | null }>(`
+      SELECT Status, IsTemplate, PreparedByID FROM Sheets WHERE SheetID = @SheetID
+    `)
+  const row = statusResult.recordset[0]
+  if (!row) {
+    throw new AppError('Template not found', 404)
+  }
+  const isTemplate = row.IsTemplate === true || row.IsTemplate === 1
+  if (!isTemplate) {
+    throw new AppError('Sheet is not a template', 400)
+  }
+  const preparedById = row.PreparedByID != null ? Number(row.PreparedByID) : null
+  if (preparedById != null && preparedById !== userId) {
+    throw new AppError('Forbidden', 403)
+  }
+  if (!TEMPLATE_EDITABLE_STATUSES.includes(row.Status as (typeof TEMPLATE_EDITABLE_STATUSES)[number])) {
+    throw new AppError(
+      `Template can only be edited when status is Draft, Modified Draft, or Rejected. Current status: ${row.Status}.`,
+      409
+    )
+  }
+}
+
+// ───────────────────────────────────────────
+// Subsheet CRUD + reorder
+// ───────────────────────────────────────────
+
+export type CreateSubsheetResult = { subId: number; subName: string; orderIndex: number }
+export type UpdateSubsheetResult = { subId: number; subName: string; orderIndex: number }
+export type DeleteSubsheetResult = { deletedSubId: number }
+export type ReorderSubsheetsResult = { updated: number }
+
+export async function createSubsheet(
+  sheetId: number,
+  subName: string,
+  userId: number
+): Promise<CreateSubsheetResult> {
+  await assertTemplateStructureEditable(sheetId, userId)
+  const pool = await poolPromise
+  const nextResult = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<{ NextIndex: number }>(`
+      SELECT ISNULL(MAX(OrderIndex), 0) + 1 AS NextIndex
+      FROM SubSheets WHERE SheetID = @SheetID
+    `)
+  const orderIndex = nextResult.recordset[0]?.NextIndex ?? 1
+  const insertResult = await pool
+    .request()
+    .input('SubName', sql.VarChar(150), nv(subName) ?? '')
+    .input('SheetID', sql.Int, sheetId)
+    .input('OrderIndex', sql.Int, orderIndex)
+    .query<{ SubID: number }>(`
+      INSERT INTO SubSheets (SubName, SheetID, OrderIndex, TemplateSubID)
+      OUTPUT INSERTED.SubID
+      VALUES (@SubName, @SheetID, @OrderIndex, NULL)
+    `)
+  const subId = insertResult.recordset[0].SubID
+  return { subId, subName: subName.trim() || 'Subsheet', orderIndex }
+}
+
+export async function updateSubsheet(
+  sheetId: number,
+  subId: number,
+  body: { subName?: string },
+  userId: number
+): Promise<UpdateSubsheetResult> {
+  await assertTemplateStructureEditable(sheetId, userId)
+  const pool = await poolPromise
+  const subName = body.subName != null ? String(body.subName).trim() : undefined
+  if (subName === undefined) {
+    const rowResult = await pool
+      .request()
+      .input('SheetID', sql.Int, sheetId)
+      .input('SubID', sql.Int, subId)
+      .query<{ SubName: string; OrderIndex: number }>(`
+        SELECT SubName, OrderIndex FROM SubSheets WHERE SheetID = @SheetID AND SubID = @SubID
+      `)
+    const row = rowResult.recordset[0]
+    if (!row) throw new AppError('Subsheet not found', 404)
+    return { subId, subName: row.SubName, orderIndex: row.OrderIndex ?? 0 }
+  }
+  await pool
+    .request()
+    .input('SubName', sql.VarChar(150), subName)
+    .input('SheetID', sql.Int, sheetId)
+    .input('SubID', sql.Int, subId)
+    .query(`
+      UPDATE SubSheets SET SubName = @SubName WHERE SheetID = @SheetID AND SubID = @SubID
+    `)
+  const orderResult = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .input('SubID', sql.Int, subId)
+    .query<{ OrderIndex: number }>(`SELECT OrderIndex FROM SubSheets WHERE SheetID = @SheetID AND SubID = @SubID`)
+  const orderIndex = orderResult.recordset[0]?.OrderIndex ?? 0
+  return { subId, subName, orderIndex }
+}
+
+export async function deleteSubsheet(
+  sheetId: number,
+  subId: number,
+  userId: number
+): Promise<DeleteSubsheetResult> {
+  await assertTemplateStructureEditable(sheetId, userId)
+  const pool = await poolPromise
+  const tx = new sql.Transaction(pool)
+  try {
+    await tx.begin()
+    const subCheck = await tx.request().input('SheetID', sql.Int, sheetId).input('SubID', sql.Int, subId)
+      .query<{ SubID: number }>(`SELECT SubID FROM SubSheets WHERE SheetID = @SheetID AND SubID = @SubID`)
+    if (!subCheck.recordset[0]) {
+      await tx.rollback()
+      throw new AppError('Subsheet not found', 404)
+    }
+    await tx.request().input('SubID', sql.Int, subId).query(`
+      DELETE O FROM InformationTemplateOptions O
+      INNER JOIN InformationTemplates IT ON IT.InfoTemplateID = O.InfoTemplateID
+      WHERE IT.SubID = @SubID
+    `)
+    await tx.request().input('SubID', sql.Int, subId).query(`
+      DELETE FROM InformationTemplates WHERE SubID = @SubID
+    `)
+    await tx.request().input('SubID', sql.Int, subId).query(`
+      DELETE FROM SubSheets WHERE SubID = @SubID
+    `)
+    await tx.commit()
+    return { deletedSubId: subId }
+  } catch (err) {
+    try {
+      await tx.rollback()
+    } catch {
+      /* ignore */
+    }
+    throw err
+  }
+}
+
+export async function reorderSubsheets(
+  sheetId: number,
+  order: Array<{ subId: number; orderIndex: number }>,
+  userId: number
+): Promise<ReorderSubsheetsResult> {
+  await assertTemplateStructureEditable(sheetId, userId)
+  const pool = await poolPromise
+  const subIdsInSheet = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<{ SubID: number }>(`SELECT SubID FROM SubSheets WHERE SheetID = @SheetID`)
+  const allowed = new Set((subIdsInSheet.recordset ?? []).map((r) => r.SubID))
+  for (const { subId } of order) {
+    if (!allowed.has(subId)) {
+      throw new AppError('Subsheet not found', 404)
+    }
+  }
+  const tx = new sql.Transaction(pool)
+  let updated = 0
+  try {
+    await tx.begin()
+    for (const { subId, orderIndex } of order) {
+      const result = await tx
+        .request()
+        .input('SheetID', sql.Int, sheetId)
+        .input('SubID', sql.Int, subId)
+        .input('OrderIndex', sql.Int, orderIndex)
+        .query(`
+          UPDATE SubSheets SET OrderIndex = @OrderIndex WHERE SheetID = @SheetID AND SubID = @SubID
+        `)
+      updated += result.rowsAffected[0] ?? 0
+    }
+    await tx.commit()
+    return { updated }
+  } catch (err) {
+    try {
+      await tx.rollback()
+    } catch {
+      /* ignore */
+    }
+    throw err
+  }
+}
+
+// ───────────────────────────────────────────
+// Field (InformationTemplate) CRUD + reorder
+// ───────────────────────────────────────────
+
+export type CreateFieldResult = {
+  fieldId: number
+  label: string
+  infoType: string
+  uom: string
+  required: boolean
+  orderIndex: number
+  options: string[]
+}
+export type UpdateFieldResult = CreateFieldResult
+export type DeleteFieldResult = { deletedFieldId: number }
+export type ReorderFieldsResult = { updated: number }
+
+function assertSubsheetBelongsToTemplate(
+  pool: sql.ConnectionPool,
+  sheetId: number,
+  subId: number
+): Promise<void> {
+  return pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .input('SubID', sql.Int, subId)
+    .query<{ SubID: number }>(`SELECT SubID FROM SubSheets WHERE SheetID = @SheetID AND SubID = @SubID`)
+    .then((r) => {
+      if (!r.recordset[0]) throw new AppError('Subsheet not found', 404)
+    })
+}
+
+export async function createField(
+  sheetId: number,
+  subId: number,
+  body: {
+    label: string
+    infoType: 'int' | 'decimal' | 'varchar'
+    uom?: string
+    required: boolean
+    options?: string[]
+  },
+  userId: number
+): Promise<CreateFieldResult> {
+  await assertTemplateStructureEditable(sheetId, userId)
+  const pool = await poolPromise
+  await assertSubsheetBelongsToTemplate(pool, sheetId, subId)
+  const nextResult = await pool
+    .request()
+    .input('SubID', sql.Int, subId)
+    .query<{ NextIndex: number }>(`
+      SELECT ISNULL(MAX(OrderIndex), 0) + 1 AS NextIndex
+      FROM InformationTemplates WHERE SubID = @SubID
+    `)
+  const orderIndex = nextResult.recordset[0]?.NextIndex ?? 1
+  const label = (body.label ?? '').trim() || 'Field'
+  const infoType = body.infoType ?? 'varchar'
+  const uom = (body.uom ?? '').trim()
+  const required = Boolean(body.required)
+  const options = Array.isArray(body.options) ? body.options : []
+  const insertResult = await pool
+    .request()
+    .input('SubID', sql.Int, subId)
+    .input('Label', sql.VarChar(150), label)
+    .input('InfoType', sql.VarChar(30), infoType)
+    .input('OrderIndex', sql.Int, orderIndex)
+    .input('UOM', sql.VarChar(50), uom)
+    .input('Required', sql.Bit, required ? 1 : 0)
+    .query<{ InfoTemplateID: number }>(`
+      INSERT INTO InformationTemplates (SubID, Label, InfoType, OrderIndex, UOM, Required, TemplateInfoTemplateID)
+      OUTPUT INSERTED.InfoTemplateID
+      VALUES (@SubID, @Label, @InfoType, @OrderIndex, @UOM, @Required, NULL)
+    `)
+  const fieldId = insertResult.recordset[0].InfoTemplateID
+  for (let k = 0; k < options.length; k += 1) {
+    await pool
+      .request()
+      .input('InfoTemplateID', sql.Int, fieldId)
+      .input('OptionValue', sql.VarChar(100), nv(options[k]) ?? '')
+      .input('SortOrder', sql.Int, k)
+      .query(`
+        INSERT INTO InformationTemplateOptions (InfoTemplateID, OptionValue, SortOrder)
+        VALUES (@InfoTemplateID, @OptionValue, @SortOrder)
+      `)
+  }
+  return { fieldId, label, infoType, uom, required, orderIndex, options }
+}
+
+export async function updateField(
+  sheetId: number,
+  subId: number,
+  fieldId: number,
+  body: {
+    label?: string
+    infoType?: 'int' | 'decimal' | 'varchar'
+    uom?: string
+    required?: boolean
+    options?: string[]
+    orderIndex?: number
+  },
+  userId: number
+): Promise<UpdateFieldResult> {
+  await assertTemplateStructureEditable(sheetId, userId)
+  const pool = await poolPromise
+  await assertSubsheetBelongsToTemplate(pool, sheetId, subId)
+  const fieldCheck = await pool
+    .request()
+    .input('SubID', sql.Int, subId)
+    .input('InfoTemplateID', sql.Int, fieldId)
+    .query<{ InfoTemplateID: number }>(`
+      SELECT InfoTemplateID FROM InformationTemplates WHERE SubID = @SubID AND InfoTemplateID = @InfoTemplateID
+    `)
+  if (!fieldCheck.recordset[0]) throw new AppError('Field not found', 404)
+  const updates: string[] = []
+  const req = pool.request().input('InfoTemplateID', sql.Int, fieldId).input('SubID', sql.Int, subId)
+  if (body.label !== undefined) {
+    const label = String(body.label).trim() || 'Field'
+    req.input('Label', sql.VarChar(150), label)
+    updates.push('Label = @Label')
+  }
+  if (body.infoType !== undefined) {
+    req.input('InfoType', sql.VarChar(30), body.infoType)
+    updates.push('InfoType = @InfoType')
+  }
+  if (body.uom !== undefined) {
+    req.input('UOM', sql.VarChar(50), String(body.uom).trim())
+    updates.push('UOM = @UOM')
+  }
+  if (body.required !== undefined) {
+    req.input('Required', sql.Bit, body.required ? 1 : 0)
+    updates.push('Required = @Required')
+  }
+  if (body.orderIndex !== undefined) {
+    req.input('OrderIndex', sql.Int, body.orderIndex)
+    updates.push('OrderIndex = @OrderIndex')
+  }
+  if (updates.length > 0) {
+    await req.query(`
+      UPDATE InformationTemplates SET ${updates.join(', ')} WHERE SubID = @SubID AND InfoTemplateID = @InfoTemplateID
+    `)
+  }
+  if (body.options !== undefined) {
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    await tx.request().input('InfoTemplateID', sql.Int, fieldId).query(`
+      DELETE FROM InformationTemplateOptions WHERE InfoTemplateID = @InfoTemplateID
+    `)
+    const opts = Array.isArray(body.options) ? body.options : []
+    for (let k = 0; k < opts.length; k += 1) {
+      await tx
+        .request()
+        .input('InfoTemplateID', sql.Int, fieldId)
+        .input('OptionValue', sql.VarChar(100), nv(opts[k]) ?? '')
+        .input('SortOrder', sql.Int, k)
+        .query(`
+          INSERT INTO InformationTemplateOptions (InfoTemplateID, OptionValue, SortOrder)
+          VALUES (@InfoTemplateID, @OptionValue, @SortOrder)
+        `)
+    }
+    await tx.commit()
+  }
+  const rowResult = await pool
+    .request()
+    .input('SubID', sql.Int, subId)
+    .input('InfoTemplateID', sql.Int, fieldId)
+    .query<{ Label: string; InfoType: string; UOM: string; Required: boolean | number; OrderIndex: number }>(`
+      SELECT Label, InfoType, UOM, Required, OrderIndex FROM InformationTemplates WHERE SubID = @SubID AND InfoTemplateID = @InfoTemplateID
+    `)
+  const row = rowResult.recordset[0]
+  const optResult = await pool
+    .request()
+    .input('InfoTemplateID', sql.Int, fieldId)
+    .query<{ OptionValue: string }>(`SELECT OptionValue FROM InformationTemplateOptions WHERE InfoTemplateID = @InfoTemplateID ORDER BY SortOrder`)
+  const options = (optResult.recordset ?? []).map((r) => r.OptionValue)
+  const required = row?.Required === true || row?.Required === 1
+  return {
+    fieldId,
+    label: row?.Label ?? '',
+    infoType: row?.InfoType ?? 'varchar',
+    uom: row?.UOM ?? '',
+    required: Boolean(required),
+    orderIndex: row?.OrderIndex ?? 0,
+    options,
+  }
+}
+
+export async function deleteField(
+  sheetId: number,
+  subId: number,
+  fieldId: number,
+  userId: number
+): Promise<DeleteFieldResult> {
+  await assertTemplateStructureEditable(sheetId, userId)
+  const pool = await poolPromise
+  await assertSubsheetBelongsToTemplate(pool, sheetId, subId)
+  const fieldCheck = await pool
+    .request()
+    .input('SubID', sql.Int, subId)
+    .input('InfoTemplateID', sql.Int, fieldId)
+    .query<{ InfoTemplateID: number }>(`
+      SELECT InfoTemplateID FROM InformationTemplates WHERE SubID = @SubID AND InfoTemplateID = @InfoTemplateID
+    `)
+  if (!fieldCheck.recordset[0]) throw new AppError('Field not found', 404)
+  const tx = new sql.Transaction(pool)
+  try {
+    await tx.begin()
+    await tx.request().input('InfoTemplateID', sql.Int, fieldId).query(`
+      DELETE FROM InformationTemplateOptions WHERE InfoTemplateID = @InfoTemplateID
+    `)
+    await tx.request().input('InfoTemplateID', sql.Int, fieldId).input('SubID', sql.Int, subId).query(`
+      DELETE FROM InformationTemplates WHERE SubID = @SubID AND InfoTemplateID = @InfoTemplateID
+    `)
+    await tx.commit()
+    return { deletedFieldId: fieldId }
+  } catch (err) {
+    try {
+      await tx.rollback()
+    } catch {
+      /* ignore */
+    }
+    throw err
+  }
+}
+
+export async function reorderFields(
+  sheetId: number,
+  subId: number,
+  order: Array<{ fieldId: number; orderIndex: number }>,
+  userId: number
+): Promise<ReorderFieldsResult> {
+  await assertTemplateStructureEditable(sheetId, userId)
+  const pool = await poolPromise
+  await assertSubsheetBelongsToTemplate(pool, sheetId, subId)
+  const fieldIdsInSub = await pool
+    .request()
+    .input('SubID', sql.Int, subId)
+    .query<{ InfoTemplateID: number }>(`SELECT InfoTemplateID FROM InformationTemplates WHERE SubID = @SubID`)
+  const allowed = new Set((fieldIdsInSub.recordset ?? []).map((r) => r.InfoTemplateID))
+  for (const { fieldId } of order) {
+    if (!allowed.has(fieldId)) {
+      throw new AppError('Field not found', 404)
+    }
+  }
+  const tx = new sql.Transaction(pool)
+  let updated = 0
+  try {
+    await tx.begin()
+    for (const { fieldId, orderIndex } of order) {
+      const result = await tx
+        .request()
+        .input('SubID', sql.Int, subId)
+        .input('InfoTemplateID', sql.Int, fieldId)
+        .input('OrderIndex', sql.Int, orderIndex)
+        .query(`
+          UPDATE InformationTemplates SET OrderIndex = @OrderIndex WHERE SubID = @SubID AND InfoTemplateID = @InfoTemplateID
+        `)
+      updated += result.rowsAffected[0] ?? 0
+    }
+    await tx.commit()
+    return { updated }
+  } catch (err) {
+    try {
+      await tx.rollback()
+    } catch {
+      /* ignore */
+    }
+    throw err
+  }
+}
+
+// ───────────────────────────────────────────
 // Lightweight caches (memoization)
 // ───────────────────────────────────────────
 
@@ -1013,16 +1487,18 @@ export async function createTemplate(
       console.error('insertAuditLog failed', e)
     })
 
-    await notifyUsers({
-      recipientRoleIds: [1, 2],
-      sheetId,
-      title: 'New Template Created',
-      message: `Template #${sheetId} was created by User #${userId}.`,
-      category: 'Datasheet',
-      createdBy: userId,
-    }).catch((e: unknown) => {
+    try {
+      await notifyUsers({
+        recipientRoleIds: [1, 2],
+        sheetId,
+        title: 'New Template Created',
+        message: `Template #${sheetId} was created by User #${userId}.`,
+        category: 'Datasheet',
+        createdBy: userId,
+      })
+    } catch (e) {
       console.error('notifyUsers failed', e)
-    })
+    }
 
     return sheetId
   } catch (err) {
@@ -1037,7 +1513,6 @@ export async function createTemplate(
   }
 }
 
-const TEMPLATE_EDITABLE_STATUSES = ['Draft', 'Modified Draft', 'Rejected'] as const
 const TEMPLATE_VERIFIABLE_STATUSES = ['Draft', 'Modified Draft'] as const
 
 export async function updateTemplate(
@@ -1098,16 +1573,18 @@ export async function updateTemplate(
     await tx.commit()
     didCommit = true
 
-    await notifyUsers({
-      recipientRoleIds: [1, 2],
-      sheetId,
-      title: 'Template Updated',
-      message: `Template #${sheetId} was updated by User #${userId}.`,
-      category: 'Datasheet',
-      createdBy: userId,
-    }).catch((e) => {
+    try {
+      await notifyUsers({
+        recipientRoleIds: [1, 2],
+        sheetId,
+        title: 'Template Updated',
+        message: `Template #${sheetId} was updated by User #${userId}.`,
+        category: 'Datasheet',
+        createdBy: userId,
+      })
+    } catch (e) {
       console.error('notifyUsers failed', e)
-    })
+    }
 
     return sheetId
   } catch (err) {

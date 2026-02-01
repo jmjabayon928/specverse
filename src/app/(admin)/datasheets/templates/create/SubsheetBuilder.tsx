@@ -14,6 +14,22 @@ type SubsheetBuilderProps = {
   mode: SheetMode
   previewMode: boolean
   readOnly: boolean
+  /** When provided, called after rename so parent can persist (e.g. PATCH subsheet). */
+  onRenameSubsheet?: (index: number, name: string) => void | Promise<void>
+  /** When provided, called after reorder so parent can persist (e.g. PUT subsheets/order). */
+  onReorderSubsheets?: (subsheets: UnifiedSubsheet[]) => void | Promise<void>
+  /** When provided, called instead of local delete; parent shows modal, calls API, then updates state. */
+  onDeleteSubsheet?: (index: number) => void | Promise<void>
+  /** When provided, called instead of local add; parent calls API then adds subsheet to state. */
+  onAddSubsheet?: () => void | Promise<void>
+  /** When provided, called after field add so parent can persist (POST field). */
+  onAddField?: (subsheetIndex: number, field: InfoField) => void | Promise<void>
+  /** When provided, called after field edit so parent can persist (PATCH field). */
+  onUpdateField?: (subsheetIndex: number, fieldIndex: number, field: InfoField) => void | Promise<void>
+  /** When provided, called after field delete so parent can persist (DELETE field). */
+  onDeleteField?: (subsheetIndex: number, fieldIndex: number) => void | Promise<void>
+  /** When provided, called after field reorder so parent can persist (PATCH orderIndex). */
+  onReorderFields?: (subsheetIndex: number, fields: InfoField[]) => void | Promise<void>
 }
 
 const buildSubsheetError = (
@@ -74,24 +90,50 @@ const updateFields = (subsheets: UnifiedSubsheet[], index: number, fields: InfoF
 }
 
 export default function SubsheetBuilder(props: Readonly<SubsheetBuilderProps>) {
-  const { subsheets, onChange, formErrors = {}, mode, previewMode, readOnly } = props
+  const {
+    subsheets,
+    onChange,
+    formErrors = {},
+    mode,
+    previewMode,
+    readOnly,
+    onRenameSubsheet,
+    onReorderSubsheets,
+    onDeleteSubsheet,
+    onAddSubsheet,
+    onAddField,
+    onUpdateField,
+    onDeleteField,
+    onReorderFields,
+  } = props
 
   const canEdit = (mode === 'create' || mode === 'edit') && !previewMode && !readOnly
 
   const handleRename = (index: number, name: string) => {
     onChange(renameSubsheet(subsheets, index, name))
+    void onRenameSubsheet?.(index, name)
   }
 
   const handleAdd = () => {
-    onChange([...subsheets, createEmptySubsheet()])
+    if (onAddSubsheet) {
+      void onAddSubsheet()
+    } else {
+      onChange([...subsheets, createEmptySubsheet()])
+    }
   }
 
   const handleDelete = (index: number) => {
-    onChange(removeSubsheetAt(subsheets, index))
+    if (onDeleteSubsheet) {
+      void onDeleteSubsheet(index)
+    } else {
+      onChange(removeSubsheetAt(subsheets, index))
+    }
   }
 
   const handleMove = (index: number, direction: number) => {
-    onChange(moveSubsheet(subsheets, index, direction))
+    const next = moveSubsheet(subsheets, index, direction)
+    onChange(next)
+    void onReorderSubsheets?.(next)
   }
 
   const handleFieldsChange = (index: number, fields: InfoField[]) => {
@@ -160,6 +202,10 @@ export default function SubsheetBuilder(props: Readonly<SubsheetBuilderProps>) {
               onFieldsChange={(fields) => handleFieldsChange(index, fields)}
               isEditMode={canEdit}
               formErrors={formErrors}
+              onAddField={onAddField ? (field) => onAddField(index, field) : undefined}
+              onUpdateField={onUpdateField ? (fi, field) => onUpdateField(index, fi, field) : undefined}
+              onDeleteField={onDeleteField ? (fi) => onDeleteField(index, fi) : undefined}
+              onReorderFields={onReorderFields ? (f) => onReorderFields(index, f) : undefined}
             />
           </div>
         )
