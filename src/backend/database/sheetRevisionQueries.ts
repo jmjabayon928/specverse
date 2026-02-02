@@ -5,6 +5,8 @@ export interface SheetRevisionRow {
   RevisionID: number
   SheetID: number
   RevisionNum: number
+  SystemRevisionNum: number | null
+  SystemRevisionAt: Date | null
   SnapshotJson: string | null
   CreatedByID: number | null
   CreatedByDate: Date | null
@@ -29,6 +31,10 @@ export interface RevisionListItem {
   createdByName: string | null
   status: string | null
   comment: string | null
+  /** System revision number (canonical); same as revisionNumber when dual-written. */
+  systemRevisionNum: number
+  /** System revision timestamp. */
+  systemRevisionAt: Date
 }
 
 export interface RevisionDetails extends RevisionListItem {
@@ -36,8 +42,8 @@ export interface RevisionDetails extends RevisionListItem {
 }
 
 /**
- * Get the next revision number for a sheet (within transaction for safety)
- * Uses MAX(RevisionNum) + 1 with UPDLOCK/HOLDLOCK to prevent race conditions
+ * Get the next system revision number for a sheet (within transaction for safety).
+ * Uses MAX(SystemRevisionNum) + 1 with COALESCE for nulls; same lock strategy as before.
  */
 export async function getNextRevisionNumber(
   tx: sql.Transaction,
@@ -46,7 +52,7 @@ export async function getNextRevisionNumber(
   const result = await tx.request()
     .input('SheetID', sql.Int, sheetId)
     .query<{ NextRevisionNum: number }>(`
-      SELECT ISNULL(MAX(RevisionNum), 0) + 1 AS NextRevisionNum
+      SELECT ISNULL(MAX(COALESCE(SystemRevisionNum, RevisionNum)), 0) + 1 AS NextRevisionNum
       FROM dbo.SheetRevisions WITH (UPDLOCK, HOLDLOCK)
       WHERE SheetID = @SheetID
     `)
@@ -55,17 +61,21 @@ export async function getNextRevisionNumber(
 }
 
 /**
- * Create a new revision snapshot (must be called within a transaction)
+ * Create a new revision snapshot (must be called within a transaction).
+ * Dual-writes SystemRevisionNum/SystemRevisionAt (canonical) and RevisionNum/RevisionDate (legacy).
  */
 export async function createRevision(
   tx: sql.Transaction,
   input: CreateRevisionInput
 ): Promise<number> {
-  const revisionNumber = await getNextRevisionNumber(tx, input.sheetId)
+  const nextSystemNum = await getNextRevisionNumber(tx, input.sheetId)
 
   const result = await tx.request()
     .input('SheetID', sql.Int, input.sheetId)
-    .input('RevisionNum', sql.Int, revisionNumber)
+    .input('SystemRevisionNum', sql.Int, nextSystemNum)
+    .input('SystemRevisionAt', sql.DateTime2(7), input.createdByDate)
+    .input('RevisionNum', sql.Int, nextSystemNum)
+    .input('RevisionDate', sql.Date, input.createdByDate)
     .input('SnapshotJson', sql.NVarChar(sql.MAX), input.snapshotJson)
     .input('CreatedByID', sql.Int, input.createdById)
     .input('CreatedByDate', sql.DateTime2(0), input.createdByDate)
@@ -73,11 +83,13 @@ export async function createRevision(
     .input('Notes', sql.NVarChar(1000), input.notes ?? null)
     .query<{ RevisionID: number }>(`
       INSERT INTO dbo.SheetRevisions (
-        SheetID, RevisionNum, SnapshotJson, CreatedByID, CreatedByDate, Status, Notes
+        SheetID, SystemRevisionNum, SystemRevisionAt, RevisionNum, RevisionDate,
+        SnapshotJson, CreatedByID, CreatedByDate, Status, Notes
       )
       OUTPUT INSERTED.RevisionID
       VALUES (
-        @SheetID, @RevisionNum, @SnapshotJson, @CreatedByID, @CreatedByDate, @Status, @Notes
+        @SheetID, @SystemRevisionNum, @SystemRevisionAt, @RevisionNum, CAST(@RevisionDate AS DATE),
+        @SnapshotJson, @CreatedByID, @CreatedByDate, @Status, @Notes
       )
     `)
 
@@ -107,7 +119,7 @@ export async function listRevisionsPaged(
 
   const total = countResult.recordset[0]?.Total ?? 0
 
-  // Get paginated rows
+  // Get paginated rows (order by system revision, fallback to legacy for nulls)
   const rowsResult = await pool.request()
     .input('SheetID', sql.Int, sheetId)
     .input('Offset', sql.Int, offset)
@@ -115,6 +127,8 @@ export async function listRevisionsPaged(
     .query<{
       RevisionID: number
       RevisionNum: number
+      SystemRevisionNum: number | null
+      SystemRevisionAt: Date | null
       CreatedByDate: Date | null
       CreatedByID: number | null
       CreatedByName: string | null
@@ -124,6 +138,8 @@ export async function listRevisionsPaged(
       SELECT 
         r.RevisionID,
         r.RevisionNum,
+        r.SystemRevisionNum,
+        r.SystemRevisionAt,
         r.CreatedByDate,
         r.CreatedByID,
         u.FirstName + ' ' + u.LastName AS CreatedByName,
@@ -132,7 +148,7 @@ export async function listRevisionsPaged(
       FROM dbo.SheetRevisions r
       LEFT JOIN dbo.Users u ON r.CreatedByID = u.UserID
       WHERE r.SheetID = @SheetID
-      ORDER BY r.RevisionNum DESC
+      ORDER BY COALESCE(r.SystemRevisionNum, r.RevisionNum) DESC
       OFFSET @Offset ROWS
       FETCH NEXT @PageSize ROWS ONLY
     `)
@@ -145,6 +161,8 @@ export async function listRevisionsPaged(
     createdByName: row.CreatedByName,
     status: row.Status,
     comment: row.Notes,
+    systemRevisionNum: row.SystemRevisionNum ?? row.RevisionNum,
+    systemRevisionAt: row.SystemRevisionAt ?? row.CreatedByDate ?? new Date(0),
   }))
 
   return { total, rows }
@@ -165,6 +183,8 @@ export async function getRevisionById(
     .query<{
       RevisionID: number
       RevisionNum: number
+      SystemRevisionNum: number | null
+      SystemRevisionAt: Date | null
       CreatedByDate: Date | null
       CreatedByID: number | null
       CreatedByName: string | null
@@ -175,6 +195,8 @@ export async function getRevisionById(
       SELECT 
         r.RevisionID,
         r.RevisionNum,
+        r.SystemRevisionNum,
+        r.SystemRevisionAt,
         r.CreatedByDate,
         r.CreatedByID,
         u.FirstName + ' ' + u.LastName AS CreatedByName,
@@ -212,5 +234,7 @@ export async function getRevisionById(
     status: row.Status,
     comment: row.Notes,
     snapshot,
+    systemRevisionNum: row.SystemRevisionNum ?? row.RevisionNum,
+    systemRevisionAt: row.SystemRevisionAt ?? row.CreatedByDate ?? new Date(0),
   }
 }

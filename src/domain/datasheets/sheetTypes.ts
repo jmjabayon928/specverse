@@ -84,6 +84,10 @@ export interface UnifiedSheet {
   // Revision Info
   revisionNum: number
   revisionDate: string
+  /** Engineering/document revision (preferred in exports when present). */
+  engineeringRevision?: string | null
+  /** Client revision code (optional; include in exports if layout permits). */
+  clientRevisionCode?: string | null
 
   // Equipment
   equipmentName: string

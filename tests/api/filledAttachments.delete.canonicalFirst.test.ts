@@ -58,7 +58,10 @@ jest.mock('../../src/backend/services/templateService', () => ({
 }))
 
 const deleteSheetAttachmentLinkMock = jest.fn<Promise<boolean>, [number, number]>()
-const deleteAttachmentByIdMock = jest.fn<Promise<void>, [number, number]>()
+const deleteAttachmentByIdMock = jest.fn<
+  Promise<void>,
+  [sheetId: number, attachmentId: number, userId: number]
+>()
 
 jest.mock('../../src/backend/services/filledSheetService', () => ({
   fetchAllFilled: jest.fn(),
@@ -68,9 +71,10 @@ jest.mock('../../src/backend/services/filledSheetService', () => ({
   updateFilledSheet: jest.fn(),
   verifyFilledSheet: jest.fn(),
   approveFilledSheet: jest.fn(),
+  bumpRejectedToModifiedDraftFilled: jest.fn().mockResolvedValue(undefined),
   doesEquipmentTagExist: jest.fn(),
   getAttachmentsForSheet: jest.fn().mockResolvedValue([]),
-  deleteAttachmentById: (...args: [number, number]) => deleteAttachmentByIdMock(...args),
+  deleteAttachmentById: (...args: [number, number, number]) => deleteAttachmentByIdMock(...args),
   getNotesForSheet: jest.fn(),
   createNoteForSheet: jest.fn(),
   updateNoteForSheet: jest.fn(),
@@ -130,7 +134,7 @@ describe('Filled sheet attachments delete - canonical first with legacy fallback
 
     expect(res.statusCode).toBe(204)
     expect(deleteSheetAttachmentLinkMock).toHaveBeenCalledWith(123, 555)
-    expect(deleteAttachmentByIdMock).toHaveBeenCalledWith(123, 555)
+    expect(deleteAttachmentByIdMock).toHaveBeenCalledWith(123, 555, 1)
   })
 })
 

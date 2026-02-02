@@ -1351,6 +1351,8 @@ interface RawSheetRow {
   PackageName: string
   RevisionNum: number
   RevisionDate: Date | null
+  EngineeringRevision?: string | null
+  ClientRevisionCode?: string | null
   PreparedByID: number
   preparedByName: string
   PreparedByDate: Date | null
@@ -1444,6 +1446,8 @@ function buildUnifiedSheetFromRow(row: RawSheetRow): UnifiedSheet {
     packageName: row.PackageName,
     revisionNum: Array.isArray(row.RevisionNum) ? row.RevisionNum[0] : row.RevisionNum,
     revisionDate,
+    engineeringRevision: row.EngineeringRevision ?? undefined,
+    clientRevisionCode: row.ClientRevisionCode ?? undefined,
     preparedById: row.PreparedByID,
     preparedByName: row.preparedByName,
     preparedByDate,

@@ -40,12 +40,29 @@ const mockGetValueSetStatus = jest.fn()
 const mockCreateValueSet = jest.fn()
 const mockListValueSets = jest.fn()
 
+// Full mock to avoid loading the real filledSheetService (deterministic, no timeout under parallel run).
 jest.mock('../../src/backend/services/filledSheetService', () => ({
-  ...jest.requireActual<typeof import('../../src/backend/services/filledSheetService')>(
-    '../../src/backend/services/filledSheetService'
-  ),
+  fetchAllFilled: jest.fn(),
+  fetchReferenceOptions: jest.fn(),
   getFilledSheetDetailsById: (...args: unknown[]) => mockGetFilledSheetDetailsById(...args),
+  createFilledSheet: jest.fn(),
   updateFilledSheet: (...args: unknown[]) => mockUpdateFilledSheet(...args),
+  verifyFilledSheet: jest.fn(),
+  approveFilledSheet: jest.fn(),
+  bumpRejectedToModifiedDraftFilled: jest.fn(),
+  doesEquipmentTagExist: jest.fn(),
+  getFilledSheetTemplateId: jest.fn(),
+  getLatestApprovedTemplateId: jest.fn(),
+  getAttachmentsForSheet: jest.fn(),
+  deleteAttachmentById: jest.fn(),
+  listSheetAttachments: jest.fn(),
+  deleteSheetAttachmentLink: jest.fn(),
+  getNotesForSheet: jest.fn(),
+  createNoteForSheet: jest.fn(),
+  updateNoteForSheet: jest.fn(),
+  deleteNoteForSheet: jest.fn(),
+  exportPDF: jest.fn(),
+  exportExcel: jest.fn(),
 }))
 
 jest.mock('../../src/backend/database/valueSetQueries', () => ({

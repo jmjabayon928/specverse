@@ -80,6 +80,8 @@ export const listRevisionsHandler: RequestHandler = async (req, res, next) => {
         createdByName: row.createdByName,
         status: row.status,
         comment: row.comment,
+        systemRevisionNum: row.systemRevisionNum,
+        systemRevisionAt: row.systemRevisionAt.toISOString(),
       })),
     })
   } catch (err: unknown) {
@@ -122,6 +124,8 @@ export const getRevisionHandler: RequestHandler = async (req, res, next) => {
       status: revision.status,
       comment: revision.comment,
       snapshot: revision.snapshot as UnifiedSheet,
+      systemRevisionNum: revision.systemRevisionNum,
+      systemRevisionAt: revision.systemRevisionAt.toISOString(),
     })
   } catch (err: unknown) {
     if (err instanceof z.ZodError) {

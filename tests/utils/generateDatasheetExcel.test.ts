@@ -7,6 +7,87 @@ jest.mock('../../src/backend/services/sheetLogsService', () => ({
   fetchSheetLogsMerged: jest.fn().mockResolvedValue([]),
 }))
 
+/** Minimal sheet for display-revision and filename tests. */
+function minimalSheet(overrides: Partial<UnifiedSheet> = {}): UnifiedSheet {
+  return {
+    sheetId: 1,
+    isTemplate: false,
+    status: 'Draft',
+    sheetName: 'Test Sheet',
+    sheetDesc: '',
+    sheetDesc2: '',
+    clientDocNum: 0,
+    clientProjectNum: 0,
+    companyDocNum: 0,
+    companyProjectNum: 0,
+    areaName: '',
+    packageName: '',
+    revisionNum: 2,
+    revisionDate: '',
+    preparedByName: '',
+    preparedByDate: '',
+    modifiedByName: undefined,
+    modifiedByDate: '',
+    rejectedByName: undefined,
+    rejectedByDate: '',
+    rejectComment: undefined,
+    verifiedByName: undefined,
+    verifiedDate: null,
+    approvedByName: undefined,
+    approvedDate: null,
+    equipmentName: '',
+    equipmentTagNum: '',
+    serviceName: '',
+    requiredQty: 0,
+    itemLocation: '',
+    manuName: '',
+    suppName: '',
+    installPackNum: undefined,
+    equipSize: 0,
+    modelNum: undefined,
+    driver: undefined,
+    pid: undefined,
+    installDwg: undefined,
+    codeStd: undefined,
+    categoryName: '',
+    clientName: 'Client',
+    projectName: '',
+    areaId: 0,
+    categoryId: 0,
+    clientId: 0,
+    manuId: 0,
+    projectId: 0,
+    suppId: 0,
+    clientLogo: null,
+    preparedById: 0,
+    modifiedById: 0,
+    rejectedById: 0,
+    subsheets: [],
+    ...overrides,
+  }
+}
+
+describe('generateDatasheetExcel display revision (engineeringRevision)', () => {
+  it('uses engineeringRevision in filename when present', async () => {
+    const sheet = minimalSheet({ engineeringRevision: 'Rev-A', revisionNum: 2 })
+    const { fileName } = await generateDatasheetExcel(sheet, 'eng', 'SI')
+    expect(fileName).toContain('Rev-A')
+    expect(fileName).not.toContain('RevNo-2-')
+  })
+
+  it('falls back to revisionNum in filename when engineeringRevision is absent', async () => {
+    const sheet = minimalSheet({ revisionNum: 3 })
+    const { fileName } = await generateDatasheetExcel(sheet, 'eng', 'SI')
+    expect(fileName).toContain('RevNo-3-')
+  })
+
+  it('falls back to revisionNum when engineeringRevision is empty string', async () => {
+    const sheet = minimalSheet({ engineeringRevision: '', revisionNum: 4 })
+    const { fileName } = await generateDatasheetExcel(sheet, 'eng', 'SI')
+    expect(fileName).toContain('RevNo-4-')
+  })
+})
+
 describe('generateDatasheetExcel USC conversion', () => {
   it('converts SI values to USC units when uom=USC', async () => {
     const sheet: UnifiedSheet = {

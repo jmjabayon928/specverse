@@ -99,7 +99,7 @@ export async function generateDatasheetPDF(
           <td style="text-align:right;">
             <h1>${sheet.sheetName}</h1>
             <p>${sheet.sheetDesc}</p>
-            <p><b>${getUI("revisionNum")}:</b> ${sheet.revisionNum}</p>
+            <p><b>${getUI("revisionNum")}:</b> ${(sheet.engineeringRevision?.trim() ?? "") || String(sheet.revisionNum ?? "")}</p>
             <p><b>${getUI("preparedBy")}:</b> ${sheet.preparedByName} (${sheet.preparedByDate})</p>
           </td>
         </tr>

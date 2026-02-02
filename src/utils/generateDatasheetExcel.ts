@@ -162,6 +162,15 @@ const cleanForFileName = (
     .replaceAll(/\s+/g, '_')
 }
 
+/** Revision string for display/filename: prefer engineeringRevision when present, else revisionNum. */
+function getDisplayRevision(sheet: {
+  revisionNum?: number
+  engineeringRevision?: string | null
+}): string {
+  const eng = sheet.engineeringRevision?.trim() ?? ''
+  return eng !== '' ? eng : String(sheet.revisionNum ?? '')
+}
+
 export interface DatasheetExcelResult {
   buffer: Buffer
   fileName: string
@@ -183,11 +192,12 @@ export const generateDatasheetExcel = async (
   uom: 'SI' | 'USC'
 ): Promise<DatasheetExcelResult> => {
   const sheetType = sheet.isTemplate ? 'Template' : 'FilledSheet'
+  const displayRevision = getDisplayRevision(sheet)
   const fileName = `${cleanForFileName(sheetType)}-${cleanForFileName(
     sheet.clientName
   )}-${cleanForFileName(
     sheet.sheetName
-  )}-RevNo-${cleanForFileName(sheet.revisionNum)}-${uom}-${lang}.xlsx`
+  )}-RevNo-${cleanForFileName(displayRevision)}-${uom}-${lang}.xlsx`
 
   const isUSC = uom === 'USC'
 
@@ -306,7 +316,7 @@ export const generateDatasheetExcel = async (
         'areaName',
         sheet.areaName,
       ],
-      ['packageName', sheet.packageName, 'revisionNum', sheet.revisionNum],
+      ['packageName', sheet.packageName, 'revisionNum', getDisplayRevision(sheet)],
       [
         'revisionDate',
         sheet.revisionDate,

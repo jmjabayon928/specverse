@@ -35,6 +35,10 @@ process.env.JWT_SECRET ??= 'secret'
 const testSheetId = 999
 const mockRevisionId = 1001
 const mockRevisionNumber = 1
+/** Fixed date for deterministic mocks and payloads (no time-dependent flakiness). */
+const FIXED_DATE = new Date('2026-01-28T12:00:00.000Z')
+const FIXED_DATE_STRING = '2026-01-28'
+
 const mockSnapshot = {
   sheetName: 'Test Sheet',
   sheetDesc: 'Test Desc',
@@ -148,23 +152,27 @@ describe('Sheet Revisions API', () => {
         {
           revisionId: mockRevisionId,
           revisionNumber: mockRevisionNumber,
-          createdAt: new Date('2026-01-28T12:00:00.000Z'),
+          createdAt: FIXED_DATE,
           createdBy: 1,
           createdByName: 'Test User',
           status: 'Draft',
           comment: null,
+          systemRevisionNum: mockRevisionNumber,
+          systemRevisionAt: FIXED_DATE,
         },
       ],
     })
     mockGetRevisionById.mockResolvedValue({
       revisionId: mockRevisionId,
       revisionNumber: mockRevisionNumber,
-      createdAt: new Date('2026-01-28T12:00:00.000Z'),
+      createdAt: FIXED_DATE,
       createdBy: 1,
       createdByName: 'Test User',
       status: 'Draft',
       comment: null,
       snapshot: mockSnapshot,
+      systemRevisionNum: mockRevisionNumber,
+      systemRevisionAt: FIXED_DATE,
     })
     mockGetFilledSheetDetailsById.mockResolvedValue({
       datasheet: { ...mockSnapshot, sheetId: testSheetId },
@@ -189,9 +197,9 @@ describe('Sheet Revisions API', () => {
           areaId: 1,
           packageName: 'Test Package',
           revisionNum: 1,
-          revisionDate: new Date().toISOString().split('T')[0],
+          revisionDate: FIXED_DATE_STRING,
           preparedById: 1,
-          preparedByDate: new Date().toISOString().split('T')[0],
+          preparedByDate: FIXED_DATE_STRING,
           itemLocation: 'Test Location',
           requiredQty: 1,
           equipmentName: 'Test Equipment',
@@ -282,12 +290,14 @@ describe('Sheet Revisions API', () => {
       mockGetRevisionById.mockResolvedValueOnce({
         revisionId: mockRevisionId,
         revisionNumber: mockRevisionNumber,
-        createdAt: new Date('2026-01-28T12:00:00.000Z'),
+        createdAt: FIXED_DATE,
         createdBy: 1,
         createdByName: 'Test User',
         status: 'Draft',
         comment: null,
         snapshot: validRestoreSnapshot,
+        systemRevisionNum: mockRevisionNumber,
+        systemRevisionAt: FIXED_DATE,
       })
       mockGetFilledSheetDetailsById
         .mockResolvedValueOnce({ datasheet: { ...validRestoreSnapshot, sheetId: testSheetId } })

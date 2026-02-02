@@ -45,6 +45,15 @@ const cleanForFileName = (
     .replaceAll(/\s+/g, '_')
 }
 
+/** Revision string for display/filename: prefer engineeringRevision when present, else revisionNum. */
+function getDisplayRevision(sheet: {
+  revisionNum?: number
+  engineeringRevision?: string | null
+}): string {
+  const eng = sheet.engineeringRevision?.trim() ?? ''
+  return eng !== '' ? eng : String(sheet.revisionNum ?? '')
+}
+
 type LogEntry = {
   id: number
   kind: 'audit' | 'change'
@@ -182,11 +191,12 @@ export const generateDatasheetPDF = async (
 ): Promise<DatasheetPDFResult> => {
   const sheetType = sheet.isTemplate ? 'Template' : 'FilledSheet'
 
+  const displayRevision = getDisplayRevision(sheet)
   const fileName = `${cleanForFileName(sheetType)}-${cleanForFileName(
     sheet.clientName
   )}-${cleanForFileName(
     sheet.sheetName
-  )}-RevNo-${cleanForFileName(sheet.revisionNum)}-${uom}-${lang}.pdf`
+  )}-RevNo-${cleanForFileName(displayRevision)}-${uom}-${lang}.pdf`
 
   const uiMap = getUiMapForLang(lang)
   const getUI = (key: string): string => getLabel(key, uiMap)
@@ -235,7 +245,7 @@ export const generateDatasheetPDF = async (
     </tr>
     <tr class="data-row">
       <td class="label">${getUI('packageName')}</td><td class="value">${sheet.packageName ?? ''}</td>
-      <td class="label">${getUI('revisionNum')}</td><td class="value">${sheet.revisionNum ?? ''}</td>
+      <td class="label">${getUI('revisionNum')}</td><td class="value">${getDisplayRevision(sheet)}</td>
     </tr>
     <tr class="data-row">
       <td class="label">${getUI('revisionDate')}</td><td class="value">${sheet.revisionDate ?? ''}</td>

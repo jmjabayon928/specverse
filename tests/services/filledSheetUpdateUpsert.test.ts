@@ -370,6 +370,33 @@ describe('updateFilledSheet SQL column names (Sheets / SheetRevisions)', () => {
     expect(withRevisionNum).toBe(true)
   })
 
+  it('next revision number query uses SystemRevisionNum (or COALESCE)', async () => {
+    await updateFilledSheet(1, minimalUnifiedSheet, 1)
+
+    const nextNumQueries = executedQueries.filter((q) => {
+      const n = q.replace(/\s+/g, ' ').toLowerCase()
+      return n.includes('sheetrevisions') && n.includes('max') && n.includes('nextrevisionnum')
+    })
+    expect(nextNumQueries.length).toBeGreaterThanOrEqual(1)
+    expect(nextNumQueries[0]).toMatch(/systemrevisionnum|coalesce\s*\(\s*r?\.?systemrevisionnum/i)
+  })
+
+  it('SheetRevisions INSERT includes SystemRevisionNum, SystemRevisionAt, RevisionNum, RevisionDate', async () => {
+    await updateFilledSheet(1, minimalUnifiedSheet, 1)
+
+    const insertSheetRevisions = executedQueries.filter((q) => {
+      const n = q.replace(/\s+/g, ' ').toLowerCase()
+      return n.includes('insert') && n.includes('sheetrevisions')
+    })
+    expect(insertSheetRevisions.length).toBeGreaterThanOrEqual(1)
+
+    const insertSql = insertSheetRevisions[0]
+    expect(insertSql).toMatch(/\bSystemRevisionNum\b/)
+    expect(insertSql).toMatch(/\bSystemRevisionAt\b/)
+    expect(insertSql).toMatch(/\bRevisionNum\b/)
+    expect(insertSql).toMatch(/\bRevisionDate\b/)
+  })
+
   it('SheetRevisions INSERT uses Notes (not Comment) and CreatedByID/CreatedByDate (not CreatedBy)', async () => {
     await updateFilledSheet(1, minimalUnifiedSheet, 1)
 
