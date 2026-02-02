@@ -1,5 +1,6 @@
 // tests/services/filledSheetUpdateUpsert.test.ts
 // Phase 2 Slice #2: Assert updateFilledSheet uses UPSERT (no wholesale DELETE on InformationValues).
+// Contract: first save creates revision (updateFilledSheet calls createRevision); create/clone does not (see createFilledSheet.wiring.test).
 
 const executedQueries: string[] = []
 const queryResponses: Array<{ recordset?: unknown[]; rowsAffected?: number[] }> = []

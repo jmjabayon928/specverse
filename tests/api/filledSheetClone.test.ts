@@ -1,5 +1,7 @@
 // tests/api/filledSheetClone.test.ts
 // Phase 4: Clone uses latest approved template; 409 when no latest approved.
+// Phase 3: Filled→filled clone creates new sheet with correct linkage; revisions are NOT copied.
+// Phase 3.1: Contract — create/clone does not create revisions; first save does. Cloned sheet has 0 revisions until first update.
 
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
@@ -47,6 +49,19 @@ jest.mock('../../src/backend/services/filledSheetService', () => {
   }
 })
 
+const mockListRevisionsPaged = jest.fn()
+
+jest.mock('../../src/backend/database/sheetRevisionQueries', () => {
+  const actual =
+    jest.requireActual<typeof import('../../src/backend/database/sheetRevisionQueries')>(
+      '../../src/backend/database/sheetRevisionQueries'
+    )
+  return {
+    ...actual,
+    listRevisionsPaged: (...args: unknown[]) => mockListRevisionsPaged(...args),
+  }
+})
+
 process.env.JWT_SECRET ??= 'secret'
 
 function createAuthCookie(): string {
@@ -71,6 +86,7 @@ describe('Filled sheet clone (Phase 4)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockDoesEquipmentTagExist.mockResolvedValue(false)
+    mockListRevisionsPaged.mockResolvedValue({ total: 0, rows: [] })
   })
 
   it('uses latest approved template id when calling createFilledSheet (not source TemplateID)', async () => {
@@ -116,5 +132,66 @@ describe('Filled sheet clone (Phase 4)', () => {
 
     expect(res.statusCode).toBe(409)
     expect(mockCreateFilledSheet).not.toHaveBeenCalled()
+  })
+
+  it('createFilledSheet is called with isTemplate false and templateId (new sheet, no revision copy)', async () => {
+    mockGetFilledSheetTemplateId.mockResolvedValue({ TemplateID: 10 })
+    mockGetLatestApprovedTemplateId.mockResolvedValue(99)
+    mockCreateFilledSheet.mockResolvedValue({ sheetId: 42 })
+
+    const res = await request(app)
+      .post('/api/backend/filledsheets/5/clone')
+      .set('Cookie', [authCookie])
+      .send({
+        equipmentTagNum: 'CLONE-TAG-3',
+        projectId: 2,
+        fieldValues: { 101: 'val1' },
+      })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.body).toHaveProperty('sheetId', 42)
+    expect(mockCreateFilledSheet).toHaveBeenCalledTimes(1)
+    const createInput = mockCreateFilledSheet.mock.calls[0][0] as {
+      templateId: number
+      isTemplate: boolean
+      equipmentTagNum: string
+      projectId: number
+      fieldValues: Record<string, string>
+    }
+    expect(createInput.templateId).toBe(99)
+    expect(createInput.isTemplate).toBe(false)
+    expect(createInput.equipmentTagNum).toBe('CLONE-TAG-3')
+    expect(createInput.projectId).toBe(2)
+    expect(createInput.fieldValues).toEqual({ 101: 'val1' })
+  })
+
+  it('cloned sheet has 0 revisions until first update (list revisions returns empty)', async () => {
+    const newSheetId = 200
+    mockGetFilledSheetTemplateId.mockResolvedValue({ TemplateID: 10 })
+    mockGetLatestApprovedTemplateId.mockResolvedValue(99)
+    mockCreateFilledSheet.mockResolvedValue({ sheetId: newSheetId })
+    mockListRevisionsPaged.mockResolvedValue({ total: 0, rows: [] })
+
+    const cloneRes = await request(app)
+      .post('/api/backend/filledsheets/5/clone')
+      .set('Cookie', [authCookie])
+      .send({
+        equipmentTagNum: 'CLONE-NO-REV',
+        projectId: 1,
+        fieldValues: {},
+      })
+
+    expect(cloneRes.statusCode).toBe(201)
+    expect(cloneRes.body.sheetId).toBe(newSheetId)
+
+    const listRes = await request(app)
+      .get(`/api/backend/filledsheets/${newSheetId}/revisions?page=1&pageSize=20`)
+      .set('Cookie', [authCookie])
+
+    expect(listRes.statusCode).toBe(200)
+    expect(listRes.body.total).toBe(0)
+    expect(Array.isArray(listRes.body.rows)).toBe(true)
+    expect(listRes.body.rows).toHaveLength(0)
+    expect(mockListRevisionsPaged).toHaveBeenCalledWith(newSheetId, 1, 20)
   })
 })

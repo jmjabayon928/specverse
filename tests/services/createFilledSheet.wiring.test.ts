@@ -1,10 +1,12 @@
 // tests/services/createFilledSheet.wiring.test.ts
 // Service-level wiring: createFilledSheet with repo/DB stubbed to prove meta+values mapping matches validated shapes.
+// Contract: create/clone does not create revisions; first save does. createFilledSheet must not call createRevision.
 
 import { AppError } from '../../src/backend/errors/AppError'
 import type { UnifiedSheet } from '../../src/domain/datasheets/sheetTypes'
 
 const queryResultQueue: unknown[] = []
+const mockCreateRevision = jest.fn()
 
 // Stub config/db so createFilledSheet's runInTransaction uses our queue (same module the service imports).
 jest.mock('../../src/backend/config/db', () => {
@@ -55,6 +57,17 @@ jest.mock('../../src/backend/database/auditQueries', () => ({
 jest.mock('../../src/backend/utils/notifyUsers', () => ({
   notifyUsers: jest.fn().mockResolvedValue(undefined),
 }))
+
+jest.mock('../../src/backend/database/sheetRevisionQueries', () => {
+  const actual =
+    jest.requireActual<typeof import('../../src/backend/database/sheetRevisionQueries')>(
+      '../../src/backend/database/sheetRevisionQueries'
+    )
+  return {
+    ...actual,
+    createRevision: (...args: unknown[]) => mockCreateRevision(...args),
+  }
+})
 
 const INFO_TEMPLATE_ID_DECIMAL = 3792
 const INFO_TEMPLATE_ID_OPTION = 3797
@@ -286,6 +299,20 @@ function enqueueSuccessResponsesFourFields(): void {
 describe('createFilledSheet wiring (stubbed DB)', () => {
   beforeEach(() => {
     queryResultQueue.length = 0
+    mockCreateRevision.mockClear()
+  })
+
+  it('does not call createRevision (create/clone does not create revisions; first save does)', async () => {
+    enqueueSuccessResponses()
+    const { createFilledSheet } = await import('../../src/backend/services/filledSheetService')
+    const payload = buildMinimalPayload({
+      [String(INFO_TEMPLATE_ID_DECIMAL)]: '2.0',
+      [String(INFO_TEMPLATE_ID_OPTION)]: 'D',
+    })
+
+    await createFilledSheet(payload, { userId: 1, route: '/test', method: 'POST' })
+
+    expect(mockCreateRevision).not.toHaveBeenCalled()
   })
 
   it('resolves with sheetId when fieldValues have decimal "2.0" and option "D" (meta has "D ")', async () => {
