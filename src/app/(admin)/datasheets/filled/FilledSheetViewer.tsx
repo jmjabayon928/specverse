@@ -1,4 +1,6 @@
 // src/app/(admin)/datasheets/filled/FilledSheetViewer.tsx
+"use client";
+
 import React from "react";
 import type { UnifiedSheet, UnifiedSubsheet } from "@/domain/datasheets/sheetTypes";
 import type { InfoField } from "@/domain/datasheets/sheetTypes";

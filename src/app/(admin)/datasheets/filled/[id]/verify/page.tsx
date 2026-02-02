@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import { Metadata } from "next";
-import FilledSheetViewer from "../../FilledSheetViewer";
+import VerifyPageClient from "./VerifyPageClient";
 import VerifyForm from "./VerifyForm";
 
 export const metadata: Metadata = {
@@ -34,8 +34,8 @@ export default async function FilledVerifyPage({ params }: Readonly<PageProps>) 
     <div className="container max-w-6xl py-6">
       <h1 className="text-2xl font-semibold mb-6">Verify Filled Datasheet</h1>
 
-      {/* ✅ Read-only view of the filled sheet */}
-      <FilledSheetViewer
+      {/* ✅ Read-only view of the filled sheet (client for Add Note / Add Attachment) */}
+      <VerifyPageClient
         sheet={rawData.datasheet}
         translations={rawData.translations ?? null}
         language="eng"
