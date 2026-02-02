@@ -44,7 +44,7 @@ const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: 'Dashboard',
-    roles: ['admin', 'manager', 'estimator', 'user'],
+    roles: ['admin', 'manager', 'estimator', 'user', 'supervisor'],
     subItems: [
       { name: 'Overview & Stats', path: '/', pro: false }
     ],
@@ -52,7 +52,7 @@ const navItems: NavItem[] = [
   {
     icon: <DataSheetsIcon />,
     name: 'DataSheets',
-    roles: ['admin', 'engineer', 'estimator', 'qa'],
+    roles: ['admin', 'engineer', 'estimator', 'qa', 'supervisor'],
     subItems: [
       { name: 'Templates', path: '/datasheets/templates', pro: false },
       { name: 'Filled Forms', path: '/datasheets/filled', pro: false },
@@ -68,7 +68,7 @@ const navItems: NavItem[] = [
   {
     icon: <EstimationIcon />,
     name: 'Project Estimation',
-    roles: ['admin', 'estimator', 'manager'],
+    roles: ['admin', 'estimator', 'manager', 'supervisor', 'engineer'],
     subItems: [
       { name: 'Estimation List', path: '/estimation' },
       { name: 'Estimation Packages', path: '/estimation/packages' },
@@ -79,7 +79,7 @@ const navItems: NavItem[] = [
   {
     icon: <InventoryIcon />,
     name: 'Inventory',
-    roles: ['admin', 'warehouse', 'maintenance'],
+    roles: ['admin', 'warehouse', 'maintenance', 'supervisor', 'engineer'],
     subItems: [
       { name: 'Inventory Items', path: '/inventory' },
       { name: 'Transactions', path: '/inventory/transactions' },

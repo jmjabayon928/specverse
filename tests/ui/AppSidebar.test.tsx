@@ -66,4 +66,37 @@ describe('AppSidebar role gating', () => {
     const list = document.querySelector('ul[aria-hidden="true"]')
     expect(list).toBeInTheDocument()
   })
+
+  it('shows Dashboard, Datasheets, Estimation, and Inventory for Supervisor', () => {
+    useSessionMock.mockReturnValue({
+      user: { role: 'Supervisor', permissions: [], userId: 1, roleId: 1 },
+      loading: false,
+    })
+
+    render(<AppSidebar />)
+
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('DataSheets')).toBeInTheDocument()
+    expect(screen.getByText('Project Estimation')).toBeInTheDocument()
+    expect(screen.getByText('Inventory')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /templates/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /filled forms/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /estimation list/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /inventory items/i })).toBeInTheDocument()
+  })
+
+  it('shows Estimation and Inventory for Engineer', () => {
+    useSessionMock.mockReturnValue({
+      user: { role: 'Engineer', permissions: [], userId: 1, roleId: 1 },
+      loading: false,
+    })
+
+    render(<AppSidebar />)
+
+    expect(screen.getByText('Project Estimation')).toBeInTheDocument()
+    expect(screen.getByText('Inventory')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /estimation list/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /inventory items/i })).toBeInTheDocument()
+    expect(screen.getByText('DataSheets')).toBeInTheDocument()
+  })
 })
