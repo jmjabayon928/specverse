@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { UserSession } from '@/domain/auth/sessionTypes'
+import type { SheetTranslations } from '@/domain/i18n/translationTypes'
 import RevisionDetailsTabs from './RevisionDetailsTabs'
 
 interface RevisionListItem {
@@ -35,12 +36,21 @@ interface RevisionDetails {
   snapshot: unknown
 }
 
-interface Props {
+type Props = Readonly<{
   sheetId: number
   user: UserSession
-}
+  defaultLanguage: string
+  defaultUnitSystem: 'SI' | 'USC'
+  initialTranslations: SheetTranslations | null
+}>
 
-export default function RevisionsListClient({ sheetId, user }: Props) {
+export default function RevisionsListClient({
+  sheetId,
+  user,
+  defaultLanguage,
+  defaultUnitSystem,
+  initialTranslations,
+}: Props) {
   const router = useRouter()
   const [revisions, setRevisions] = useState<RevisionListItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -287,6 +297,9 @@ export default function RevisionsListClient({ sheetId, user }: Props) {
               onClose={() => setSelectedRevision(null)}
               onRestore={() => setShowRestoreModal(true)}
               canEdit={canEdit}
+              language={defaultLanguage}
+              unitSystem={defaultUnitSystem}
+              translations={initialTranslations}
             />
           </div>
         </div>

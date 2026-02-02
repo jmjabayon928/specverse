@@ -228,13 +228,17 @@ type WithNotes = { notes?: SheetNoteDTO[] };
 type WithAttachments = { attachments?: SheetAttachmentDTO[] };
 type SheetWithExtras = UnifiedSheet & WithNotes & WithAttachments;
 
+export type ViewerMode = "live" | "revision";
+
 interface Props {
   sheet: UnifiedSheet;
   translations: SheetTranslations | null;
   language: string;
   unitSystem: UnitSystem;
+  /** When "revision", action buttons (Add Note, Add Attachment) and Change Log are hidden; no handlers required. */
+  viewerMode?: ViewerMode;
 
-  // Optional handlers for the buttons
+  // Optional handlers for the buttons (ignored when viewerMode === "revision")
   onAddNote?: (sheetId: number) => void;
   onAddAttachment?: (sheetId: number) => void;
 }
@@ -244,6 +248,7 @@ const FilledSheetViewer: React.FC<Props> = ({
   translations,
   language,
   unitSystem,
+  viewerMode = "live",
   onAddNote,
   onAddAttachment,
 }) => {
@@ -263,10 +268,10 @@ const FilledSheetViewer: React.FC<Props> = ({
     [sheetX.attachments]
   );
 
-  // Handlers with proper type narrowing for sheetId
-  const canAddNote = Boolean(onAddNote && typeof sheet.sheetId === "number");
-  const canAddAttachment = Boolean(onAddAttachment && typeof sheet.sheetId === "number");
+  const isRevision = viewerMode === "revision";
   const sheetId = typeof sheet.sheetId === "number" ? sheet.sheetId : null;
+  const canAddNote = !isRevision && Boolean(onAddNote && typeof sheet.sheetId === "number");
+  const canAddAttachment = !isRevision && Boolean(onAddAttachment && typeof sheet.sheetId === "number");
 
   const handleAddNote = () => {
     if (onAddNote && typeof sheet.sheetId === "number") onAddNote(sheet.sheetId);
@@ -419,20 +424,22 @@ const FilledSheetViewer: React.FC<Props> = ({
       <fieldset className="border rounded p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="text-xl font-semibold">{getUILabel("Notes", language)}</div>
-          <button
-            type="button"
-            className="inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium hover:shadow disabled:opacity-50"
-            onClick={handleAddNote}
-            disabled={!canAddNote}
-            aria-label={getUILabel("AddNote", language)}
-            title={
-              canAddNote
-                ? getUILabel("AddNote", language)
-                : getUILabel("HandlerNotProvided", language) ?? "Handler not provided"
-            }
-          >
-            {getUILabel("AddNote", language) ?? "Add Note"}
-          </button>
+          {!isRevision && (
+            <button
+              type="button"
+              className="inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium hover:shadow disabled:opacity-50"
+              onClick={handleAddNote}
+              disabled={!canAddNote}
+              aria-label={getUILabel("AddNote", language)}
+              title={
+                canAddNote
+                  ? getUILabel("AddNote", language)
+                  : getUILabel("HandlerNotProvided", language) ?? "Handler not provided"
+              }
+            >
+              {getUILabel("AddNote", language) ?? "Add Note"}
+            </button>
+          )}
         </div>
 
         {groupedNotes.length > 0 ? (
@@ -480,20 +487,22 @@ const FilledSheetViewer: React.FC<Props> = ({
       <fieldset className="border rounded p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="text-xl font-semibold">{getUILabel("Attachments", language)}</div>
-          <button
-            type="button"
-            className="inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium hover:shadow disabled:opacity-50"
-            onClick={handleAddAttachment}
-            disabled={!canAddAttachment}
-            aria-label={getUILabel("AddAttachment", language)}
-            title={
-              canAddAttachment
-                ? getUILabel("AddAttachment", language)
-                : getUILabel("HandlerNotProvided", language) ?? "Handler not provided"
-            }
-          >
-            {getUILabel("AddAttachment", language) ?? "Add Attachment"}
-          </button>
+          {!isRevision && (
+            <button
+              type="button"
+              className="inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium hover:shadow disabled:opacity-50"
+              onClick={handleAddAttachment}
+              disabled={!canAddAttachment}
+              aria-label={getUILabel("AddAttachment", language)}
+              title={
+                canAddAttachment
+                  ? getUILabel("AddAttachment", language)
+                  : getUILabel("HandlerNotProvided", language) ?? "Handler not provided"
+              }
+            >
+              {getUILabel("AddAttachment", language) ?? "Add Attachment"}
+            </button>
+          )}
         </div>
 
         {attachments.length > 0 ? (
@@ -542,7 +551,7 @@ const FilledSheetViewer: React.FC<Props> = ({
         )}
       </fieldset>
 
-      {sheetId != null && (
+      {!isRevision && sheetId != null && (
         <fieldset className="border rounded p-4">
           <div className="text-xl font-semibold mb-2">Audit &amp; Change Log</div>
           <div className="text-sm text-gray-600 mb-4">

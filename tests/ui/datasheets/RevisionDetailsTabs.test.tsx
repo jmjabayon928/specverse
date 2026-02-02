@@ -67,6 +67,9 @@ describe('RevisionDetailsTabs', () => {
     onClose: jest.fn(),
     onRestore: jest.fn(),
     canEdit: false,
+    language: 'eng',
+    unitSystem: 'SI' as const,
+    translations: null,
   }
 
   afterEach(() => {
@@ -79,12 +82,24 @@ describe('RevisionDetailsTabs', () => {
     expect(screen.getByText(/no previous revision to compare/i)).toBeInTheDocument()
   })
 
-  it('switches to Snapshot tab and shows structured view', () => {
+  it('switches to Snapshot tab and shows FilledSheetViewer layout (no action buttons)', () => {
     render(<RevisionDetailsTabs {...defaultProps} />)
     fireEvent.click(screen.getByRole('button', { name: /snapshot/i }))
-    expect(screen.getByText(/revision:/i)).toBeInTheDocument()
+    expect(screen.getByText(/datasheet details/i)).toBeInTheDocument()
     expect(screen.getByText(/main/i)).toBeInTheDocument()
     expect(screen.getByText('Design Pressure')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add note/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add attachment/i })).not.toBeInTheDocument()
+  })
+
+  it('tab switching still works after viewing Snapshot', () => {
+    render(<RevisionDetailsTabs {...defaultProps} />)
+    fireEvent.click(screen.getByRole('button', { name: /snapshot/i }))
+    expect(screen.getByText(/datasheet details/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /raw json/i }))
+    expect(screen.getByRole('button', { name: /copy json/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /changes/i }))
+    expect(screen.getByText(/no previous revision to compare/i)).toBeInTheDocument()
   })
 
   it('switches to Raw JSON tab and shows Copy JSON button', () => {

@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
+import type { SheetTranslations } from '@/domain/i18n/translationTypes'
 import { diffUnifiedSheets, type DiffRow } from '@/domain/datasheets/revisionDiff'
+import FilledSheetViewer from '@/app/(admin)/datasheets/filled/FilledSheetViewer'
 import RevisionChangesTable from './RevisionChangesTable'
-import RevisionSnapshotView from './RevisionSnapshotView'
 import RevisionRawJson from './RevisionRawJson'
 
 export type RevisionDetails = Readonly<{
@@ -48,6 +49,9 @@ type Props = Readonly<{
   onClose: () => void
   onRestore: () => void
   canEdit: boolean
+  language: string
+  unitSystem: 'SI' | 'USC'
+  translations: SheetTranslations | null
 }>
 
 export default function RevisionDetailsTabs({
@@ -57,6 +61,9 @@ export default function RevisionDetailsTabs({
   onClose,
   onRestore,
   canEdit,
+  language,
+  unitSystem,
+  translations,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('changes')
   const [showUnchanged, setShowUnchanged] = useState(() => {
@@ -177,21 +184,25 @@ export default function RevisionDetailsTabs({
   const renderTabContent = useCallback(() => {
     if (activeTab === 'changes') return changesContent
     if (activeTab === 'snapshot') {
+      if (!isUnifiedSheet(selectedRevision.snapshot)) {
+        return (
+          <p className="text-sm text-gray-600">
+            Snapshot is not in a structured format. Use the Raw JSON tab to inspect.
+          </p>
+        )
+      }
       return (
-        <RevisionSnapshotView
-          snapshot={selectedRevision.snapshot}
-          meta={{
-            revisionNumber: selectedRevision.revisionNumber,
-            createdAt: selectedRevision.createdAt,
-            createdByName: selectedRevision.createdByName,
-            status: selectedRevision.status,
-            comment: selectedRevision.comment,
-          }}
+        <FilledSheetViewer
+          sheet={selectedRevision.snapshot}
+          translations={translations}
+          language={language}
+          unitSystem={unitSystem}
+          viewerMode="revision"
         />
       )
     }
     return <RevisionRawJson snapshot={selectedRevision.snapshot} />
-  }, [activeTab, changesContent, selectedRevision])
+  }, [activeTab, changesContent, selectedRevision, language, unitSystem, translations])
 
   return (
     <>
