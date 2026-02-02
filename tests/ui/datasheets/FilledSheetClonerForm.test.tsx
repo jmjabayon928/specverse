@@ -30,6 +30,27 @@ describe('FilledSheetClonerForm', () => {
     jest.resetAllMocks()
   })
 
+  it('renders clone UX hint about template structure and UOM inherited', () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.sheetId = 300
+
+    render(
+      <FilledSheetClonerForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+      />
+    )
+
+    const hint = screen.getByRole('status')
+    expect(hint).toHaveTextContent(/Template structure and units \(UOM\) are inherited/)
+    expect(hint).toHaveTextContent(/Cloning creates a new filled sheet; edit values and identity fields only/)
+  })
+
   it('requires equipment tag number and shows error when missing', async () => {
     const sheet = makeBasicUnifiedSheet()
     sheet.sheetId = 300
@@ -105,5 +126,52 @@ describe('FilledSheetClonerForm', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     })
+  })
+
+  it('does not show uom errors when template has invalid uom (clone validates only user-editable fields)', async () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.sheetId = 302
+    // Template-owned uom that would fail unifiedSheetSchema (number is invalid for uom)
+    if (sheet.subsheets[0]?.fields[0]) {
+      (sheet.subsheets[0].fields[0] as { uom?: unknown }).uom = 123
+    }
+
+    const fetchMock = globalThis.fetch as jest.Mock
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ exists: false }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ sheetId: 998 }),
+      })
+
+    render(
+      <FilledSheetClonerForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+      />
+    )
+
+    expect(screen.queryByText(/uom.*invalid/i)).not.toBeInTheDocument()
+
+    const equipmentTagLabel = screen.getByText('Equipment Tag Number')
+    const equipmentTagInput = equipmentTagLabel.closest('div')?.querySelector('input')
+    expect(equipmentTagInput).toBeTruthy()
+    fireEvent.change(equipmentTagInput!, { target: { value: 'P-CLONE-302' } })
+
+    const button = screen.getByRole('button', { name: /create cloned sheet/i })
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      const postCall = fetchMock.mock.calls.find(
+        (call: [string, RequestInit]) => call[0] === '/api/backend/filledsheets'
+      )
+      expect(postCall).toBeDefined()
+    })
+    expect(screen.queryByText(/uom.*invalid/i)).not.toBeInTheDocument()
   })
 })

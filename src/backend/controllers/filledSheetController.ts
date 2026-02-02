@@ -50,6 +50,7 @@ import {
 import { addSheetAttachment } from "../services/templateService"
 
 import { AppError } from "../errors/AppError"
+import { REVISION_SNAPSHOT_INVALID_MESSAGE } from "../database/sheetRevisionQueries"
 import { parseLang } from "../utils/parseLang"
 
 /* ───────────────────────────────────────────
@@ -325,6 +326,11 @@ export const updateFilledSheetHandler: RequestHandler = async (req, res, next) =
 
     res.status(200).json({ sheetId: updated.sheetId })
   } catch (err: unknown) {
+    if (err instanceof Error && err.message === REVISION_SNAPSHOT_INVALID_MESSAGE) {
+      console.error('createRevision snapshot validation failed', err)
+      next(new AppError('Unable to create a revision snapshot. Please try again or contact support.', 500))
+      return
+    }
     handleError(next, err, "Failed to update filled sheet")
   }
 }

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ZodError } from 'zod'
-import { unifiedSheetSchema } from '@/validation/sheetSchema'
+import { unifiedSheetSchemaForClone } from '@/validation/sheetSchema'
 import { renderInput, renderSelect, renderDate } from '@/components/ui/form/FormHelper'
 import FilledSheetSubsheetForm from '../../create/FilledSheetSubsheetForm'
 import type { UnifiedSheet, UnifiedSubsheet } from '@/domain/datasheets/sheetTypes'
@@ -291,7 +291,7 @@ export default function FilledSheetClonerForm(
   const handleSubmit = async () => {
     try {
       const sheetToValidate = buildSheetToValidate(datasheet, fieldValues)
-      const result = unifiedSheetSchema.safeParse(sheetToValidate)
+      const result = unifiedSheetSchemaForClone.safeParse(sheetToValidate)
 
       if (!result.success) {
         setFormErrors(flattenErrors(result.error))
@@ -358,6 +358,10 @@ export default function FilledSheetClonerForm(
   return (
     <div className='space-y-6'>
       <h1 className='text-xl font-semibold'>Clone Filled Sheet</h1>
+
+      <div className='p-4 bg-blue-50 text-blue-800 border border-blue-200 rounded text-sm' role='status'>
+        Template structure and units (UOM) are inherited from the template. Cloning creates a new filled sheet; edit values and identity fields only.
+      </div>
 
       {formErrors && Object.keys(formErrors).length > 0 && (
         <div className='p-4 bg-red-100 text-red-700 border border-red-400 rounded'>

@@ -1,5 +1,6 @@
 // src/backend/database/sheetRevisionQueries.ts
 import { poolPromise, sql } from '../config/db'
+import { unifiedSheetSchema } from '@/validation/sheetSchema'
 
 export interface SheetRevisionRow {
   RevisionID: number
@@ -41,6 +42,10 @@ export interface RevisionDetails extends RevisionListItem {
   snapshot: unknown // UnifiedSheet (parsed from JSON)
 }
 
+/** Error message thrown when snapshotJson is not valid UnifiedSheet (4C guard). Used by controllers for friendly response. */
+export const REVISION_SNAPSHOT_INVALID_MESSAGE =
+  'Invalid revision snapshot: snapshotJson is not a UnifiedSheet'
+
 /**
  * Get the next system revision number for a sheet (within transaction for safety).
  * Uses MAX(SystemRevisionNum) + 1 with COALESCE for nulls; same lock strategy as before.
@@ -63,14 +68,26 @@ export async function getNextRevisionNumber(
 /**
  * Create a new revision snapshot (must be called within a transaction).
  * Dual-writes SystemRevisionNum/SystemRevisionAt (canonical) and RevisionNum/RevisionDate (legacy).
+ * Validates snapshotJson is a valid UnifiedSheet before inserting.
  */
 export async function createRevision(
   tx: sql.Transaction,
   input: CreateRevisionInput
 ): Promise<number> {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(input.snapshotJson)
+  } catch {
+    throw new Error(REVISION_SNAPSHOT_INVALID_MESSAGE)
+  }
+  const parseResult = unifiedSheetSchema.safeParse(parsed)
+  if (!parseResult.success) {
+    throw new Error(REVISION_SNAPSHOT_INVALID_MESSAGE)
+  }
+
   const nextSystemNum = await getNextRevisionNumber(tx, input.sheetId)
 
-  const result = await tx.request()
+  const insertResult = await tx.request()
     .input('SheetID', sql.Int, input.sheetId)
     .input('SystemRevisionNum', sql.Int, nextSystemNum)
     .input('SystemRevisionAt', sql.DateTime2(7), input.createdByDate)
@@ -93,7 +110,7 @@ export async function createRevision(
       )
     `)
 
-  return result.recordset[0].RevisionID
+  return insertResult.recordset[0].RevisionID
 }
 
 /**

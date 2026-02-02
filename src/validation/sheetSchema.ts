@@ -8,16 +8,39 @@ const uomSchema = z
   .optional()
   .transform((v) => (v === undefined ? undefined : normalizeUom(v)));
 
-export const infoFieldSchema = z
-  .object({
-    id: z.number().optional(),
-    label: z.string().min(1, "Field label is required"),
-    infoType: z.enum(["int", "decimal", "varchar"]),
-    uom: uomSchema,
-    sortOrder: z.number(),
-    required: z.boolean(),
-    options: z.array(z.string()).optional(),
-    value: z.union([z.string(), z.number(), z.null()]).optional(),
+const infoFieldObjectSchema = z.object({
+  id: z.number().optional(),
+  label: z.string().min(1, "Field label is required"),
+  infoType: z.enum(["int", "decimal", "varchar"]),
+  uom: uomSchema,
+  sortOrder: z.number(),
+  required: z.boolean(),
+  options: z.array(z.string()).optional(),
+  value: z.union([z.string(), z.number(), z.null()]).optional(),
+});
+
+export const infoFieldSchema = infoFieldObjectSchema.superRefine((field, ctx) => {
+  if (
+    field.required &&
+    (field.value === undefined || field.value === null || String(field.value).trim() === "")
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["value"],
+      message: "This field is required.",
+    });
+  }
+});
+
+/**
+ * Clone filled sheet: same as infoFieldSchema but uom is not validated (template-owned;
+ * user does not edit uom on the clone form). Accepts any uom and coerces to string | undefined.
+ */
+export const infoFieldCloneSchema = infoFieldObjectSchema
+  .extend({
+    uom: z.unknown().optional().transform((v) =>
+      v == null ? undefined : typeof v === "string" ? v : String(v)
+    ),
   })
   .superRefine((field, ctx) => {
     if (
@@ -110,6 +133,20 @@ export const unifiedSheetSchema = z.object({
   subtypeId: z.number().positive().nullable().optional(),
 
   subsheets: z.array(subsheetSchema).min(1, "At least one subsheet is required"),
+});
+
+export const subsheetCloneSchema = z.object({
+  id: z.number().optional(),
+  name: z.string().min(1, "Subsheet name is required"),
+  fields: z.array(infoFieldCloneSchema).min(1, "At least 1 field is required"),
+});
+
+/**
+ * Clone filled sheet: validates only user-editable data. Field uom is not validated.
+ * Use in FilledSheetClonerForm so template-owned uom does not block clone.
+ */
+export const unifiedSheetSchemaForClone = unifiedSheetSchema.extend({
+  subsheets: z.array(subsheetCloneSchema).min(1, "At least one subsheet is required"),
 });
 
 /**

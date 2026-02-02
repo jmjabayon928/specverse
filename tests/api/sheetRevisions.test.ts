@@ -93,7 +93,14 @@ const mockCreateRevision = jest.fn()
 const mockUpdateFilledSheet = jest.fn()
 const mockGetFilledSheetDetailsById = jest.fn()
 
+const { REVISION_SNAPSHOT_INVALID_MESSAGE } = jest.requireActual<typeof import('../../src/backend/database/sheetRevisionQueries')>(
+  '../../src/backend/database/sheetRevisionQueries'
+)
+
 jest.mock('../../src/backend/database/sheetRevisionQueries', () => ({
+  ...jest.requireActual<typeof import('../../src/backend/database/sheetRevisionQueries')>(
+    '../../src/backend/database/sheetRevisionQueries'
+  ),
   listRevisionsPaged: (...args: unknown[]) => mockListRevisionsPaged(...args),
   getRevisionById: (...args: unknown[]) => mockGetRevisionById(...args),
   createRevision: (...args: unknown[]) => mockCreateRevision(...args),
@@ -134,10 +141,13 @@ jest.mock('../../src/backend/config/db', () => {
 function buildTestApp() {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const filledSheetRoutes = require('../../src/backend/routes/filledSheetRoutes').default
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { errorHandler } = require('../../src/backend/middleware/errorHandler')
   const app = express()
   app.use(express.json())
   app.use(cookieParser())
   app.use('/api/backend/filledsheets', filledSheetRoutes)
+  app.use(errorHandler)
   return app
 }
 
@@ -330,6 +340,35 @@ describe('Sheet Revisions API', () => {
 
       expect(sheetRes.statusCode).toBe(200)
       expect(sheetRes.body.datasheet).toHaveProperty('sheetName')
+    })
+
+    it('returns 500 and friendly message when createRevision throws invalid snapshot error (Phase 4.1)', async () => {
+      const app = buildTestApp()
+      mockGetRevisionById.mockResolvedValueOnce({
+        revisionId: mockRevisionId,
+        revisionNumber: mockRevisionNumber,
+        createdAt: FIXED_DATE,
+        createdBy: 1,
+        createdByName: 'Test User',
+        status: 'Draft',
+        comment: null,
+        snapshot: validRestoreSnapshot,
+        systemRevisionNum: mockRevisionNumber,
+        systemRevisionAt: FIXED_DATE,
+      })
+      mockGetFilledSheetDetailsById
+        .mockResolvedValueOnce({ datasheet: { ...validRestoreSnapshot, sheetId: testSheetId } })
+        .mockResolvedValueOnce({ datasheet: { ...validRestoreSnapshot, sheetId: testSheetId } })
+      mockCreateRevision.mockRejectedValueOnce(new Error(REVISION_SNAPSHOT_INVALID_MESSAGE))
+
+      const res = await request(app)
+        .post(`/api/backend/filledsheets/${testSheetId}/revisions/${mockRevisionId}/restore`)
+        .set('Cookie', [authCookie])
+        .send({ comment: 'Test restore' })
+
+      expect(res.statusCode).toBe(500)
+      expect(res.body.error).toBe('Unable to create a revision snapshot. Please try again or contact support.')
+      expect(res.body.message).toBe('Unable to create a revision snapshot. Please try again or contact support.')
     })
   })
 })

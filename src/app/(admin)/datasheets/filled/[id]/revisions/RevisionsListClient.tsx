@@ -1,11 +1,14 @@
 // src/app/(admin)/datasheets/filled/[id]/revisions/RevisionsListClient.tsx
 'use client'
 
-import { useCallback, useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { UserSession } from '@/domain/auth/sessionTypes'
 import type { SheetTranslations } from '@/domain/i18n/translationTypes'
+import { diffUnifiedSheets } from '@/domain/datasheets/revisionDiff'
+import { unifiedSheetSchema } from '@/validation/sheetSchema'
+import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
 import RevisionDetailsTabs from './RevisionDetailsTabs'
 
 interface RevisionListItem {
@@ -62,6 +65,9 @@ export default function RevisionsListClient({
   const [showRestoreModal, setShowRestoreModal] = useState(false)
   const [restoreComment, setRestoreComment] = useState('')
   const [restoring, setRestoring] = useState(false)
+  /** Per-revision changed-field count (client-side diff vs previous). Rev #1 has no previous. */
+  const [changedCountByRevisionId, setChangedCountByRevisionId] = useState<Record<number, number | null>>({})
+  const changedCountGenerationRef = useRef(0)
 
   const fetchRevisions = useCallback(async () => {
     try {
@@ -92,6 +98,57 @@ export default function RevisionsListClient({
   useEffect(() => {
     fetchRevisions()
   }, [fetchRevisions])
+
+  const revisionIdByNumber = useMemo(() => {
+    return new Map<number, number>(revisions.map(r => [r.revisionNumber, r.revisionId]))
+  }, [revisions])
+
+  useEffect(() => {
+    const revsToCompute = revisions.filter(r => r.revisionNumber >= 2)
+    if (revsToCompute.length === 0) return
+
+    const generation = changedCountGenerationRef.current + 1
+    changedCountGenerationRef.current = generation
+    setChangedCountByRevisionId({})
+
+    const computeOne = async (rev: RevisionListItem) => {
+      const prevRevId = revisionIdByNumber.get(rev.revisionNumber - 1)
+      if (prevRevId == null) return
+
+      const [currentRes, previousRes] = await Promise.all([
+        fetch(`/api/backend/filledsheets/${sheetId}/revisions/${rev.revisionId}`, {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        }),
+        fetch(`/api/backend/filledsheets/${sheetId}/revisions/${prevRevId}`, {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        }),
+      ])
+      if (generation !== changedCountGenerationRef.current) return
+      if (!currentRes.ok || !previousRes.ok) return
+
+      const [currentData, previousData] = await Promise.all([
+        currentRes.json() as Promise<RevisionDetails>,
+        previousRes.json() as Promise<RevisionDetails>,
+      ])
+      if (generation !== changedCountGenerationRef.current) return
+
+      const prevParsed = unifiedSheetSchema.safeParse(previousData.snapshot)
+      const currParsed = unifiedSheetSchema.safeParse(currentData.snapshot)
+      if (!prevParsed.success || !currParsed.success) {
+        setChangedCountByRevisionId(prev => ({ ...prev, [rev.revisionId]: null }))
+        return
+      }
+      const prevSheet = prevParsed.data as UnifiedSheet
+      const currSheet = currParsed.data as UnifiedSheet
+      const diff = diffUnifiedSheets(prevSheet, currSheet)
+      const count = diff.rows.filter(row => row.kind !== 'unchanged').length
+      setChangedCountByRevisionId(prev => ({ ...prev, [rev.revisionId]: count }))
+    }
+
+    revsToCompute.forEach(computeOne)
+  }, [revisions, revisionIdByNumber, sheetId])
 
   const handleViewDetails = async (revisionId: number) => {
     try {
@@ -151,9 +208,6 @@ export default function RevisionsListClient({
   }
 
   const canEdit = Array.isArray(user.permissions) && user.permissions.includes('DATASHEET_EDIT')
-  const revisionIdByNumber = useMemo(() => {
-    return new Map<number, number>(revisions.map(r => [r.revisionNumber, r.revisionId]))
-  }, [revisions])
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -192,6 +246,9 @@ export default function RevisionsListClient({
                     Comment
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Fields changed
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -199,7 +256,7 @@ export default function RevisionsListClient({
               <tbody className="bg-white divide-y divide-gray-200">
                 {revisions.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                    <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                       No revisions found
                     </td>
                   </tr>
@@ -220,6 +277,13 @@ export default function RevisionsListClient({
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {rev.comment || '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {rev.revisionNumber === 1
+                          ? '—'
+                          : changedCountByRevisionId[rev.revisionId] !== undefined && changedCountByRevisionId[rev.revisionId] !== null
+                            ? `${changedCountByRevisionId[rev.revisionId]} changed`
+                            : '—'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         {revisionIdByNumber.has(rev.revisionNumber - 1) && (

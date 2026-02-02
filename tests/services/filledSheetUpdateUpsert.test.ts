@@ -61,9 +61,10 @@ jest.mock('../../src/backend/utils/notifyUsers', () => ({
 import { updateFilledSheet } from '../../src/backend/services/filledSheetService'
 import { AppError } from '../../src/backend/errors/AppError'
 
+/** Must pass unifiedSheetSchema so createRevision (4C guard) accepts the snapshot. */
 const minimalUnifiedSheet = {
   sheetName: 'Test',
-  sheetDesc: '',
+  sheetDesc: 'Test description',
   sheetDesc2: '',
   clientDocNum: 1,
   clientProjectNum: 1,
@@ -96,7 +97,17 @@ const minimalUnifiedSheet = {
   subsheets: [
     {
       name: 'Sub1',
-      fields: [{ id: 1, label: 'F1', infoType: 'varchar' as const, sortOrder: 0, required: false, value: 'new' }],
+      fields: [
+        {
+          id: 1,
+          label: 'F1',
+          infoType: 'varchar' as const,
+          uom: undefined,
+          sortOrder: 0,
+          required: false,
+          value: 'new',
+        },
+      ],
     },
   ],
 }

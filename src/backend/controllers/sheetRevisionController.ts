@@ -2,7 +2,7 @@
 import type { Request, RequestHandler } from 'express'
 import { z } from 'zod'
 import { AppError } from '../errors/AppError'
-import { listRevisionsPaged, getRevisionById, createRevision } from '../database/sheetRevisionQueries'
+import { listRevisionsPaged, getRevisionById, createRevision, REVISION_SNAPSHOT_INVALID_MESSAGE } from '../database/sheetRevisionQueries'
 import { updateFilledSheet, getFilledSheetDetailsById } from '../services/filledSheetService'
 import { poolPromise, sql } from '../config/db'
 import { unifiedSheetSchema } from '@/validation/sheetSchema'
@@ -241,6 +241,11 @@ export const restoreRevisionHandler: RequestHandler = async (req, res, next) => 
   } catch (err: unknown) {
     if (err instanceof z.ZodError) {
       next(new AppError('Invalid request parameters', 400))
+      return
+    }
+    if (err instanceof Error && err.message === REVISION_SNAPSHOT_INVALID_MESSAGE) {
+      console.error('createRevision snapshot validation failed', err)
+      next(new AppError('Unable to create a revision snapshot. Please try again or contact support.', 500))
       return
     }
     next(err)
