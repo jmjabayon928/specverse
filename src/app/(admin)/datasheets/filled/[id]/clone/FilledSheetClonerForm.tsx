@@ -95,7 +95,41 @@ function mapFieldErrorsToFormErrors(
   return out
 }
 
-/** Build fieldValues from source subsheets using only field.value (not label/type/uom). Omit keys for null/undefined/blank to avoid FILLED_VALIDATE failures. Returns skipped count for fields with no id/originalId. */
+type FieldErrorDisplayItem = {
+  subsheetName: string
+  fieldLabel: string
+  message: string
+}
+
+/** Resolve backend fieldErrors to human-readable items (subsheet name, field label, message) for the error banner. */
+function getFieldErrorDisplayItems(
+  fieldErrors: FieldErrorItem[],
+  subsheets: UnifiedSubsheet[]
+): FieldErrorDisplayItem[] {
+  return fieldErrors.map((err) => {
+    const msg = displayMessage(err)
+    for (let i = 0; i < subsheets.length; i++) {
+      const sub = subsheets[i]
+      const field = sub.fields.find(
+        (f) => f.id === err.infoTemplateId || f.originalId === err.infoTemplateId
+      )
+      if (field) {
+        return {
+          subsheetName: sub.name ?? `Subsheet #${i + 1}`,
+          fieldLabel: field.label ?? `Field ${err.infoTemplateId}`,
+          message: msg,
+        }
+      }
+    }
+    return {
+      subsheetName: 'Unknown',
+      fieldLabel: `Field ${err.infoTemplateId}`,
+      message: msg,
+    }
+  })
+}
+
+/** Build fieldValues keyed by TEMPLATE InfoTemplateID (originalId ?? id) so backend createFilledSheet finds values. Omit keys for null/undefined/blank. Returns skipped count for fields with no id/originalId. */
 function buildFieldValueMap(subsheets: UnifiedSubsheet[]): {
   fieldValues: Record<string, string>
   skippedFieldsCount: number
@@ -105,8 +139,8 @@ function buildFieldValueMap(subsheets: UnifiedSubsheet[]): {
 
   for (const subsheet of subsheets) {
     for (const field of subsheet.fields) {
-      const id = field.id ?? field.originalId
-      if (id === undefined || id === null) {
+      const templateId = field.originalId ?? field.id
+      if (templateId === undefined || templateId === null) {
         skippedFieldsCount += 1
         if (process.env.NODE_ENV !== 'production') {
           console.warn(
@@ -119,7 +153,11 @@ function buildFieldValueMap(subsheets: UnifiedSubsheet[]): {
       const raw = field.value
       if (raw === null || raw === undefined) continue
       if (typeof raw === 'string' && raw.trim() === '') continue
-      fieldValues[String(id)] = String(raw)
+      if (field.options && field.options.length > 0) {
+        const rawStr = String(raw).trim()
+        if (rawStr !== '' && !field.options.includes(rawStr)) continue
+      }
+      fieldValues[String(templateId)] = String(raw)
     }
   }
 
@@ -134,10 +172,11 @@ function buildSheetToValidate(
     ...datasheet,
     subsheets: datasheet.subsheets.map((subsheet) => ({
       ...subsheet,
-      fields: subsheet.fields.map((field) => ({
-        ...field,
-        value: fieldValues[field.id?.toString() ?? ''] || '',
-      })),
+      fields: subsheet.fields.map((field) => {
+        const templateId = field.originalId ?? field.id
+        const value = templateId != null ? (fieldValues[String(templateId)] ?? '') : ''
+        return { ...field, value: value || '' }
+      }),
     })),
   }
 }
@@ -176,8 +215,7 @@ function validateParsedSheetForClone(
       const isMissing = field.value === undefined || String(field.value).trim() === ''
 
       if (field.required && isMissing) {
-        const label = field.label || `Field ${j + 1}`
-        const key = `Subsheet #${number} - ${label}`
+        const key = `Subsheet #${number} - Template #${j + 1} - value`
         manualErrors[key] = ['This field is required.']
       }
     }
@@ -217,6 +255,7 @@ export default function FilledSheetClonerForm(
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(
     initialBuild.fieldValues
   )
+  const [lastFieldErrors, setLastFieldErrors] = useState<FieldErrorItem[] | null>(null)
   const skippedFieldsCount = initialBuild.skippedFieldsCount
 
   const handleChange = <K extends keyof UnifiedSheet>(
@@ -231,16 +270,15 @@ export default function FilledSheetClonerForm(
     infoTemplateId: number,
     value: string
   ) => {
-    setFieldValues((prev) => ({ ...prev, [infoTemplateId]: value }))
+    setFieldValues((prev) => ({ ...prev, [String(infoTemplateId)]: value }))
 
     setDatasheet((prev) => {
       const updatedSubsheets = [...prev.subsheets]
       const targetSubsheet = { ...updatedSubsheets[subsheetIndex] }
-
+      const templateId = infoTemplateId
       targetSubsheet.fields = targetSubsheet.fields.map((field) =>
-        field.id === infoTemplateId ? { ...field, value } : field
+        (field.originalId ?? field.id) === templateId ? { ...field, value } : field
       )
-
       updatedSubsheets[subsheetIndex] = targetSubsheet
       return { ...prev, subsheets: updatedSubsheets }
     })
@@ -306,6 +344,7 @@ export default function FilledSheetClonerForm(
   }, [checkingTag, tagExists])
 
   const handleSubmit = async () => {
+    setLastFieldErrors(null)
     try {
       const sheetToValidate = buildSheetToValidate(datasheet, fieldValues)
       const result = unifiedSheetSchemaForClone.safeParse(sheetToValidate)
@@ -334,6 +373,16 @@ export default function FilledSheetClonerForm(
         fieldValues,
       }
 
+      if (process.env.NODE_ENV !== 'production') {
+        const sample = Object.entries(fieldValues).slice(0, 10)
+        console.debug('[FilledSheetClonerForm] clone submit', {
+          sourceSheetId: props.sourceSheetId,
+          templateId: datasheet.templateId,
+          fieldValuesKeyCount: Object.keys(fieldValues).length,
+          fieldValuesSample: sample,
+        })
+      }
+
       const response = await fetch(`/api/backend/filledsheets/${props.sourceSheetId}/clone`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -345,12 +394,17 @@ export default function FilledSheetClonerForm(
 
       if (!response.ok) {
         if (response.status === 400 && Array.isArray(body.fieldErrors)) {
-          const mapped = mapFieldErrorsToFormErrors(body.fieldErrors, datasheet.subsheets)
+          const fieldErrorsList = body.fieldErrors as FieldErrorItem[]
+          setLastFieldErrors(fieldErrorsList)
+          const mapped = mapFieldErrorsToFormErrors(fieldErrorsList, datasheet.subsheets)
           setFormErrors(mapped)
           const firstKey = Object.keys(mapped)[0]
           if (firstKey) {
             requestAnimationFrame(() => {
-              document.querySelector(`[data-error-key="${CSS.escape(firstKey)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+              const el = document.querySelector(`[data-error-key="${CSS.escape(firstKey)}"]`)
+              if (el && typeof el.scrollIntoView === 'function') {
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+              }
             })
           }
           return
@@ -387,13 +441,21 @@ export default function FilledSheetClonerForm(
       )}
 
       {formErrors && Object.keys(formErrors).length > 0 && (
-        <div className='p-4 bg-red-100 text-red-700 border border-red-400 rounded'>
+        <div className='p-4 bg-red-100 text-red-700 border border-red-400 rounded' role='alert'>
           <ul className='list-disc pl-5 space-y-1'>
-            {Object.entries(formErrors).map(([key, messages]) => (
-              <li key={key}>
-                <strong>{key}</strong>: {messages.join(', ')}
-              </li>
-            ))}
+            {lastFieldErrors && lastFieldErrors.length > 0
+              ? getFieldErrorDisplayItems(lastFieldErrors, datasheet.subsheets).map(
+                  (item, idx) => (
+                    <li key={idx}>
+                      <strong>{item.subsheetName} – {item.fieldLabel}</strong>: {item.message}
+                    </li>
+                  )
+                )
+              : Object.entries(formErrors).map(([key, messages]) => (
+                  <li key={key}>
+                    <strong>{key}</strong>: {messages.join(', ')}
+                  </li>
+                ))}
           </ul>
         </div>
       )}
@@ -507,6 +569,7 @@ export default function FilledSheetClonerForm(
             fieldValues={fieldValues}
             onFieldValueChange={handleFieldValueChange}
             formErrors={formErrors}
+            valueKeyPreferTemplateId
           />
         ))}
       </div>

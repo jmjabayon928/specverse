@@ -5,6 +5,10 @@ import React from "react";
 import type { UnifiedSubsheet, InfoField } from "@/domain/datasheets/sheetTypes";
 import FieldCompletenessHint from "@/components/datasheets/FieldCompletenessHint";
 import SectionCompletenessSummary from "@/components/datasheets/SectionCompletenessSummary";
+import {
+  normalizeNumericInput,
+  getNumericFieldError,
+} from "@/utils/numericFieldHelpers";
 
 // Memoized row: only this row rerenders when its value (or error) changes
 interface FilledSheetFieldRowProps {
@@ -15,6 +19,8 @@ interface FilledSheetFieldRowProps {
   subsheetIndex: number;
   /** Key for storing value (InfoTemplateID or unique sentinel); used so values don't collide across subsheets. */
   storageKey: number;
+  /** When true (Create Filled Sheet), allow raw typing and show "Enter a number." for invalid numeric; when false, normalize on change. */
+  strictNumericValidation?: boolean;
 }
 
 function FilledSheetFieldRowInner({
@@ -24,18 +30,38 @@ function FilledSheetFieldRowInner({
   onFieldValueChange,
   subsheetIndex,
   storageKey,
+  strictNumericValidation = false,
 }: Readonly<FilledSheetFieldRowProps>) {
   const valueStr = typeof value === "string" ? value : String(value ?? "");
-  const isIncompleteHint = field.required && valueStr.trim() === "";
-  const hasError = Boolean(errorMessage);
+  const isNumeric = field.infoType === "int" || field.infoType === "decimal";
+  const isOptionField = Boolean(field.options && field.options.length > 0);
+  const displayValue = isOptionField
+    ? (field.options!.includes(valueStr) ? valueStr : "")
+    : valueStr;
+  const isIncompleteHint = field.required && displayValue.trim() === "";
+  const requiredError =
+    field.required && displayValue.trim() === "" ? "This field is required." : undefined;
+  const numericError =
+    strictNumericValidation && isNumeric
+      ? getNumericFieldError(displayValue, field.required)
+      : null;
+  const hasError = Boolean(errorMessage || (strictNumericValidation && numericError) || (!strictNumericValidation && requiredError));
+  const inlineError =
+    strictNumericValidation && isNumeric
+      ? (numericError ?? errorMessage)
+      : (errorMessage ?? requiredError);
   const isRequired = field.required;
   const label = field.label;
 
   const onValueChange = (nextValue: string) => {
-    onFieldValueChange(subsheetIndex, storageKey, nextValue);
+    const toSend =
+      isNumeric && !strictNumericValidation
+        ? normalizeNumericInput(nextValue)
+        : nextValue;
+    onFieldValueChange(subsheetIndex, storageKey, toSend);
   };
 
-  if (field.options && field.options.length > 0) {
+  if (isOptionField) {
     return (
       <div className="mb-4">
         <label
@@ -48,7 +74,7 @@ function FilledSheetFieldRowInner({
           <FieldCompletenessHint show={isIncompleteHint} />
         </label>
         <select
-          value={value}
+          value={displayValue}
           title="Select field"
           onChange={(e) => onValueChange(e.target.value)}
           className={`w-full border rounded px-3 py-2 ${
@@ -57,19 +83,21 @@ function FilledSheetFieldRowInner({
           aria-required={isRequired}
         >
           <option value="">-- Select --</option>
-          {field.options.map((opt) => (
+          {field.options!.map((opt) => (
             <option key={`opt:${storageKey}:${opt}`} value={opt}>
               {opt}
             </option>
           ))}
         </select>
-        {hasError && <p className="text-sm text-red-600 mt-1">{errorMessage}</p>}
+        {hasError && inlineError && (
+          <p className="text-sm text-red-600 mt-1">{inlineError}</p>
+        )}
       </div>
     );
   }
 
   const inputType =
-    field.infoType === "int" || field.infoType === "decimal" ? "number" : "text";
+    isNumeric && !strictNumericValidation ? "number" : isNumeric ? "text" : "text";
 
   return (
     <div className="mb-4">
@@ -85,14 +113,16 @@ function FilledSheetFieldRowInner({
       <input
         type={inputType}
         title="Input field"
-        value={value}
+        value={displayValue}
         onChange={(e) => onValueChange(e.target.value)}
         className={`w-full border rounded px-3 py-2 ${
           hasError ? "border-red-500" : "border-gray-300"
         }`}
         aria-required={isRequired}
       />
-      {hasError && <p className="text-sm text-red-600 mt-1">{errorMessage}</p>}
+      {hasError && inlineError && (
+        <p className="text-sm text-red-600 mt-1">{inlineError}</p>
+      )}
     </div>
   );
 }
@@ -108,6 +138,10 @@ interface Props {
   /** Optional section-level completeness for hint (UX only) */
   sectionTotalRequired?: number;
   sectionFilledRequired?: number;
+  /** When true, use template id (originalId ?? id) for value key so clone payload matches backend expectation. */
+  valueKeyPreferTemplateId?: boolean;
+  /** When true (Create Filled Sheet only), use shared numeric helpers: raw typing + "Enter a number." for invalid. */
+  strictNumericValidation?: boolean;
 }
 
 function FilledSheetSubsheetFormInner(props: Readonly<Props>) {
@@ -119,6 +153,8 @@ function FilledSheetSubsheetFormInner(props: Readonly<Props>) {
     formErrors = {},
     sectionTotalRequired,
     sectionFilledRequired,
+    valueKeyPreferTemplateId = false,
+    strictNumericValidation = false,
   } = props;
 
   return (
@@ -134,8 +170,10 @@ function FilledSheetSubsheetFormInner(props: Readonly<Props>) {
         {subsheet.fields.map((field, index) => {
           const errorKey = `Subsheet #${subsheetIndex + 1} - Template #${index + 1} - value`;
           const errorMessage = formErrors?.[errorKey]?.[0];
-          // Key by InfoTemplateID only so values map correctly when labels repeat across subsheets.
-          const valueKey = field.id ?? field.originalId;
+          // Clone: key by template id so payload matches backend (template InfoTemplateID). Create/edit: key by filled id.
+          const valueKey = valueKeyPreferTemplateId
+            ? field.originalId ?? field.id
+            : field.id ?? field.originalId;
           const value =
             valueKey != null
               ? (fieldValues as Record<string, string>)[String(valueKey)] ?? ""
@@ -152,6 +190,7 @@ function FilledSheetSubsheetFormInner(props: Readonly<Props>) {
                 onFieldValueChange={onFieldValueChange}
                 subsheetIndex={subsheetIndex}
                 storageKey={storageKey}
+                strictNumericValidation={strictNumericValidation}
               />
             </div>
           );

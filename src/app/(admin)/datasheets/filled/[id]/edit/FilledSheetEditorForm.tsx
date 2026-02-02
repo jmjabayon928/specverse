@@ -11,6 +11,7 @@ import { useDatasheetCompleteness } from '@/hooks/useDatasheetCompleteness'
 import { getSubsheetKey } from '@/utils/datasheetCompleteness'
 import type { UnifiedSheet, UnifiedSubsheet } from '@/domain/datasheets/sheetTypes'
 import type { Option } from '@/domain/shared/commonTypes'
+import { isFiniteNumericString } from '@/utils/numericFieldHelpers'
 
 interface FilledSheetEditorFormProps {
   defaultValues: UnifiedSheet
@@ -160,6 +161,33 @@ function validateParsedSheet(parsed: UnifiedSheet): Record<string, string[]> {
   return manualErrors
 }
 
+/** Validate required int/decimal fields: non-blank and valid number. Returns errors keyed for inline display. */
+function validateRequiredNumerics(
+  subsheets: UnifiedSubsheet[],
+  fieldValues: Record<string, string>
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (let i = 0; i < subsheets.length; i++) {
+    const sub = subsheets[i]
+    for (let j = 0; j < sub.fields.length; j++) {
+      const field = sub.fields[j]
+      if (!field.required) continue
+      const isNumeric = field.infoType === 'int' || field.infoType === 'decimal'
+      if (!isNumeric) continue
+      const key = field.id?.toString() ?? ''
+      const v = (fieldValues[key] ?? '').trim()
+      if (!v) {
+        out[`Subsheet #${i + 1} - Template #${j + 1} - value`] = ['This field is required.']
+        continue
+      }
+      if (!isFiniteNumericString(v)) {
+        out[`Subsheet #${i + 1} - Template #${j + 1} - value`] = ['Enter a number.']
+      }
+    }
+  }
+  return out
+}
+
 export default function FilledSheetEditorForm(
   props: Readonly<FilledSheetEditorFormProps>
 ) {
@@ -249,9 +277,22 @@ export default function FilledSheetEditorForm(
         return
       }
 
+      const numericErrors = validateRequiredNumerics(datasheet.subsheets, fieldValues)
+      if (Object.keys(numericErrors).length > 0) {
+        setFormErrors(numericErrors)
+        return
+      }
+
+      const fieldValuesForPayload: Record<string, string> = {}
+      for (const [k, v] of Object.entries(fieldValues)) {
+        if (v !== undefined && v !== null && String(v).trim() !== '') {
+          fieldValuesForPayload[k] = String(v).trim()
+        }
+      }
+
       const payload = {
         ...datasheet,
-        fieldValues,
+        fieldValues: fieldValuesForPayload,
       }
 
       const res = await fetch(`/api/backend/filledsheets/${datasheet.sheetId}`, {
@@ -404,6 +445,7 @@ export default function FilledSheetEditorForm(
               formErrors={formErrors}
               sectionTotalRequired={sectionComp?.totalRequired}
               sectionFilledRequired={sectionComp?.filledRequired}
+              strictNumericValidation
             />
           )
         })}

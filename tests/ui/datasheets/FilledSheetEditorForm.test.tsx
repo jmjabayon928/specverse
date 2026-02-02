@@ -1,6 +1,6 @@
 // tests/ui/datasheets/FilledSheetEditorForm.test.tsx
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import FilledSheetEditorForm from '../../../src/app/(admin)/datasheets/filled/[id]/edit/FilledSheetEditorForm'
 import { makeBasicUnifiedSheet, makeOptions } from './datasheetTestUtils'
@@ -268,5 +268,124 @@ describe('FilledSheetEditorForm', () => {
     })
 
     expect(screen.queryByText(/uom.*Expected string|Expected string.*uom/i)).not.toBeInTheDocument()
+  })
+
+  it('blocks submit when required decimal is blank (no PUT)', async () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.isTemplate = false
+    sheet.sheetId = 555
+    sheet.subsheets[0].fields[0].value = ''
+    sheet.subsheets[0].fields[0].required = true
+
+    render(
+      <FilledSheetEditorForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+      />
+    )
+
+    const button = screen.getByRole('button', { name: /update filled sheet/i })
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      const putCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(
+        (call: [string]) => call[0]?.includes('/api/backend/filledsheets/') && call[0]?.endsWith(String(sheet.sheetId))
+      )
+      expect(putCalls.length).toBe(0)
+    })
+    expect(screen.getAllByText(/This field is required\./).length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('shows "Enter a number." for non-numeric decimal and does not submit', async () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.isTemplate = false
+    sheet.sheetId = 556
+
+    render(
+      <FilledSheetEditorForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+      />
+    )
+
+    const mainFieldset = screen.getByRole('group', { name: 'Main' })
+    const designPressureLabel = within(mainFieldset).getByText(/Design Pressure/)
+    const designPressureInput = designPressureLabel.closest('div')?.querySelector('input')
+    expect(designPressureInput).toBeTruthy()
+    fireEvent.change(designPressureInput!, { target: { value: 'varchar12' } })
+
+    await waitFor(() => {
+      expect(within(mainFieldset).getByText('Enter a number.')).toBeInTheDocument()
+    })
+
+    const button = screen.getByRole('button', { name: /update filled sheet/i })
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      const putCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(
+        (call: [string]) => call[0]?.includes('/api/backend/filledsheets/') && call[0]?.endsWith(String(sheet.sheetId))
+      )
+      expect(putCalls.length).toBe(0)
+    })
+  })
+
+  it('omits blank optional numeric from payload on submit', async () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.isTemplate = false
+    sheet.sheetId = 557
+
+    ;(globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ sheetId: sheet.sheetId }),
+    })
+
+    render(
+      <FilledSheetEditorForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+      />
+    )
+
+    const mainFieldset = screen.getByRole('group', { name: 'Main' })
+    const designPressureLabel = within(mainFieldset).getByText(/Design Pressure/)
+    const designPressureInput = designPressureLabel.closest('div')?.querySelector('input')
+    const designTempLabel = within(mainFieldset).getByText(/Design Temperature/)
+    const designTempInput = designTempLabel.closest('div')?.querySelector('input')
+    expect(designPressureInput).toBeTruthy()
+    fireEvent.change(designPressureInput!, { target: { value: '10' } })
+    if (designTempInput) {
+      fireEvent.change(designTempInput, { target: { value: '' } })
+    }
+
+    const button = screen.getByRole('button', { name: /update filled sheet/i })
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalled()
+    })
+
+    const putCall = (globalThis.fetch as jest.Mock).mock.calls.find(
+      (call: [string, RequestInit]) => call[0] === `/api/backend/filledsheets/${sheet.sheetId}`
+    ) as [string, RequestInit] | undefined
+    expect(putCall).toBeDefined()
+    const body = JSON.parse((putCall![1].body as string) || '{}')
+    expect(body.fieldValues).toBeDefined()
+    expect(body.fieldValues['1001']).toBe('10')
+    expect(Object.prototype.hasOwnProperty.call(body.fieldValues, '1002')).toBe(false)
   })
 })

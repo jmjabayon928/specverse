@@ -9,6 +9,7 @@ import type { UnifiedSheet, UnifiedSubsheet } from "@/domain/datasheets/sheetTyp
 import type { Option } from "@/domain/shared/commonTypes";
 import { applySheetTranslations } from "@/utils/applySheetTranslations";
 import type { SheetTranslations } from "@/domain/i18n/translationTypes";
+import { isFiniteNumericString } from "@/utils/numericFieldHelpers";
 
 type FieldErrorItem = {
   infoTemplateId: number;
@@ -158,7 +159,7 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
     }));
   };
 
-  // Extra guard for subsheet required fields, in case any control bypasses native required.
+  // Extra guard for subsheet required fields; for int/decimal also require valid number.
   function validateSubsheetRequired(): { ok: boolean; message?: string } {
     for (const sub of filledSheet.subsheets || []) {
       for (const f of sub.fields || []) {
@@ -169,6 +170,13 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
             return {
               ok: false,
               message: `Please fill the required field "${f.label}" in subsheet "${sub.name}".`,
+            };
+          }
+          const isNumeric = f.infoType === "int" || f.infoType === "decimal";
+          if (isNumeric && !isFiniteNumericString(v)) {
+            return {
+              ok: false,
+              message: `Please enter a number for "${f.label}" in subsheet "${sub.name}".`,
             };
           }
         }
@@ -190,14 +198,17 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
       return;
     }
 
-    // Send values keyed only by InfoTemplateID so backend maps correctly when labels repeat across subsheets.
+    // Send values keyed only by InfoTemplateID; omit blank so backend does not receive empty strings.
     const fieldValuesByTemplateId: Record<string, string> = {};
     for (const sub of filledSheet.subsheets ?? []) {
       for (const f of sub.fields ?? []) {
         const k = f.id ?? f.originalId;
         if (k != null && typeof k === "number") {
           const v = fieldValues[k];
-          if (v !== undefined && v !== null) fieldValuesByTemplateId[String(k)] = String(v);
+          if (v !== undefined && v !== null) {
+            const s = String(v).trim();
+            if (s !== "") fieldValuesByTemplateId[String(k)] = s;
+          }
         }
       }
     }
@@ -372,6 +383,7 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
             fieldValues={fieldValues}
             onFieldValueChange={handleFieldValueChange}
             formErrors={formErrors}
+            strictNumericValidation
           />
         ))}
       </div>
