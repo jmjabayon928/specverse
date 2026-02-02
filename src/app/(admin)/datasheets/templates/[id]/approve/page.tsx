@@ -4,6 +4,7 @@ import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { getTemplateDetailsById } from '@/backend/services/templateService'
 import { requireAuth } from '@/utils/sessionUtils.server'
+import { canSeeApproveUI } from '@/utils/approveGating'
 import TemplateViewer from '../TemplateViewer'
 import ApproveButton from './ApproveButton'
 
@@ -39,10 +40,7 @@ const TemplateApprovePage = async (props: TemplateApprovePageProps) => {
 
   const sessionUser = await requireAuth()
 
-  const canApprove = Array.isArray(sessionUser.permissions)
-    && sessionUser.permissions.includes('TEMPLATE_APPROVE')
-
-  if (!canApprove) {
+  if (!canSeeApproveUI(sessionUser)) {
     redirect('/unauthorized')
   }
 

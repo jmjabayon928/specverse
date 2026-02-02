@@ -69,4 +69,38 @@ describe('notifyUsers', () => {
     expect(nextIdQuery).toContain('UPDLOCK');
     expect(nextIdQuery).toContain('HOLDLOCK');
   });
+
+  it('builds template notification link to templates route', async () => {
+    await notifyUsers({
+      recipientUserIds: [1],
+      sheetId: 42,
+      title: 'Template Created',
+      message: 'Template #42 was created.',
+      category: 'Template',
+      createdBy: 1,
+    });
+
+    const linkInputCall = mockRequestChain.input.mock.calls.find(
+      (call: unknown[]) => Array.isArray(call) && call[0] === 'Link'
+    );
+    expect(linkInputCall).toBeDefined();
+    expect(linkInputCall[2]).toBe('/datasheets/templates/42');
+  });
+
+  it('builds datasheet notification link to filled route', async () => {
+    await notifyUsers({
+      recipientUserIds: [1],
+      sheetId: 99,
+      title: 'Filled Sheet Updated',
+      message: 'Sheet #99 has been updated.',
+      category: 'Datasheet',
+      createdBy: 1,
+    });
+
+    const linkInputCall = mockRequestChain.input.mock.calls.find(
+      (call: unknown[]) => Array.isArray(call) && call[0] === 'Link'
+    );
+    expect(linkInputCall).toBeDefined();
+    expect(linkInputCall[2]).toBe('/datasheets/filled/99');
+  });
 });

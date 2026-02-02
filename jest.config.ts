@@ -56,6 +56,7 @@ const config: Config = {
       testMatch: [
         '<rootDir>/tests/ui/**/*.test.tsx',
         '<rootDir>/tests/components/**/*.test.ts?(x)',
+        '<rootDir>/tests/hooks/**/*.test.ts',
       ],
       ...commonConfig,
       moduleNameMapper: {

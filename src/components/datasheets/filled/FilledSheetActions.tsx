@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import type { UserSession } from '@/domain/auth/sessionTypes'
 import type { MinimalSheetForActions } from '@/domain/datasheets/sheetTypes'
 import IconTooltip from '@/components/ui/tooltip/IconTooltip'
+import { canSeeApproveUI } from '@/utils/approveGating'
 import ExportSheetButtons from '@/components/datasheets/ExportSheetButtons'
 
 interface FilledSheetActionsProps {
@@ -67,7 +68,7 @@ export default function FilledSheetActions(props: Readonly<FilledSheetActionsPro
     hasPermission(user, 'DATASHEET_VERIFY')
 
   const canApprove =
-    status === verifiedStatus && hasPermission(user, 'DATASHEET_APPROVE')
+    status === verifiedStatus && canSeeApproveUI(user)
 
   const canDuplicate =
     status === approvedStatus && hasPermission(user, 'DATASHEET_CREATE')

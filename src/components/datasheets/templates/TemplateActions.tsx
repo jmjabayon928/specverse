@@ -7,6 +7,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import type { UserSession } from '@/domain/auth/sessionTypes'
 import type { MinimalSheetForActions } from '@/domain/datasheets/sheetTypes'
 import IconTooltip from '@/components/ui/tooltip/IconTooltip'
+import { canSeeApproveUI } from '@/utils/approveGating'
 import ExportSheetButtons from '@/components/datasheets/ExportSheetButtons'
 
 type TemplateActionsProps = {
@@ -68,7 +69,7 @@ const canApproveTemplate = (user: UserSession, sheet: MinimalSheetForActions) =>
     return false
   }
 
-  return userHasPermission(user, 'DATASHEET_APPROVE')
+  return canSeeApproveUI(user)
 }
 
 const canCloneTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {

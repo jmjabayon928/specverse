@@ -12,7 +12,6 @@ export async function requireAuth(): Promise<UserSession> {
   const token = cookieStore.get('token')?.value
 
   if (!token) {
-    console.warn('⚠️ No token found in cookies — redirecting to login')
     redirect('/login')
     throw new Error('Redirected due to missing token')
   }
@@ -30,10 +29,6 @@ export async function requireAuth(): Promise<UserSession> {
     )
 
     if (!res.ok) {
-      console.warn(
-        '⚠️ Token found, but session validation failed — clearing cookie and redirecting'
-      )
-      // You can optionally clear the cookie on backend side too
       redirect('/login')
       throw new Error('Redirected due to invalid token')
     }
@@ -42,14 +37,12 @@ export async function requireAuth(): Promise<UserSession> {
 
     // Ensure required fields exist to prevent user?.userId errors
     if (!session.userId || !session.roleId) {
-      console.error('❌ Incomplete session data received — redirecting')
       redirect('/login')
       throw new Error('Redirected due to incomplete session')
     }
 
     return session
-  } catch (error) {
-    console.error('❌ Error fetching session:', error)
+  } catch {
     redirect('/login')
     throw new Error('Redirected due to session fetch error')
   }
@@ -90,8 +83,7 @@ export default async function getUserSession(): Promise<UserSession | null> {
     }
 
     return session
-  } catch (error) {
-    console.error('❌ Error fetching optional session:', error)
+  } catch {
     return null
   }
 }

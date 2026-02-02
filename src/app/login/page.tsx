@@ -52,23 +52,7 @@ export default function LoginPage() {
         return;
       }
 
-      // ✅ Optional: revalidate session if needed
-      const sessionCheck = await fetch("/api/backend/auth/session", {
-        method: "GET",
-        headers: {
-          "Cache-Control": "no-cache",
-        },
-        credentials: "include",
-      });
-
-      if (!sessionCheck.ok) {
-        setError("Session validation failed. Please try again.");
-        router.replace("/login"); // 👈 Fixes double login issue
-        return;
-      }
-
-      // ✅ Redirect to home on success
-      router.push("/dashboard");
+      router.replace("/dashboard");
     } catch (err) {
       console.error("Login error:", err);
       setError("Something went wrong. Please try again.");

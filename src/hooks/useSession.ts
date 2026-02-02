@@ -14,22 +14,18 @@ export function useSession(): UseSessionResult {
   const pathname = usePathname()
 
   useEffect(() => {
-    // If user is on login page, skip session fetch
     const isLoginPage = pathname === '/login'
     if (isLoginPage) {
       setLoading(false)
       return
     }
 
+    setLoading(true)
     const fetchSession = async () => {
       try {
         const res = await fetch('/api/backend/auth/session', {
           credentials: 'include',
         })
-
-        if (process.env.NODE_ENV !== 'production') {
-          console.log('🛰️ Session fetch response status:', res.status)
-        }
 
         // 304 = session unchanged
         if (res.status === 304) {
@@ -44,10 +40,7 @@ export function useSession(): UseSessionResult {
 
         const data: UserSession = await res.json()
         setUser(data)
-      } catch (err) {
-        if (process.env.NODE_ENV !== 'production') {
-          console.error('❌ Failed to load session:', err)
-        }
+      } catch {
         setUser(null)
       } finally {
         setLoading(false)

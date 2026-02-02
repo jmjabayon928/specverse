@@ -1543,7 +1543,7 @@ export async function createTemplate(
         sheetId,
         title: 'New Template Created',
         message: `Template #${sheetId} was created by User #${userId}.`,
-        category: 'Datasheet',
+        category: 'Template',
         createdBy: userId,
       })
     } catch (e) {
@@ -1630,7 +1630,7 @@ export async function updateTemplate(
         sheetId,
         title: 'Template Updated',
         message: `Template #${sheetId} was updated by User #${userId}.`,
-        category: 'Datasheet',
+        category: 'Template',
         createdBy: userId,
       })
     } catch (e) {

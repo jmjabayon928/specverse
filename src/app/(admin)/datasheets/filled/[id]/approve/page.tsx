@@ -2,6 +2,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
 import { requireAuth } from "@/utils/sessionUtils.server";
+import { canSeeApproveUI } from "@/utils/approveGating";
 import { Metadata } from "next";
 import FilledSheetViewer from "../../FilledSheetViewer";
 import ApproveButton from "./ApproveButton";
@@ -20,7 +21,7 @@ export default async function FilledApprovePage({ params }: Readonly<PageProps>)
   if (!sheetId || isNaN(sheetId)) return notFound();
 
   const sessionUser = await requireAuth();
-  if (!sessionUser.permissions?.includes("DATASHEET_APPROVE")) {
+  if (!canSeeApproveUI(sessionUser)) {
     return redirect("/unauthorized");
   }
 
