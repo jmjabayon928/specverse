@@ -106,11 +106,18 @@ function getSystemForUnit(uRaw: string): EngineeringSystem | null {
 /**
  * Split out pressure annotation for units like "kPa(a)".
  * Returns display annotation and the bare unit.
+ * Accepts unknown: null/undefined → '', non-string coerced via String() then trimmed.
  */
-function extractPressureAnnotation(
-  unitRaw: string,
+export function extractPressureAnnotation(
+  unitRaw: unknown,
 ): { annot: '(a)' | '(g)' | ''; bare: string } {
-  const trimmed = unitRaw.trim()
+  const safe =
+    typeof unitRaw === 'string'
+      ? unitRaw
+      : unitRaw == null
+        ? ''
+        : String(unitRaw)
+  const trimmed = safe.trim()
   const match = /\(([ag])\)\s*$/i.exec(trimmed)
 
   if (!match) {
@@ -118,7 +125,7 @@ function extractPressureAnnotation(
   }
 
   const annot = match[1].toLowerCase() === 'a' ? '(a)' : '(g)'
-  const bare = trimmed.replace(/\(([ag])\)\s*$/i, '')
+  const bare = trimmed.replace(/\(([ag])\)\s*$/i, '').trim()
 
   return { annot, bare }
 }
@@ -246,10 +253,10 @@ function scaleWithinSI(value: number, from: string, to: string): number | null {
  */
 export function getOtherSameSystemConversions(
   value: number,
-  unitRaw: string,
+  unitRaw: unknown,
   system: EngineeringSystem,
 ): OtherConversion[] {
-  const { annot, bare } = extractPressureAnnotation(unitRaw)
+  const { annot, bare } = extractPressureAnnotation(unitRaw ?? '')
   const uNorm = normalizeUnit(bare)
 
   // Enforce that suggestions match the current toggle (SI/USC)

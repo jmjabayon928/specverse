@@ -1,6 +1,13 @@
 // src/utils/unitConversionTable.ts
 import { getQuantityKind, normalizeUnit } from './unitKinds'
 
+/** Normalize unit input to a string; avoids .trim() on non-string (e.g. number/null from runtime). */
+function normalizeUnitParam(raw: unknown): string {
+  if (typeof raw === 'string') return raw.trim()
+  if (raw == null) return ''
+  return String(raw).trim()
+}
+
 type ConversionEntry = {
   siUnit: string
   uscUnit: string
@@ -147,9 +154,10 @@ for (const entry of conversionTable) {
 
 export const convertToUSC = (
   valueStr: string,
-  fromUnit: string | null | undefined,
+  fromUnitRaw: unknown,
 ): { value: string; unit: string } => {
-  if (!fromUnit?.trim()) {
+  const fromUnit = normalizeUnitParam(fromUnitRaw)
+  if (!fromUnit) {
     return { value: valueStr, unit: '' }
   }
 
@@ -169,8 +177,13 @@ export const convertToUSC = (
 
 export const convertToSI = (
   valueStr: string,
-  fromUnit: string,
+  fromUnitRaw: unknown,
 ): { value: string; unit: string } => {
+  const fromUnit = normalizeUnitParam(fromUnitRaw)
+  if (!fromUnit) {
+    return { value: valueStr, unit: '' }
+  }
+
   const normalizedUnit = normalizeUnit(fromUnit)
   const entry = uscToSIMap.get(normalizeUnit(normalizedUnit))
   const value = Number.parseFloat(valueStr)
@@ -185,8 +198,9 @@ export const convertToSI = (
   }
 }
 
-export const getUSCUnit = (siUnit: string | null | undefined): string => {
-  if (!siUnit?.trim()) {
+export const getUSCUnit = (siUnitRaw: unknown): string => {
+  const siUnit = normalizeUnitParam(siUnitRaw)
+  if (!siUnit) {
     return ''
   }
 
@@ -203,7 +217,9 @@ export const getUSCUnit = (siUnit: string | null | undefined): string => {
   return entry?.uscUnit ?? siUnit
 }
 
-export const getSIUnit = (uscUnit: string): string => {
+export const getSIUnit = (uscUnitRaw: unknown): string => {
+  const uscUnit = normalizeUnitParam(uscUnitRaw)
+  if (!uscUnit) return ''
   const normalizedUnit = normalizeUnit(uscUnit)
   const entry = uscToSIMap.get(normalizeUnit(normalizedUnit))
 

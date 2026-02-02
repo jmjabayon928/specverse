@@ -154,4 +154,119 @@ describe('FilledSheetEditorForm', () => {
     const button = screen.getByRole('button', { name: /update filled sheet/i })
     expect(button).toBeEnabled()
   })
+
+  it('renders header fields as disabled when readOnlyHeader is true', () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.isTemplate = false
+
+    render(
+      <FilledSheetEditorForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+        readOnlyHeader={true}
+      />
+    )
+
+    const sheetNameInput = screen.getByDisplayValue('Test Sheet')
+    expect(sheetNameInput).toBeDisabled()
+  })
+
+  it('renders at least one InformationValue input enabled when readOnlyHeader is true', () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.isTemplate = false
+
+    render(
+      <FilledSheetEditorForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+        readOnlyHeader={true}
+      />
+    )
+
+    const designPressureInput = screen.getByDisplayValue('10')
+    expect(designPressureInput).not.toBeDisabled()
+  })
+
+  it('shows red banner and mentions sheetName when 400 returns headerFieldErrors', async () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.isTemplate = false
+    sheet.sheetId = 333
+
+    ;(globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        error: 'Header fields are read-only for filled sheet edit.',
+        headerFieldErrors: [
+          { field: 'sheetName', message: 'Header fields are read-only on filled sheet edit.' },
+        ],
+      }),
+    })
+
+    render(
+      <FilledSheetEditorForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+        readOnlyHeader={true}
+      />
+    )
+
+    const button = screen.getByRole('button', { name: /update filled sheet/i })
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Header fields are read-only\. Remove changes to:/)).toBeInTheDocument()
+    })
+    expect(screen.getByText(/Header fields are read-only\. Remove changes to:/)).toHaveTextContent('sheetName')
+  })
+
+  it('submit validation passes when field.uom is array (schema normalizes to string)', async () => {
+    const sheet = makeBasicUnifiedSheet()
+    sheet.isTemplate = false
+    sheet.sheetId = 444
+    const firstField = sheet.subsheets[0].fields[0]
+    firstField.uom = ['kW', 'kW'] as unknown as string
+
+    ;(globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ sheetId: sheet.sheetId }),
+    })
+
+    render(
+      <FilledSheetEditorForm
+        defaultValues={sheet}
+        areas={areas}
+        manufacturers={manufacturers}
+        suppliers={suppliers}
+        categories={categories}
+        clients={clients}
+        projects={projects}
+        readOnlyHeader={true}
+      />
+    )
+
+    const button = screen.getByRole('button', { name: /update filled sheet/i })
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalled()
+    })
+
+    expect(screen.queryByText(/uom.*Expected string|Expected string.*uom/i)).not.toBeInTheDocument()
+  })
 })

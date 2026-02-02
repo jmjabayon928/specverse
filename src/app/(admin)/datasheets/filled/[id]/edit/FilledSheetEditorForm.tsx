@@ -20,6 +20,8 @@ interface FilledSheetEditorFormProps {
   categories: Option[]
   clients: Option[]
   projects: Option[]
+  /** When true, header/metadata fields are read-only; only InformationValues are editable. */
+  readOnlyHeader?: boolean
 }
 
 function flattenErrors(zodError: ZodError): Record<string, string[]> {
@@ -169,11 +171,16 @@ export default function FilledSheetEditorForm(
     categories,
     clients,
     projects,
+    readOnlyHeader = false,
   } = props
+
+  const headerDisabled = readOnlyHeader
 
   const router = useRouter()
   const [datasheet, setDatasheet] = useState<UnifiedSheet>(defaultValues)
   const [formErrors, setFormErrors] = useState<Record<string, string[]>>({})
+  const [formErrorSummary, setFormErrorSummary] = useState<string | null>(null)
+  const [headerErrorsByField, setHeaderErrorsByField] = useState<Record<string, string[]>>({})
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(
     buildFieldValueMap(defaultValues.subsheets)
   )
@@ -213,6 +220,8 @@ export default function FilledSheetEditorForm(
   }, [])
 
   const handleSubmit = async () => {
+    setFormErrorSummary(null)
+    setHeaderErrorsByField({})
     try {
       const sheetToValidate: UnifiedSheet = {
         ...datasheet,
@@ -253,6 +262,19 @@ export default function FilledSheetEditorForm(
 
       const resultJson = await res.json().catch(() => ({}))
       if (!res.ok) {
+        if (res.status === 400 && Array.isArray(resultJson.headerFieldErrors) && resultJson.headerFieldErrors.length > 0) {
+          const byField: Record<string, string[]> = {}
+          for (const item of resultJson.headerFieldErrors as Array<{ field: string; message: string }>) {
+            const { field, message } = item
+            if (!byField[field]) byField[field] = []
+            byField[field].push(message)
+          }
+          setHeaderErrorsByField(byField)
+          const names = (resultJson.headerFieldErrors as Array<{ field: string }>).map((e) => e.field)
+          const first3 = names.slice(0, 3).join(', ')
+          const more = names.length > 3 ? ` (+${names.length - 3} more)` : ''
+          setFormErrorSummary(`Header fields are read-only. Remove changes to: ${first3}${more}.`)
+        }
         if (res.status === 400 && Array.isArray(resultJson.fieldErrors)) {
           const mapped = mapFieldErrorsToFormErrors(resultJson.fieldErrors, datasheet.subsheets)
           setFormErrors(mapped)
@@ -281,9 +303,17 @@ export default function FilledSheetEditorForm(
     }
   }
 
+  const headerErrors: Record<string, string[]> = { ...formErrors, ...headerErrorsByField }
+
   return (
     <div className='space-y-6'>
       <h1 className='text-xl font-semibold'>Edit Filled Sheet</h1>
+
+      {formErrorSummary && (
+        <div className='p-4 bg-red-100 text-red-700 border border-red-400 rounded' role='alert'>
+          {formErrorSummary}
+        </div>
+      )}
 
       {formErrors && Object.keys(formErrors).length > 0 && (
         <div className='p-4 bg-red-100 text-red-700 border border-red-400 rounded'>
@@ -305,57 +335,57 @@ export default function FilledSheetEditorForm(
       <fieldset className='border border-gray-300 rounded p-4'>
         <legend className='text-md font-semibold px-2'>Datasheet Details</legend>
         <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mt-2'>
-          {renderInput('Sheet Name', 'sheetName', datasheet, handleChange, false, formErrors)}
-          {renderInput('Sheet Description', 'sheetDesc', datasheet, handleChange, false, formErrors)}
-          {renderInput('Additional Description', 'sheetDesc2', datasheet, handleChange, false, formErrors)}
-          {renderInput('Client Doc #', 'clientDocNum', datasheet, handleChange, false, formErrors, 'number')}
-          {renderInput('Client Project #', 'clientProjectNum', datasheet, handleChange, false, formErrors, 'number')}
-          {renderInput('Company Doc #', 'companyDocNum', datasheet, handleChange, false, formErrors, 'number')}
+          {renderInput('Sheet Name', 'sheetName', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderInput('Sheet Description', 'sheetDesc', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderInput('Additional Description', 'sheetDesc2', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderInput('Client Doc #', 'clientDocNum', datasheet, handleChange, headerDisabled, headerErrors, 'number')}
+          {renderInput('Client Project #', 'clientProjectNum', datasheet, handleChange, headerDisabled, headerErrors, 'number')}
+          {renderInput('Company Doc #', 'companyDocNum', datasheet, handleChange, headerDisabled, headerErrors, 'number')}
           {renderInput(
             'Company Project #',
             'companyProjectNum',
             datasheet,
             handleChange,
-            false,
-            formErrors,
+            headerDisabled,
+            headerErrors,
             'number'
           )}
-          {renderSelect('Area', 'areaId', datasheet, handleChange, false, areas, formErrors)}
-          {renderInput('Package Name', 'packageName', datasheet, handleChange, false, formErrors)}
-          {renderInput('Revision Number', 'revisionNum', datasheet, handleChange, false, formErrors, 'number')}
-          {renderDate('Revision Date', 'revisionDate', datasheet, handleChange, false, formErrors)}
+          {renderSelect('Area', 'areaId', datasheet, handleChange, headerDisabled, areas, headerErrors)}
+          {renderInput('Package Name', 'packageName', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderInput('Revision Number', 'revisionNum', datasheet, handleChange, headerDisabled, headerErrors, 'number')}
+          {renderDate('Revision Date', 'revisionDate', datasheet, handleChange, headerDisabled, headerErrors)}
         </div>
       </fieldset>
 
       <fieldset className='border border-gray-300 rounded p-4'>
         <legend className='text-md font-semibold px-2'>Equipment Details</legend>
         <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mt-2'>
-          {renderInput('Equipment Name', 'equipmentName', datasheet, handleChange, false, formErrors)}
-          {renderInput('Equipment Tag Number', 'equipmentTagNum', datasheet, handleChange, false, formErrors)}
-          {renderInput('Service Name', 'serviceName', datasheet, handleChange, false, formErrors)}
+          {renderInput('Equipment Name', 'equipmentName', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderInput('Equipment Tag Number', 'equipmentTagNum', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderInput('Service Name', 'serviceName', datasheet, handleChange, headerDisabled, headerErrors)}
           {renderInput(
             'Required Quantity',
             'requiredQty',
             datasheet,
             handleChange,
-            false,
-            formErrors,
+            headerDisabled,
+            headerErrors,
             'number'
           )}
-          {renderInput('Item Location', 'itemLocation', datasheet, handleChange, false, formErrors)}
-          {renderSelect('Manufacturer', 'manuId', datasheet, handleChange, false, manufacturers, formErrors)}
-          {renderSelect('Supplier', 'suppId', datasheet, handleChange, false, suppliers, formErrors)}
-          {renderInput('Install Package #', 'installPackNum', datasheet, handleChange, false, formErrors)}
-          {renderInput('Equipment Size', 'equipSize', datasheet, handleChange, false, formErrors, 'number')}
-          {renderInput('Model Number', 'modelNum', datasheet, handleChange, false, formErrors)}
-          {renderInput('Driver', 'driver', datasheet, handleChange, false, formErrors)}
-          {renderInput('Location DWG', 'locationDwg', datasheet, handleChange, false, formErrors)}
-          {renderInput('PID', 'pid', datasheet, handleChange, false, formErrors, 'number')}
-          {renderInput('Install DWG', 'installDwg', datasheet, handleChange, false, formErrors)}
-          {renderInput('Code Standard', 'codeStd', datasheet, handleChange, false, formErrors)}
-          {renderSelect('Category', 'categoryId', datasheet, handleChange, false, categories, formErrors)}
-          {renderSelect('Client', 'clientId', datasheet, handleChange, false, clients, formErrors)}
-          {renderSelect('Project', 'projectId', datasheet, handleChange, false, projects, formErrors)}
+          {renderInput('Item Location', 'itemLocation', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderSelect('Manufacturer', 'manuId', datasheet, handleChange, headerDisabled, manufacturers, headerErrors)}
+          {renderSelect('Supplier', 'suppId', datasheet, handleChange, headerDisabled, suppliers, headerErrors)}
+          {renderInput('Install Package #', 'installPackNum', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderInput('Equipment Size', 'equipSize', datasheet, handleChange, headerDisabled, headerErrors, 'number')}
+          {renderInput('Model Number', 'modelNum', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderInput('Driver', 'driver', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderInput('Location DWG', 'locationDwg', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderInput('PID', 'pid', datasheet, handleChange, headerDisabled, headerErrors, 'number')}
+          {renderInput('Install DWG', 'installDwg', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderInput('Code Standard', 'codeStd', datasheet, handleChange, headerDisabled, headerErrors)}
+          {renderSelect('Category', 'categoryId', datasheet, handleChange, headerDisabled, categories, headerErrors)}
+          {renderSelect('Client', 'clientId', datasheet, handleChange, headerDisabled, clients, headerErrors)}
+          {renderSelect('Project', 'projectId', datasheet, handleChange, headerDisabled, projects, headerErrors)}
         </div>
       </fieldset>
 

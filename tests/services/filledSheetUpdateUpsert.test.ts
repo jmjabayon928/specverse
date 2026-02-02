@@ -37,6 +37,7 @@ jest.mock('../../src/backend/config/db', () => ({
     NVarChar: (n: number) => n,
     VarChar: (n: number) => n,
     MAX: 2147483647,
+    DateTime2: (_scale?: number) => 0,
     Transaction: jest.fn().mockImplementation(() => mockTransaction),
   },
 }))
@@ -200,5 +201,207 @@ describe('updateFilledSheet lifecycle guards', () => {
       statusCode: 409,
       message: expect.stringContaining('only be edited when status'),
     })
+  })
+})
+
+describe('updateFilledSheet values-only (no header update)', () => {
+  beforeEach(() => {
+    executedQueries.length = 0
+    queryResponses.length = 0
+    mockTransaction.request.mockImplementation(() => makeRequest())
+    queryResponses.push(
+      { recordset: [{ Status: 'Draft' }] },
+      { recordset: [{ InfoTemplateID: 1, Required: 0, Label: 'F1', InfoType: 'varchar' }] },
+      { recordset: [] },
+      { rowsAffected: [1] },
+      {
+        recordset: [
+          { InfoTemplateID: 1, InfoValue: 'old', ValueSetID: null, Label: 'F1', UOM: null },
+        ],
+      },
+      { recordset: [{ InfoTemplateID: 1, ValueSetID: null }] },
+      { recordset: [{ InfoTemplateID: 1, UOM: null }] },
+      { rowsAffected: [1] },
+      { rowsAffected: [1] }
+    )
+  })
+
+  it('does not update Sheets.sheetName when allowHeaderUpdate is false (default)', async () => {
+    const inputWithNewName = { ...minimalUnifiedSheet, sheetName: 'ChangedName' }
+    await updateFilledSheet(1, inputWithNewName, 1, { skipRevisionCreation: true })
+
+    const updateSheetsQueries = executedQueries.filter((q) => {
+      const n = q.replace(/\s+/g, ' ').toLowerCase()
+      return n.includes('update') && n.includes('sheets') && n.includes('set')
+    })
+    expect(updateSheetsQueries.length).toBeGreaterThanOrEqual(1)
+    const sheetsUpdate = updateSheetsQueries[0]
+    expect(sheetsUpdate).not.toMatch(/SheetName\s*=/i)
+  })
+
+  it('persists InformationValues as expected (UPDATE or INSERT executed)', async () => {
+    await updateFilledSheet(1, minimalUnifiedSheet, 1, { skipRevisionCreation: true })
+
+    const infoValueQueries = executedQueries.filter((q) => {
+      const n = q.replace(/\s+/g, ' ').toLowerCase()
+      return (n.includes('update') || n.includes('insert')) && n.includes('informationvalues')
+    })
+    expect(infoValueQueries.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('with STRICT_FILLED_HEADER_GUARD unset: does not throw when sheetName differs (silent ignore)', async () => {
+    const prev = process.env.STRICT_FILLED_HEADER_GUARD
+    delete process.env.STRICT_FILLED_HEADER_GUARD
+
+    const inputWithNewName = { ...minimalUnifiedSheet, sheetName: 'ChangedName' }
+    const result = await updateFilledSheet(1, inputWithNewName, 1, { skipRevisionCreation: true })
+
+    if (prev !== undefined) process.env.STRICT_FILLED_HEADER_GUARD = prev
+    expect(result).toEqual({ sheetId: 1 })
+  })
+})
+
+describe('updateFilledSheet strict header guard (STRICT_FILLED_HEADER_GUARD=1)', () => {
+  const currentHeaderRow = {
+    SheetName: 'Test',
+    SheetDesc: '',
+    SheetDesc2: '',
+    ClientDocNum: 1,
+    ClientProjNum: 1,
+    CompanyDocNum: 1,
+    CompanyProjNum: 1,
+    AreaID: 1,
+    PackageName: 'P',
+    RevisionNum: 1,
+    RevisionDate: '2026-01-01',
+    ItemLocation: 'L',
+    RequiredQty: 1,
+    EquipmentName: 'E',
+    EquipmentTagNum: 'TAG',
+    ServiceName: 'S',
+    ManuID: 1,
+    SuppID: 1,
+    InstallPackNum: null as string | null,
+    EquipSize: 1,
+    ModelNum: null as string | null,
+    Driver: null as string | null,
+    LocationDWG: null as string | null,
+    PID: null as number | null,
+    InstallDWG: null as string | null,
+    CodeStd: null as string | null,
+    CategoryID: 1,
+    ClientID: 1,
+    ProjectID: 1,
+  }
+
+  beforeEach(() => {
+    executedQueries.length = 0
+    queryResponses.length = 0
+    mockTransaction.request.mockImplementation(() => makeRequest())
+    queryResponses.push(
+      { recordset: [{ Status: 'Draft' }] },
+      { recordset: [{ InfoTemplateID: 1, Required: 0, Label: 'F1', InfoType: 'varchar' }] },
+      { recordset: [] },
+      { recordset: [currentHeaderRow] },
+      { rowsAffected: [1] },
+      {
+        recordset: [
+          { InfoTemplateID: 1, InfoValue: 'old', ValueSetID: null, Label: 'F1', UOM: null },
+        ],
+      },
+      { recordset: [{ InfoTemplateID: 1, ValueSetID: null }] },
+      { recordset: [{ InfoTemplateID: 1, UOM: null }] },
+      { rowsAffected: [1] },
+      { rowsAffected: [1] }
+    )
+  })
+
+  it('changing sheetName triggers 400 and includes sheetName in payload', async () => {
+    process.env.STRICT_FILLED_HEADER_GUARD = '1'
+
+    const inputWithNewName = { ...minimalUnifiedSheet, sheetName: 'ChangedName' }
+    const p = updateFilledSheet(1, inputWithNewName, 1, { skipRevisionCreation: true })
+
+    await expect(p).rejects.toThrow(AppError)
+    await expect(p).rejects.toMatchObject({
+      statusCode: 400,
+      payload: expect.objectContaining({
+        headerFieldErrors: expect.arrayContaining([
+          expect.objectContaining({ field: 'sheetName', message: 'Header fields are read-only on filled sheet edit.' }),
+        ]),
+      }),
+    })
+
+    delete process.env.STRICT_FILLED_HEADER_GUARD
+  })
+})
+
+describe('updateFilledSheet SQL column names (Sheets / SheetRevisions)', () => {
+  beforeEach(() => {
+    executedQueries.length = 0
+    queryResponses.length = 0
+    mockTransaction.request.mockImplementation(() => makeRequest())
+    queryResponses.push(
+      { recordset: [{ Status: 'Draft' }] },
+      { recordset: [{ InfoTemplateID: 1, Required: 0, Label: 'F1', InfoType: 'varchar' }] },
+      { recordset: [] },
+      { rowsAffected: [1] },
+      {
+        recordset: [
+          { InfoTemplateID: 1, InfoValue: 'old', ValueSetID: null, Label: 'F1', UOM: null },
+        ],
+      },
+      { recordset: [{ InfoTemplateID: 1, ValueSetID: null }] },
+      { recordset: [{ InfoTemplateID: 1, UOM: null }] },
+      { rowsAffected: [1] },
+      { rowsAffected: [1] },
+      { recordset: [{ NextRevisionNum: 1 }] },
+      { recordset: [{ RevisionID: 1 }] }
+    )
+  })
+
+  it('SQL does not contain RevisionNumber (uses RevisionNum)', async () => {
+    await updateFilledSheet(1, minimalUnifiedSheet, 1)
+
+    const withRevisionNumber = executedQueries.some((q) => q.includes('RevisionNumber'))
+    expect(withRevisionNumber).toBe(false)
+
+    const withRevisionNum = executedQueries.some((q) => q.includes('RevisionNum'))
+    expect(withRevisionNum).toBe(true)
+  })
+
+  it('SheetRevisions INSERT uses Notes (not Comment) and CreatedByID/CreatedByDate (not CreatedBy)', async () => {
+    await updateFilledSheet(1, minimalUnifiedSheet, 1)
+
+    const insertSheetRevisions = executedQueries.filter((q) => {
+      const n = q.replace(/\s+/g, ' ').toLowerCase()
+      return n.includes('insert') && n.includes('sheetrevisions')
+    })
+    expect(insertSheetRevisions.length).toBeGreaterThanOrEqual(1)
+
+    const insertSql = insertSheetRevisions[0]
+    expect(insertSql).not.toMatch(/\bComment\b/)
+    expect(insertSql).toMatch(/\bNotes\b/)
+    expect(insertSql).not.toMatch(/\bCreatedBy\b(?!ID|Date)/)
+    expect(insertSql).toMatch(/\bCreatedByID\b/)
+    expect(insertSql).toMatch(/\bCreatedByDate\b/)
+  })
+
+  it('SheetRevisions INSERT does not include RevisionID (relies on DB auto-gen)', async () => {
+    await updateFilledSheet(1, minimalUnifiedSheet, 1)
+
+    const insertSheetRevisions = executedQueries.filter((q) => {
+      const n = q.replace(/\s+/g, ' ').toLowerCase()
+      return n.includes('insert') && n.includes('sheetrevisions')
+    })
+    expect(insertSheetRevisions.length).toBeGreaterThanOrEqual(1)
+
+    const insertSql = insertSheetRevisions[0]
+    const insertColumnListMatch = /insert\s+into\s+dbo\.sheetrevisions\s*\(\s*([^)]+)\s*\)/i.exec(
+      insertSql.replace(/\s+/g, ' ')
+    )
+    expect(insertColumnListMatch).toBeTruthy()
+    const columnList = insertColumnListMatch![1]
+    expect(columnList).not.toMatch(/\brevisionid\b/i)
   })
 })

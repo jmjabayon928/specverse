@@ -11,7 +11,7 @@ BEGIN
     CREATE TABLE dbo.SheetRevisions (
         RevisionID INT IDENTITY(1,1) PRIMARY KEY,
         SheetID INT NOT NULL,
-        RevisionNumber INT NOT NULL,
+        RevisionNum INT NOT NULL,
         SnapshotJson NVARCHAR(MAX) NOT NULL,
         CreatedBy INT NOT NULL,
         CreatedAt DATETIME2 NOT NULL DEFAULT GETDATE(),
@@ -19,12 +19,12 @@ BEGIN
         Status NVARCHAR(50) NULL,
         CONSTRAINT FK_SheetRevisions_SheetID FOREIGN KEY (SheetID) REFERENCES dbo.Sheets(SheetID) ON DELETE CASCADE,
         CONSTRAINT FK_SheetRevisions_CreatedBy FOREIGN KEY (CreatedBy) REFERENCES dbo.Users(UserID),
-        CONSTRAINT UQ_SheetRevisions_SheetID_RevisionNumber UNIQUE (SheetID, RevisionNumber)
+        CONSTRAINT UQ_SheetRevisions_SheetID_RevisionNum UNIQUE (SheetID, RevisionNum)
     );
 
     -- Indexes for efficient queries
     CREATE INDEX IX_SheetRevisions_SheetID ON dbo.SheetRevisions(SheetID);
-    CREATE INDEX IX_SheetRevisions_SheetID_RevisionNumber ON dbo.SheetRevisions(SheetID, RevisionNumber DESC);
+    CREATE INDEX IX_SheetRevisions_SheetID_RevisionNum ON dbo.SheetRevisions(SheetID, RevisionNum DESC);
     
     PRINT 'SheetRevisions table created successfully.';
 END

@@ -23,13 +23,15 @@ export type QuantityKind =
   | 'force'                   // kN, lbf
 
 // Canonical normalizer used for UI inputs, table keys, and lookups.
-export function normalizeUnit(raw: string): string {
-  if (!raw) {
+// Accepts unknown to avoid .trim() on non-string at API boundaries (e.g. uom as array).
+export function normalizeUnit(raw: unknown): string {
+  const s = typeof raw === 'string' ? raw : raw == null ? '' : String(raw)
+  if (!s) {
     return ''
   }
 
   // 1) Lowercase and trim whitespace
-  let result = raw.trim().toLowerCase()
+  let result = s.trim().toLowerCase()
 
   // 2) Unicode and symbol cleanup
   result = Array.from(result, char => {

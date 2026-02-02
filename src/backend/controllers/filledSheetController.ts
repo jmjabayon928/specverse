@@ -26,6 +26,7 @@ import {
   approveFilledSheet,
 
   // utils / business rules
+  bumpRejectedToModifiedDraftFilled,
   doesEquipmentTagExist,
   getFilledSheetTemplateId,
   getLatestApprovedTemplateId,
@@ -186,6 +187,18 @@ const verifyFilledSheetBodySchema = z
     (value): { action: "verify" | "reject"; rejectionComment?: string } => ({
       action: value.action ?? "verify",
       rejectionComment: value.rejectionComment,
+    })
+  )
+
+const approveFilledSheetBodySchema = z
+  .object({
+    action: z.enum(["approve", "reject"]).optional(),
+    rejectComment: z.string().optional(),
+  })
+  .transform(
+    (value): { action: "approve" | "reject"; rejectComment?: string } => ({
+      action: value.action ?? "approve",
+      rejectComment: value.rejectComment,
     })
   )
 
@@ -359,10 +372,24 @@ export const approveFilledSheetHandler: RequestHandler = async (req, res, next) 
       return
     }
 
-    await approveFilledSheet(sheetId, userId)
+    const body = approveFilledSheetBodySchema.parse(req.body ?? {})
+    if (body.action === "reject") {
+      const trimmed = body.rejectComment?.trim() ?? ""
+      if (trimmed.length === 0) {
+        next(new AppError("Rejection reason is required when rejecting.", 400))
+        return
+      }
+    }
+
+    await approveFilledSheet(
+      sheetId,
+      body.action,
+      body.action === "reject" ? (body.rejectComment?.trim() ?? "") : undefined,
+      userId
+    )
     res.status(200).json({ sheetId })
   } catch (err: unknown) {
-    handleError(next, err, "Failed to approve filled sheet")
+    handleError(next, err, "Failed to approve or reject filled sheet")
   }
 }
 
@@ -474,6 +501,7 @@ export const uploadFilledSheetAttachmentHandler: RequestHandler = async (req, re
       ensureTemplate: false,
     })
 
+    await bumpRejectedToModifiedDraftFilled(sheetId, user.userId)
     res.status(201).json(saved)
   } catch (err: unknown) {
     handleError(next, err, "Failed to upload attachment")
@@ -518,13 +546,20 @@ export const deleteFilledSheetAttachmentHandler: RequestHandler = async (req, re
       return
     }
 
+    const user = asUser(req)
+    if (user?.userId == null) {
+      next(new AppError("Unauthorized", 401))
+      return
+    }
+
     const deletedCanonical = await deleteSheetAttachmentLink(sheetId, attachmentId)
     if (deletedCanonical) {
+      await bumpRejectedToModifiedDraftFilled(sheetId, user.userId)
       res.status(204).end()
       return
     }
 
-    await deleteAttachmentById(sheetId, attachmentId)
+    await deleteAttachmentById(sheetId, attachmentId, user.userId)
     res.status(204).end()
   } catch (err: unknown) {
     handleError(next, err, "Failed to delete attachment")
@@ -621,7 +656,7 @@ export const deleteFilledSheetNoteHandler: RequestHandler = async (req, res, nex
       return
     }
 
-    await deleteNoteForSheet(sheetId, noteId)
+    await deleteNoteForSheet(sheetId, noteId, userId)
     res.status(204).end()
   } catch (err: unknown) {
     handleError(next, err, "Failed to delete note")

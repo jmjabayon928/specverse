@@ -9,13 +9,15 @@ import FilledSheetEditorForm from "./FilledSheetEditorForm";
 import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
 import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
 import { mapToUnifiedSheet } from "@/utils/templateViewMapper";
+import { normalizeUom } from "@/utils/normalizeUom";
 
 interface PageProps {
-  readonly params: Readonly<{ id: string }>;
+  readonly params: Promise<Readonly<{ id: string }>>;
 }
 
 export default async function FilledEditPage(props: Readonly<PageProps>) {
-  const { id } = props.params; // Avoid destructuring in the argument itself
+  const params = await props.params;
+  const id = params.id;
   const sheetId = Number(id ?? "0");
 
   if (!sheetId || isNaN(sheetId)) return notFound();
@@ -29,11 +31,19 @@ export default async function FilledEditPage(props: Readonly<PageProps>) {
   const token = sessionCookie.get("token")?.value;
   if (!token || !filledData) return notFound();
 
-  const defaultValues = mapToUnifiedSheet({
+  const mapped = mapToUnifiedSheet({
     datasheet: filledData.datasheet,
     subsheets: filledData.datasheet.subsheets,
     isTemplate: false,
   });
+
+  const defaultValues = {
+    ...mapped,
+    subsheets: mapped.subsheets.map((sub) => ({
+      ...sub,
+      fields: sub.fields.map((f) => ({ ...f, uom: normalizeUom(f.uom) })),
+    })),
+  };
 
   return (
     <SecurePage requiredPermission="DATASHEET_EDIT">
@@ -60,6 +70,7 @@ export default async function FilledEditPage(props: Readonly<PageProps>) {
           label: p.name,
           value: p.id,
         }))}
+        readOnlyHeader={true}
       />
     </SecurePage>
   );

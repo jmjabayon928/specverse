@@ -246,7 +246,6 @@ router.post(
   '/:id/verify',
   verifyToken,
   requirePermission('DATASHEET_VERIFY'),
-  auditAction('Verify Filled Sheet', { tableName: 'Sheets', recordIdParam: 'id' }),
   verifyFilledSheetHandler
 )
 
@@ -254,7 +253,6 @@ router.post(
   '/:id/approve',
   verifyToken,
   requirePermission('DATASHEET_APPROVE'),
-  auditAction('Approve Filled Sheet', { tableName: 'Sheets', recordIdParam: 'id' }),
   approveFilledSheetHandler
 )
 

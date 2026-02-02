@@ -64,6 +64,14 @@ describe('validateFilledValues', () => {
     expect(errors).toHaveLength(0)
   })
 
+  it('decimal accepts "2" and "2.0"', () => {
+    const fieldMeta: Record<number, FilledFieldMeta> = {
+      1: meta({ infoType: 'decimal', required: false }),
+    }
+    expect(validateFilledValues(fieldMeta, { '1': '2' })).toHaveLength(0)
+    expect(validateFilledValues(fieldMeta, { '1': '2.0' })).toHaveLength(0)
+  })
+
   it('options ["A","B"], value "C" fails with "Choose a valid option." and includes optionsPreview/optionsCount', () => {
     const fieldMeta: Record<number, FilledFieldMeta> = {
       1: meta({ infoType: 'varchar', required: false, options: ['A', 'B'] }),
@@ -91,6 +99,41 @@ describe('validateFilledValues', () => {
     }
     const values: Record<string, string> = { '1': 'A' }
     const errors = validateFilledValues(fieldMeta, values)
+    expect(errors).toHaveLength(0)
+  })
+
+  it('options compare trims both sides: meta.options = ["D ", "E", "F"], value = "D" passes', () => {
+    const fieldMeta: Record<number, FilledFieldMeta> = {
+      1: meta({ infoType: 'varchar', required: false, options: ['D ', 'E', 'F'] }),
+    }
+    const values: Record<string, string> = { '1': 'D' }
+    const errors = validateFilledValues(fieldMeta, values)
+    expect(errors).toHaveLength(0)
+  })
+
+  it('key lookup uses String(infoTemplateId): values = { "3792": "2" } found for infoTemplateId 3792', () => {
+    const fieldMeta: Record<number, FilledFieldMeta> = {
+      3792: meta({ infoType: 'decimal', required: false }),
+    }
+    const values: Record<string, string> = { '3792': '2' }
+    const errors = validateFilledValues(fieldMeta, values)
+    expect(errors).toHaveLength(0)
+  })
+
+  it('real IDs 3792/3795/3796/3797: decimals "2" and options "A"/"D" pass with exact meta', () => {
+    const fieldMeta: Record<number, FilledFieldMeta> = {
+      3792: meta({ infoType: 'decimal', required: false }),
+      3795: meta({ infoType: 'decimal', required: false }),
+      3796: meta({ infoType: 'varchar', required: false, options: ['A', 'B', 'C'] }),
+      3797: meta({ infoType: 'varchar', required: false, options: ['D', 'E', 'F'] }),
+    }
+    const valuesKeyedByTemplateId: Record<string, string> = {
+      '3792': '2',
+      '3795': '2',
+      '3796': 'A',
+      '3797': 'D',
+    }
+    const errors = validateFilledValues(fieldMeta, valuesKeyedByTemplateId)
     expect(errors).toHaveLength(0)
   })
 

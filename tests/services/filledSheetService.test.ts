@@ -129,75 +129,169 @@ describe('Filled Sheets API', () => {
     }
   })
 
-  it('POST /api/backend/filledsheets should reject invalid body', async () => {
-    const invalidPayload = {
-      sheetId: 0,
-      note: 'Wrong shape',
-    }
+  describe('POST /api/backend/filledsheets route contract', () => {
+    it('rejects invalid body', async () => {
+      const invalidPayload = {
+        sheetId: 0,
+        note: 'Wrong shape',
+      }
 
-    const res = await request(app)
-      .post('/api/backend/filledsheets')
-      .set('Cookie', [authCookie])
-      .send(invalidPayload)
+      const res = await request(app)
+        .post('/api/backend/filledsheets')
+        .set('Cookie', [authCookie])
+        .send(invalidPayload)
 
-    expect(res.statusCode).toBeGreaterThanOrEqual(400)
-  })
+      expect(res.statusCode).toBeGreaterThanOrEqual(400)
+    })
 
-  it('POST /api/backend/filledsheets returns 400 with message when service throws VALIDATION error', async () => {
-    const filledSheetService = await import('../../src/backend/services/filledSheetService')
-    const createFilledSheet = filledSheetService.createFilledSheet as jest.Mock
-    const validationMessage = 'Missing required values for: Design Pressure'
-    createFilledSheet.mockRejectedValueOnce(new Error(`VALIDATION: ${validationMessage}`))
+    it('returns 400 with message when service throws VALIDATION error', async () => {
+      const filledSheetService = await import('../../src/backend/services/filledSheetService')
+      const createFilledSheet = filledSheetService.createFilledSheet as jest.Mock
+      const validationMessage = 'Missing required values for: Design Pressure'
+      createFilledSheet.mockRejectedValueOnce(new Error(`VALIDATION: ${validationMessage}`))
 
-    const res = await request(app)
-      .post('/api/backend/filledsheets')
-      .set('Cookie', [authCookie])
-      .send({
-        templateId: 1,
-        sheetName: 'Test',
-        equipmentName: 'E',
-        equipmentTagNum: 'T',
-        categoryId: 1,
-        clientId: 1,
-        projectId: 1,
-        fieldValues: {},
-      })
+      const res = await request(app)
+        .post('/api/backend/filledsheets')
+        .set('Cookie', [authCookie])
+        .send({
+          templateId: 1,
+          sheetName: 'Test',
+          equipmentName: 'E',
+          equipmentTagNum: 'T',
+          categoryId: 1,
+          clientId: 1,
+          projectId: 1,
+          fieldValues: {},
+        })
 
-    expect(res.statusCode).toBe(400)
-    expect(res.body?.error).toContain(validationMessage)
-  })
+      expect(res.statusCode).toBe(400)
+      expect(res.body?.error).toContain(validationMessage)
+    })
 
-  it('POST /api/backend/filledsheets returns 400 with fieldErrors when service throws AppError with payload', async () => {
-    const { createFilledSheet } = await import('../../src/backend/services/filledSheetService')
-    const { AppError } = await import('../../src/backend/errors/AppError')
-    const createFilledSheetMock = createFilledSheet as jest.Mock
-    const fieldErrors = [
-      { infoTemplateId: 101, message: 'Enter a whole number.', label: 'Pressure' },
-    ]
-    createFilledSheetMock.mockRejectedValueOnce(
-      new AppError('Validation failed', 400, true, { fieldErrors })
-    )
+    it('returns 400 with fieldErrors when service throws AppError with payload', async () => {
+      const { createFilledSheet } = await import('../../src/backend/services/filledSheetService')
+      const { AppError } = await import('../../src/backend/errors/AppError')
+      const createFilledSheetMock = createFilledSheet as jest.Mock
+      const fieldErrors = [
+        { infoTemplateId: 101, message: 'Enter a whole number.', label: 'Pressure' },
+      ]
+      createFilledSheetMock.mockRejectedValueOnce(
+        new AppError('Validation failed', 400, true, { fieldErrors })
+      )
 
-    const res = await request(app)
-      .post('/api/backend/filledsheets')
-      .set('Cookie', [authCookie])
-      .send({
-        templateId: 1,
-        sheetName: 'Test',
-        equipmentName: 'E',
-        equipmentTagNum: 'T',
-        categoryId: 1,
-        clientId: 1,
-        projectId: 1,
-        fieldValues: { '101': 'abc' },
-      })
+      const res = await request(app)
+        .post('/api/backend/filledsheets')
+        .set('Cookie', [authCookie])
+        .send({
+          templateId: 1,
+          sheetName: 'Test',
+          equipmentName: 'E',
+          equipmentTagNum: 'T',
+          categoryId: 1,
+          clientId: 1,
+          projectId: 1,
+          fieldValues: { '101': 'abc' },
+        })
 
-    expect(res.statusCode).toBe(400)
-    expect(res.body?.fieldErrors).toBeDefined()
-    expect(Array.isArray(res.body.fieldErrors)).toBe(true)
-    expect(res.body.fieldErrors).toHaveLength(1)
-    expect(res.body.fieldErrors[0].message).toBe('Enter a whole number.')
-    expect(res.body.fieldErrors[0].infoTemplateId).toBe(101)
+      expect(res.statusCode).toBe(400)
+      expect(res.body?.fieldErrors).toBeDefined()
+      expect(Array.isArray(res.body.fieldErrors)).toBe(true)
+      expect(res.body.fieldErrors).toHaveLength(1)
+      expect(res.body.fieldErrors[0].message).toBe('Enter a whole number.')
+      expect(res.body.fieldErrors[0].infoTemplateId).toBe(101)
+    })
+
+    it('returns 201 and sheetId when valid payload (decimal "2", "2.0", option "D")', async () => {
+      const { createFilledSheet } = await import('../../src/backend/services/filledSheetService')
+      const createFilledSheetMock = createFilledSheet as jest.Mock
+      createFilledSheetMock.mockResolvedValueOnce({ sheetId: 999 })
+
+      const res = await request(app)
+        .post('/api/backend/filledsheets')
+        .set('Cookie', [authCookie])
+        .send({
+          templateId: 1239,
+          sheetName: 'Test Sheet',
+          equipmentName: 'E',
+          equipmentTagNum: 'TAG-1',
+          categoryId: 1,
+          clientId: 1,
+          projectId: 1,
+          fieldValues: { '3792': '2', '3795': '2.0', '3797': 'D' },
+        })
+
+      expect(res.statusCode).toBe(201)
+      expect(res.body).toHaveProperty('sheetId', 999)
+    })
+
+    it('returns 400 and fieldErrors with infoTemplateId when invalid decimal', async () => {
+      const { createFilledSheet } = await import('../../src/backend/services/filledSheetService')
+      const { AppError } = await import('../../src/backend/errors/AppError')
+      const createFilledSheetMock = createFilledSheet as jest.Mock
+      const expectedInfoTemplateId = 3792
+      const fieldErrors = [
+        { infoTemplateId: expectedInfoTemplateId, message: 'Enter a number.', label: 'Information_dec' },
+      ]
+      createFilledSheetMock.mockRejectedValueOnce(
+        new AppError('Validation failed', 400, true, { fieldErrors })
+      )
+
+      const res = await request(app)
+        .post('/api/backend/filledsheets')
+        .set('Cookie', [authCookie])
+        .send({
+          templateId: 1,
+          sheetName: 'Test',
+          equipmentName: 'E',
+          equipmentTagNum: 'T',
+          categoryId: 1,
+          clientId: 1,
+          projectId: 1,
+          fieldValues: { [String(expectedInfoTemplateId)]: 'abc' },
+        })
+
+      expect(res.statusCode).toBe(400)
+      expect(res.body?.fieldErrors).toBeDefined()
+      expect(Array.isArray(res.body.fieldErrors)).toBe(true)
+      const match = (res.body.fieldErrors as Array<{ infoTemplateId: number }>).find(
+        (e) => e.infoTemplateId === expectedInfoTemplateId
+      )
+      expect(match).toBeDefined()
+      expect(match?.infoTemplateId).toBe(expectedInfoTemplateId)
+    })
+
+    it('with STRICT_FILLED_HEADER_GUARD=1, POST create still returns 201 and sheetId', async () => {
+      const prev = process.env.STRICT_FILLED_HEADER_GUARD
+      process.env.STRICT_FILLED_HEADER_GUARD = '1'
+      try {
+        const { createFilledSheet } = await import('../../src/backend/services/filledSheetService')
+        const createFilledSheetMock = createFilledSheet as jest.Mock
+        createFilledSheetMock.mockResolvedValueOnce({ sheetId: 999 })
+
+        const res = await request(app)
+          .post('/api/backend/filledsheets')
+          .set('Cookie', [authCookie])
+          .send({
+            templateId: 1,
+            sheetName: 'From Template',
+            equipmentName: 'E',
+            equipmentTagNum: 'TAG-1',
+            categoryId: 1,
+            clientId: 1,
+            projectId: 1,
+            fieldValues: { '101': '2' },
+          })
+
+        expect(res.statusCode).toBe(201)
+        expect(res.body).toHaveProperty('sheetId', 999)
+      } finally {
+        if (prev !== undefined) {
+          process.env.STRICT_FILLED_HEADER_GUARD = prev
+        } else {
+          delete process.env.STRICT_FILLED_HEADER_GUARD
+        }
+      }
+    })
   })
 
   it('PUT /api/backend/filledsheets/:id should reject invalid id or body', async () => {

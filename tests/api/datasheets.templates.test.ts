@@ -40,6 +40,7 @@ jest.mock('../../src/backend/services/templateService', () => {
       '../../src/backend/services/templateService'
     )
   const templateStore: Record<number, Record<string, unknown>> = {}
+  let nextCreateId = 1
   const defaultDatasheet = (templateId: number): Record<string, unknown> => ({
     sheetId: templateId,
     sheetName: 'Original Template Name',
@@ -62,7 +63,11 @@ jest.mock('../../src/backend/services/templateService', () => {
         { id: 1, disciplineId: 1, code: 'Pressure Transmitter', name: 'Pressure Transmitter' },
       ],
     }),
-    createTemplate: jest.fn().mockResolvedValue(1),
+    createTemplate: jest.fn().mockImplementation((data: Record<string, unknown>) => {
+      const newId = nextCreateId++
+      templateStore[newId] = { ...data, sheetId: newId }
+      return Promise.resolve(newId)
+    }),
     updateTemplate: jest.fn().mockImplementation(
       (sheetId: number, data: Record<string, unknown>, userId: number) => {
         const existing = templateStore[sheetId] ?? defaultDatasheet(sheetId)
@@ -83,6 +88,7 @@ jest.mock('../../src/backend/services/templateService', () => {
       return Promise.resolve({ datasheet, translations: null })
     }),
     verifyTemplate: jest.fn().mockResolvedValue(undefined),
+    approveTemplate: jest.fn().mockResolvedValue(1),
   }
 })
 
@@ -501,6 +507,25 @@ describe('Templates API', () => {
     expect(verifyRes.statusCode).toBe(200)
   })
 
+  it('POST /api/backend/templates/:id/approve returns 400 when action is reject and rejectComment is missing', async () => {
+    const res = await request(app)
+      .post('/api/backend/templates/1/approve')
+      .set('Cookie', [authCookie])
+      .send({ action: 'reject' })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.body?.error ?? res.text).toMatch(/rejection reason|required when rejecting/i)
+  })
+
+  it('POST /api/backend/templates/:id/approve returns 400 when action is reject and rejectComment is empty string', async () => {
+    const res = await request(app)
+      .post('/api/backend/templates/1/approve')
+      .set('Cookie', [authCookie])
+      .send({ action: 'reject', rejectComment: '   ' })
+
+    expect(res.statusCode).toBe(400)
+  })
+
   it('POST /api/backend/templates should reject invalid body', async () => {
     const invalidPayload = {
       sheetName: 'Invalid Only Name',
@@ -562,6 +587,81 @@ describe('Templates API', () => {
       .send(payloadWithoutDiscipline)
 
     expect(res.statusCode).toBe(400)
+  })
+
+  it('POST /api/backend/templates returns 400 with structured error when field has unknown infoType (e.g. bogus)', async () => {
+    const { AppError } = await import('../../src/backend/errors/AppError')
+    const templateService = await import('../../src/backend/services/templateService')
+    const mockCreate = templateService.createTemplate as jest.Mock
+    mockCreate.mockRejectedValueOnce(
+      new AppError("Invalid infoType: 'bogus'. Allowed: int, decimal, varchar.", 400)
+    )
+
+    const payload = await buildTemplatePayload()
+    const createPayload = {
+      ...payload,
+      subsheets: [
+        {
+          name: 'Sub One',
+          fields: [
+            { label: 'Bad', infoType: 'bogus', uom: '', required: false, sortOrder: 0, options: [] },
+          ],
+        },
+      ],
+    }
+
+    const res = await request(app)
+      .post('/api/backend/templates')
+      .set('Cookie', [authCookie])
+      .send(createPayload)
+
+    expect(res.statusCode).toBe(400)
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining('Invalid infoType'),
+      message: expect.stringContaining('Invalid infoType'),
+      code: 'BAD_REQUEST',
+    })
+  })
+
+  it('POST /api/backend/templates persists int, decimal, varchar fields; GET returns all three in order', async () => {
+    const payload = await buildTemplatePayload()
+    const subsheetWithThreeTypes = {
+      name: 'Sub One',
+      fields: [
+        { label: 'Int Field', infoType: 'int', uom: '', required: false, sortOrder: 0, options: [] },
+        { label: 'Dec Field', infoType: 'decimal', uom: '', required: false, sortOrder: 1, options: [] },
+        { label: 'Text Field', infoType: 'varchar', uom: '', required: false, sortOrder: 2, options: [] },
+      ],
+    }
+    const createPayload = { ...payload, subsheets: [subsheetWithThreeTypes] }
+
+    const createRes = await request(app)
+      .post('/api/backend/templates')
+      .set('Cookie', [authCookie])
+      .send(createPayload)
+
+    expect(createRes.statusCode).toBe(201)
+    const sheetId = createRes.body?.sheetId ?? createRes.body?.SheetID ?? createRes.body?.id
+    expect(typeof sheetId).toBe('number')
+
+    const getRes = await request(app)
+      .get(`/api/backend/templates/${sheetId}`)
+      .set('Cookie', [authCookie])
+
+    expect(getRes.statusCode).toBe(200)
+    const datasheet = getRes.body?.datasheet as Record<string, unknown> | undefined
+    expect(datasheet).toBeDefined()
+    const subsheets = datasheet?.subsheets as Array<{ fields: Array<{ label: string; infoType: string }> }> | undefined
+    expect(Array.isArray(subsheets)).toBe(true)
+    expect(subsheets?.length).toBe(1)
+    const fields = subsheets?.[0]?.fields ?? []
+    expect(fields.length).toBe(3)
+    expect(fields[0].label).toBe('Int Field')
+    expect(fields[0].infoType).toBe('int')
+    expect(fields[1].label).toBe('Dec Field')
+    expect(fields[1].infoType).toBe('decimal')
+    expect(fields[2].label).toBe('Text Field')
+    expect(fields[2].infoType).toBe('varchar')
   })
 
   it('PUT /api/backend/templates/:id returns 200 and sheetId when update succeeds', async () => {

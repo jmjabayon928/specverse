@@ -197,7 +197,6 @@ router.post(
   '/:id/verify',
   verifyToken,
   requirePermission('DATASHEET_VERIFY'),
-  auditAction('Verify Template', { tableName: 'Sheets', recordIdParam: 'id' }),
   verifyTemplateHandler,
 )
 
@@ -205,7 +204,6 @@ router.post(
   '/:id/approve',
   verifyToken,
   requirePermission('DATASHEET_APPROVE'),
-  auditAction('Approve Template', { tableName: 'Sheets', recordIdParam: 'id' }),
   approveTemplateHandler,
 )
 

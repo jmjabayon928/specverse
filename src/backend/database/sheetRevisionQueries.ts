@@ -4,20 +4,21 @@ import { poolPromise, sql } from '../config/db'
 export interface SheetRevisionRow {
   RevisionID: number
   SheetID: number
-  RevisionNumber: number
-  SnapshotJson: string
-  CreatedBy: number
-  CreatedAt: Date
-  Comment: string | null
+  RevisionNum: number
+  SnapshotJson: string | null
+  CreatedByID: number | null
+  CreatedByDate: Date | null
+  Notes: string | null
   Status: string | null
 }
 
 export interface CreateRevisionInput {
   sheetId: number
   snapshotJson: string
-  createdBy: number
+  createdById: number
+  createdByDate: Date
   status: string | null
-  comment?: string | null
+  notes?: string | null
 }
 
 export interface RevisionListItem {
@@ -36,7 +37,7 @@ export interface RevisionDetails extends RevisionListItem {
 
 /**
  * Get the next revision number for a sheet (within transaction for safety)
- * Uses MAX(RevisionNumber) + 1 with UPDLOCK/HOLDLOCK to prevent race conditions
+ * Uses MAX(RevisionNum) + 1 with UPDLOCK/HOLDLOCK to prevent race conditions
  */
 export async function getNextRevisionNumber(
   tx: sql.Transaction,
@@ -44,13 +45,13 @@ export async function getNextRevisionNumber(
 ): Promise<number> {
   const result = await tx.request()
     .input('SheetID', sql.Int, sheetId)
-    .query<{ NextRevisionNumber: number }>(`
-      SELECT ISNULL(MAX(RevisionNumber), 0) + 1 AS NextRevisionNumber
+    .query<{ NextRevisionNum: number }>(`
+      SELECT ISNULL(MAX(RevisionNum), 0) + 1 AS NextRevisionNum
       FROM dbo.SheetRevisions WITH (UPDLOCK, HOLDLOCK)
       WHERE SheetID = @SheetID
     `)
 
-  return result.recordset[0]?.NextRevisionNumber ?? 1
+  return result.recordset[0]?.NextRevisionNum ?? 1
 }
 
 /**
@@ -64,18 +65,19 @@ export async function createRevision(
 
   const result = await tx.request()
     .input('SheetID', sql.Int, input.sheetId)
-    .input('RevisionNumber', sql.Int, revisionNumber)
+    .input('RevisionNum', sql.Int, revisionNumber)
     .input('SnapshotJson', sql.NVarChar(sql.MAX), input.snapshotJson)
-    .input('CreatedBy', sql.Int, input.createdBy)
+    .input('CreatedByID', sql.Int, input.createdById)
+    .input('CreatedByDate', sql.DateTime2(0), input.createdByDate)
     .input('Status', sql.NVarChar(50), input.status)
-    .input('Comment', sql.NVarChar(1000), input.comment ?? null)
+    .input('Notes', sql.NVarChar(1000), input.notes ?? null)
     .query<{ RevisionID: number }>(`
       INSERT INTO dbo.SheetRevisions (
-        SheetID, RevisionNumber, SnapshotJson, CreatedBy, Status, Comment
+        SheetID, RevisionNum, SnapshotJson, CreatedByID, CreatedByDate, Status, Notes
       )
       OUTPUT INSERTED.RevisionID
       VALUES (
-        @SheetID, @RevisionNumber, @SnapshotJson, @CreatedBy, @Status, @Comment
+        @SheetID, @RevisionNum, @SnapshotJson, @CreatedByID, @CreatedByDate, @Status, @Notes
       )
     `)
 
@@ -112,37 +114,37 @@ export async function listRevisionsPaged(
     .input('PageSize', sql.Int, maxPageSize)
     .query<{
       RevisionID: number
-      RevisionNumber: number
-      CreatedAt: Date
-      CreatedBy: number
+      RevisionNum: number
+      CreatedByDate: Date | null
+      CreatedByID: number | null
       CreatedByName: string | null
       Status: string | null
-      Comment: string | null
+      Notes: string | null
     }>(`
       SELECT 
         r.RevisionID,
-        r.RevisionNumber,
-        r.CreatedAt,
-        r.CreatedBy,
+        r.RevisionNum,
+        r.CreatedByDate,
+        r.CreatedByID,
         u.FirstName + ' ' + u.LastName AS CreatedByName,
         r.Status,
-        r.Comment
+        r.Notes
       FROM dbo.SheetRevisions r
-      LEFT JOIN dbo.Users u ON r.CreatedBy = u.UserID
+      LEFT JOIN dbo.Users u ON r.CreatedByID = u.UserID
       WHERE r.SheetID = @SheetID
-      ORDER BY r.RevisionNumber DESC
+      ORDER BY r.RevisionNum DESC
       OFFSET @Offset ROWS
       FETCH NEXT @PageSize ROWS ONLY
     `)
 
   const rows: RevisionListItem[] = rowsResult.recordset.map(row => ({
     revisionId: row.RevisionID,
-    revisionNumber: row.RevisionNumber,
-    createdAt: row.CreatedAt,
-    createdBy: row.CreatedBy,
+    revisionNumber: row.RevisionNum,
+    createdAt: row.CreatedByDate ?? new Date(0),
+    createdBy: row.CreatedByID ?? 0,
     createdByName: row.CreatedByName,
     status: row.Status,
-    comment: row.Comment,
+    comment: row.Notes,
   }))
 
   return { total, rows }
@@ -162,25 +164,25 @@ export async function getRevisionById(
     .input('RevisionID', sql.Int, revisionId)
     .query<{
       RevisionID: number
-      RevisionNumber: number
-      CreatedAt: Date
-      CreatedBy: number
+      RevisionNum: number
+      CreatedByDate: Date | null
+      CreatedByID: number | null
       CreatedByName: string | null
       Status: string | null
-      Comment: string | null
-      SnapshotJson: string
+      Notes: string | null
+      SnapshotJson: string | null
     }>(`
       SELECT 
         r.RevisionID,
-        r.RevisionNumber,
-        r.CreatedAt,
-        r.CreatedBy,
+        r.RevisionNum,
+        r.CreatedByDate,
+        r.CreatedByID,
         u.FirstName + ' ' + u.LastName AS CreatedByName,
         r.Status,
-        r.Comment,
+        r.Notes,
         r.SnapshotJson
       FROM dbo.SheetRevisions r
-      LEFT JOIN dbo.Users u ON r.CreatedBy = u.UserID
+      LEFT JOIN dbo.Users u ON r.CreatedByID = u.UserID
       WHERE r.SheetID = @SheetID AND r.RevisionID = @RevisionID
     `)
 
@@ -190,20 +192,25 @@ export async function getRevisionById(
 
   const row = result.recordset[0]
   let snapshot: unknown
-  try {
-    snapshot = JSON.parse(row.SnapshotJson)
-  } catch {
-    throw new Error('Invalid snapshot JSON')
+  const jsonStr = row.SnapshotJson
+  if (jsonStr != null && jsonStr !== '') {
+    try {
+      snapshot = JSON.parse(jsonStr)
+    } catch {
+      throw new Error('Invalid snapshot JSON')
+    }
+  } else {
+    snapshot = null
   }
 
   return {
     revisionId: row.RevisionID,
-    revisionNumber: row.RevisionNumber,
-    createdAt: row.CreatedAt,
-    createdBy: row.CreatedBy,
+    revisionNumber: row.RevisionNum,
+    createdAt: row.CreatedByDate ?? new Date(0),
+    createdBy: row.CreatedByID ?? 0,
     createdByName: row.CreatedByName,
     status: row.Status,
-    comment: row.Comment,
+    comment: row.Notes,
     snapshot,
   }
 }

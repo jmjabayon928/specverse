@@ -14,6 +14,14 @@ describe('normalizeUnit', () => {
     expect(normalizeUnit('n/mm2')).toBe('mpa')
     expect(normalizeUnit('N/mm^2')).toBe('mpa')
   })
+
+  it('accepts unknown and does not throw (no .trim() on non-string)', () => {
+    expect(normalizeUnit(null)).toBe('')
+    expect(normalizeUnit(undefined)).toBe('')
+    expect(normalizeUnit(123)).toBe('123')
+    expect(normalizeUnit(['kW', 'kW'])).toBe('kw,kw')
+    expect(normalizeUnit('  kPa  ')).toBe('kpa')
+  })
 })
 
 describe('convertToUSC', () => {
@@ -46,6 +54,20 @@ describe('convertToUSC', () => {
     expect(Number.parseFloat(resultLarge.value)).toBeCloseTo(1.450377377, 2)
   })
 
+  it('convertToUSC(valueStr, 123 as unknown) does not throw', () => {
+    const result = convertToUSC('1', 123 as unknown)
+    expect(result).toEqual({ value: '1', unit: '123' })
+  })
+
+  it('convertToUSC(valueStr, null) does not throw', () => {
+    const result = convertToUSC('1', null)
+    expect(result).toEqual({ value: '1', unit: '' })
+  })
+
+  it('convertToUSC(valueStr, undefined) does not throw', () => {
+    const result = convertToUSC('1', undefined)
+    expect(result).toEqual({ value: '1', unit: '' })
+  })
 })
 
 describe('convertToSI', () => {

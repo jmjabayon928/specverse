@@ -22,7 +22,7 @@ export async function notifyUsers({
   category,
   createdBy,
   linkOverride,
-}: NotifyUsersParams) {
+}: NotifyUsersParams): Promise<void> {
   const pool = await poolPromise;
 
   // 🔹 Step 1: Generate link
@@ -64,35 +64,57 @@ export async function notifyUsers({
 
   if (allRecipients.length === 0) return;
 
-  // 🔹 Step 4: Insert into Notifications table
-  const notifInsertResult = await pool
-    .request()
-    .input("Title", sql.NVarChar, title)
-    .input("Message", sql.NVarChar, message)
-    .input("Link", sql.NVarChar, link)
-    .input("NotificationType", sql.NVarChar, category)
-    .input("RelatedEntityID", sql.Int, sheetId)
-    .input("EntityType", sql.NVarChar, category)
-    .input("CreatedBy", sql.Int, createdBy)
-    .input("CreatedAt", sql.DateTime, new Date())
-    .query(`
-      INSERT INTO Notifications (Title, Message, Link, NotificationType, RelatedEntityID, EntityType, CreatedBy, CreatedAt)
-      OUTPUT INSERTED.NotificationID AS NotificationID
-      VALUES (@Title, @Message, @Link, @NotificationType, @RelatedEntityID, @EntityType, @CreatedBy, @CreatedAt)
-    `);
+  // 🔹 Step 4 & 5: Insert Notifications with explicit NotificationID (table has no IDENTITY)
+  const tx = new sql.Transaction(pool);
+  let committed = false;
+  try {
+    await tx.begin();
 
-  const notificationId = notifInsertResult.recordset[0].NotificationID;
+    const nextIdResult = await tx
+      .request()
+      .query<{ NextId: number }>(`
+        SELECT ISNULL(MAX(NotificationID), 0) + 1 AS NextId
+        FROM Notifications WITH (UPDLOCK, HOLDLOCK)
+      `);
+    const notificationId = nextIdResult.recordset[0]?.NextId ?? 1;
 
-  // 🔹 Step 5: Insert recipient entries
-  for (const userId of allRecipients) {
-    await pool
+    await tx
       .request()
       .input("NotificationID", sql.Int, notificationId)
-      .input("UserID", sql.Int, userId)
-      .input("IsRead", sql.Bit, 0)
+      .input("Title", sql.NVarChar, title)
+      .input("Message", sql.NVarChar, message)
+      .input("Link", sql.NVarChar, link)
+      .input("NotificationType", sql.NVarChar, category)
+      .input("RelatedEntityID", sql.Int, sheetId)
+      .input("EntityType", sql.NVarChar, category)
+      .input("CreatedBy", sql.Int, createdBy)
+      .input("CreatedAt", sql.DateTime, new Date())
       .query(`
-        INSERT INTO NotificationRecipients (NotificationID, UserID, IsRead)
-        VALUES (@NotificationID, @UserID, @IsRead)
+        INSERT INTO Notifications (NotificationID, Title, Message, Link, NotificationType, RelatedEntityID, EntityType, CreatedBy, CreatedAt)
+        VALUES (@NotificationID, @Title, @Message, @Link, @NotificationType, @RelatedEntityID, @EntityType, @CreatedBy, @CreatedAt)
       `);
+
+    for (const userId of allRecipients) {
+      await tx
+        .request()
+        .input("NotificationID", sql.Int, notificationId)
+        .input("UserID", sql.Int, userId)
+        .input("IsRead", sql.Bit, 0)
+        .query(`
+          INSERT INTO NotificationRecipients (NotificationID, UserID, IsRead)
+          VALUES (@NotificationID, @UserID, @IsRead)
+        `);
+    }
+
+    await tx.commit();
+    committed = true;
+  } finally {
+    if (!committed) {
+      try {
+        await tx.rollback();
+      } catch {
+        // ignore rollback error; transaction may already be aborted
+      }
+    }
   }
 }

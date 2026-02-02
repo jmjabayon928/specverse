@@ -13,8 +13,8 @@ interface FilledSheetFieldRowProps {
   errorMessage: string | undefined;
   onFieldValueChange: (subsheetIndex: number, infoTemplateId: number, value: string) => void;
   subsheetIndex: number;
-  /** Fallback for value lookup/callback when field.id and field.originalId are undefined */
-  fieldIndex: number;
+  /** Key for storing value (InfoTemplateID or unique sentinel); used so values don't collide across subsheets. */
+  storageKey: number;
 }
 
 function FilledSheetFieldRowInner({
@@ -23,9 +23,8 @@ function FilledSheetFieldRowInner({
   errorMessage,
   onFieldValueChange,
   subsheetIndex,
-  fieldIndex,
+  storageKey,
 }: Readonly<FilledSheetFieldRowProps>) {
-  const infoTemplateId = field.id ?? field.originalId ?? fieldIndex;
   const valueStr = typeof value === "string" ? value : String(value ?? "");
   const isIncompleteHint = field.required && valueStr.trim() === "";
   const hasError = Boolean(errorMessage);
@@ -33,7 +32,7 @@ function FilledSheetFieldRowInner({
   const label = field.label;
 
   const onValueChange = (nextValue: string) => {
-    onFieldValueChange(subsheetIndex, infoTemplateId, nextValue);
+    onFieldValueChange(subsheetIndex, storageKey, nextValue);
   };
 
   if (field.options && field.options.length > 0) {
@@ -55,11 +54,11 @@ function FilledSheetFieldRowInner({
           className={`w-full border rounded px-3 py-2 ${
             hasError ? "border-red-500" : "border-gray-300"
           }`}
-          required={isRequired}
+          aria-required={isRequired}
         >
           <option value="">-- Select --</option>
           {field.options.map((opt) => (
-            <option key={`opt:${infoTemplateId}:${opt}`} value={opt}>
+            <option key={`opt:${storageKey}:${opt}`} value={opt}>
               {opt}
             </option>
           ))}
@@ -91,7 +90,7 @@ function FilledSheetFieldRowInner({
         className={`w-full border rounded px-3 py-2 ${
           hasError ? "border-red-500" : "border-gray-300"
         }`}
-        required={isRequired}
+        aria-required={isRequired}
       />
       {hasError && <p className="text-sm text-red-600 mt-1">{errorMessage}</p>}
     </div>
@@ -135,8 +134,15 @@ function FilledSheetSubsheetFormInner(props: Readonly<Props>) {
         {subsheet.fields.map((field, index) => {
           const errorKey = `Subsheet #${subsheetIndex + 1} - Template #${index + 1} - value`;
           const errorMessage = formErrors?.[errorKey]?.[0];
-          // String key for lookup: Editor/Cloner use Record<string, string>; Creator uses Record<number, string>; both work at runtime
-          const value = (fieldValues as Record<string, string>)[String(field.id ?? field.originalId ?? index)] ?? "";
+          // Key by InfoTemplateID only so values map correctly when labels repeat across subsheets.
+          const valueKey = field.id ?? field.originalId;
+          const value =
+            valueKey != null
+              ? (fieldValues as Record<string, string>)[String(valueKey)] ?? ""
+              : "";
+          // Use unique negative sentinel when id missing so index-based keys don't collide across subsheets.
+          const storageKey =
+            valueKey != null ? valueKey : -(subsheetIndex * 1000 + index + 1);
           return (
             <div key={String(field.id ?? field.originalId ?? index)} data-error-key={errorKey}>
               <FilledSheetFieldRow
@@ -145,7 +151,7 @@ function FilledSheetSubsheetFormInner(props: Readonly<Props>) {
                 errorMessage={errorMessage}
                 onFieldValueChange={onFieldValueChange}
                 subsheetIndex={subsheetIndex}
-                fieldIndex={index}
+                storageKey={storageKey}
               />
             </div>
           );

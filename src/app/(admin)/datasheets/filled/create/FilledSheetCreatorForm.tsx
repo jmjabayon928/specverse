@@ -61,6 +61,8 @@ interface Props {
   template: UnifiedSheet;
   translations?: SheetTranslations | null;
   language: string;
+  /** When true, all header/metadata fields are read-only (template-driven create). */
+  readOnlyHeader?: boolean;
 }
 
 // Hoisted to avoid deep-nesting warnings
@@ -84,8 +86,9 @@ function categoriesToOptions(
 }
 
 export default function FilledSheetCreatorForm(props: Readonly<Props>) {
-  const { template, translations, language } = props;
+  const { template, translations, language, readOnlyHeader = true } = props;
   const router = useRouter();
+  const headerDisabled = readOnlyHeader ?? true;
 
   const [translatedSheet, setTranslatedSheet] = useState<UnifiedSheet>(template);
   // keyed by InfoTemplateID
@@ -97,6 +100,7 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
   const [clients, setClients] = useState<Option[]>([]);
   const [projects, setProjects] = useState<Option[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [formErrorSummary, setFormErrorSummary] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
@@ -159,7 +163,8 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
     for (const sub of filledSheet.subsheets || []) {
       for (const f of sub.fields || []) {
         if (f.required) {
-          const v = (fieldValues[f.id!] ?? "").trim();
+          const key = f.id ?? f.originalId;
+          const v = (key != null ? (fieldValues[key] ?? "") : "").trim();
           if (!v) {
             return {
               ok: false,
@@ -175,6 +180,8 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); // onSubmit only fires if the form is valid (native checks). We prevent the full page reload.
     setSubmitError(null);
+    setFormErrorSummary(null);
+    setFormErrors({});
 
     // Extra guard for subsheet required fields
     const v = validateSubsheetRequired();
@@ -183,9 +190,20 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
       return;
     }
 
+    // Send values keyed only by InfoTemplateID so backend maps correctly when labels repeat across subsheets.
+    const fieldValuesByTemplateId: Record<string, string> = {};
+    for (const sub of filledSheet.subsheets ?? []) {
+      for (const f of sub.fields ?? []) {
+        const k = f.id ?? f.originalId;
+        if (k != null && typeof k === "number") {
+          const v = fieldValues[k];
+          if (v !== undefined && v !== null) fieldValuesByTemplateId[String(k)] = String(v);
+        }
+      }
+    }
     const payload = {
       ...filledSheet,
-      fieldValues,
+      fieldValues: fieldValuesByTemplateId,
     };
 
     try {
@@ -199,17 +217,23 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
 
       if (!res.ok) {
         if (res.status === 400 && Array.isArray(resultJson.fieldErrors)) {
-          const mapped = mapFieldErrorsToFormErrors(resultJson.fieldErrors, filledSheet.subsheets ?? []);
+          const errors = resultJson.fieldErrors as FieldErrorItem[];
+          const mapped = mapFieldErrorsToFormErrors(errors, filledSheet.subsheets ?? []);
+          const firstMsg = errors.length > 0 ? displayMessage(errors[0]) : "";
+          const summary =
+            errors.length > 1 ? `${firstMsg} (+${errors.length - 1} more)` : firstMsg;
+          setFormErrorSummary(summary || "Validation failed.");
           setFormErrors(mapped);
           setSubmitError(null);
           const firstKey = Object.keys(mapped)[0];
           if (firstKey) {
             requestAnimationFrame(() => {
-              document.querySelector(`[data-error-key="${CSS.escape(firstKey)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              document.querySelector(`[data-error-key="${CSS.escape(firstKey)}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
             });
           }
           return;
         }
+        setFormErrorSummary(null);
         setSubmitError(resultJson.error ?? "Failed to create filled sheet");
         setFormErrors({});
         return;
@@ -223,30 +247,45 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
       router.push(`/datasheets/filled/${resultJson.sheetId}?success=created`);
     } catch (error) {
       console.error("❌ Submission failed:", error);
+      setFormErrorSummary(null);
       setSubmitError((error as Error).message || "An error occurred while submitting the form.");
       setFormErrors({});
     }
   }
 
   return (
-    <form className="max-w-6xl mx-auto px-4 space-y-6" onSubmit={handleSubmit} noValidate={false}>
+    <form className="max-w-6xl mx-auto px-4 space-y-6" onSubmit={handleSubmit} noValidate>
       <h1 className="text-xl font-semibold">Create Filled Sheet</h1>
+
+      {formErrorSummary && (
+        <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+          {formErrorSummary}
+        </div>
+      )}
 
       {/* Datasheet Details */}
       <fieldset className="border border-gray-300 rounded p-4">
         <legend className="text-md font-semibold px-2">Datasheet Details</legend>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-          {/* Mark key top-level fields as required */}
-          {renderInput("Sheet Name", "sheetName", filledSheet, handleChange, true)}
-          {renderInput("Sheet Description", "sheetDesc", filledSheet, handleChange)}
-          {renderInput("Additional Description", "sheetDesc2", filledSheet, handleChange)}
-          {renderInput("Client Doc #", "clientDocNum", filledSheet, handleChange, false, {}, "number")}
-          {renderInput("Client Project #", "clientProjectNum", filledSheet, handleChange, false, {}, "number")}
-          {renderInput("Company Doc #", "companyDocNum", filledSheet, handleChange, false, {}, "number")}
-          {renderInput("Company Project #", "companyProjectNum", filledSheet, handleChange, false, {}, "number")}
-          {renderSelect("Area", "areaId", filledSheet, handleChange, false, areas)}
-          {renderInput("Package Name", "packageName", filledSheet, handleChange)}
-          {renderInput("Revision Number", "revisionNum", filledSheet, handleChange, false, {}, "number")}
+          {renderInput("Sheet Name", "sheetName", filledSheet, handleChange, headerDisabled, {}, "text")}
+          {renderInput("Sheet Description", "sheetDesc", filledSheet, handleChange, headerDisabled)}
+          {renderInput("Additional Description", "sheetDesc2", filledSheet, handleChange, headerDisabled)}
+          {renderInput("Client Doc #", "clientDocNum", filledSheet, handleChange, headerDisabled, {}, "number")}
+          {renderInput("Client Project #", "clientProjectNum", filledSheet, handleChange, headerDisabled, {}, "number")}
+          {renderInput("Company Doc #", "companyDocNum", filledSheet, handleChange, headerDisabled, {}, "number")}
+          {renderInput("Company Project #", "companyProjectNum", filledSheet, handleChange, headerDisabled, {}, "number")}
+          {headerDisabled ? (
+            <div className="flex flex-col">
+              <span className="font-medium">Area</span>
+              <p className="border border-gray-300 px-2 py-1 rounded bg-gray-50 text-gray-700">
+                {filledSheet.areaName ?? "—"}
+              </p>
+            </div>
+          ) : (
+            renderSelect("Area", "areaId", filledSheet, handleChange, false, areas)
+          )}
+          {renderInput("Package Name", "packageName", filledSheet, handleChange, headerDisabled)}
+          {renderInput("Revision Number", "revisionNum", filledSheet, handleChange, headerDisabled, {}, "number")}
         </div>
       </fieldset>
 
@@ -254,25 +293,72 @@ export default function FilledSheetCreatorForm(props: Readonly<Props>) {
       <fieldset className="border border-gray-300 rounded p-4">
         <legend className="text-md font-semibold px-2">Equipment Details</legend>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-          {renderInput("Equipment Name", "equipmentName", filledSheet, handleChange, true)}
-          {renderInput("Equipment Tag Number", "equipmentTagNum", filledSheet, handleChange, true)}
-          {renderInput("Service Name", "serviceName", filledSheet, handleChange)}
-          {renderInput("Required Quantity", "requiredQty", filledSheet, handleChange, false, {}, "number")}
-          {renderInput("Item Location", "itemLocation", filledSheet, handleChange)}
-          {renderSelect("Manufacturer", "manuId", filledSheet, handleChange, false, manufacturers)}
-          {renderSelect("Supplier", "suppId", filledSheet, handleChange, false, suppliers)}
-          {renderInput("Install Package #", "installPackNum", filledSheet, handleChange)}
-          {renderInput("Equipment Size", "equipSize", filledSheet, handleChange, false, {}, "number")}
-          {renderInput("Model Number", "modelNum", filledSheet, handleChange)}
-          {renderInput("Driver", "driver", filledSheet, handleChange)}
-          {renderInput("Location DWG", "locationDwg", filledSheet, handleChange)}
-          {renderInput("PID", "pid", filledSheet, handleChange, false, {}, "number")}
-          {renderInput("Install DWG", "installDwg", filledSheet, handleChange)}
-          {renderInput("Code Standard", "codeStd", filledSheet, handleChange)}
-          {/* Make these selects required so native validation runs */}
-          {renderSelect("Category", "categoryId", filledSheet, handleChange, true, categories)}
-          {renderSelect("Client", "clientId", filledSheet, handleChange, true, clients)}
-          {renderSelect("Project", "projectId", filledSheet, handleChange, true, projects)}
+          {renderInput("Equipment Name", "equipmentName", filledSheet, handleChange, headerDisabled)}
+          {renderInput("Equipment Tag Number", "equipmentTagNum", filledSheet, handleChange, headerDisabled)}
+          {renderInput("Service Name", "serviceName", filledSheet, handleChange, headerDisabled)}
+          {renderInput("Required Quantity", "requiredQty", filledSheet, handleChange, headerDisabled, {}, "number")}
+          {renderInput("Item Location", "itemLocation", filledSheet, handleChange, headerDisabled)}
+          {headerDisabled ? (
+            <div className="flex flex-col">
+              <span className="font-medium">Manufacturer</span>
+              <p className="border border-gray-300 px-2 py-1 rounded bg-gray-50 text-gray-700">
+                {filledSheet.manuName ?? "—"}
+              </p>
+            </div>
+          ) : (
+            renderSelect("Manufacturer", "manuId", filledSheet, handleChange, false, manufacturers)
+          )}
+          {headerDisabled ? (
+            <div className="flex flex-col">
+              <span className="font-medium">Supplier</span>
+              <p className="border border-gray-300 px-2 py-1 rounded bg-gray-50 text-gray-700">
+                {filledSheet.suppName ?? "—"}
+              </p>
+            </div>
+          ) : (
+            renderSelect("Supplier", "suppId", filledSheet, handleChange, false, suppliers)
+          )}
+          {renderInput("Install Package #", "installPackNum", filledSheet, handleChange, headerDisabled)}
+          {renderInput("Equipment Size", "equipSize", filledSheet, handleChange, headerDisabled, {}, "number")}
+          {renderInput("Model Number", "modelNum", filledSheet, handleChange, headerDisabled)}
+          {renderInput("Driver", "driver", filledSheet, handleChange, headerDisabled)}
+          {renderInput("Location DWG", "locationDwg", filledSheet, handleChange, headerDisabled)}
+          {renderInput("PID", "pid", filledSheet, handleChange, headerDisabled, {}, "number")}
+          {renderInput("Install DWG", "installDwg", filledSheet, handleChange, headerDisabled)}
+          {renderInput("Code Standard", "codeStd", filledSheet, handleChange, headerDisabled)}
+          {renderSelect("Category", "categoryId", filledSheet, handleChange, headerDisabled, categories)}
+          {headerDisabled ? (
+            <div className="flex flex-col">
+              <span className="font-medium">Client</span>
+              <p className="border border-gray-300 px-2 py-1 rounded bg-gray-50 text-gray-700">
+                {filledSheet.clientName ?? "—"}
+              </p>
+            </div>
+          ) : (
+            renderSelect("Client", "clientId", filledSheet, handleChange, false, clients)
+          )}
+          {headerDisabled ? (
+            <div className="flex flex-col">
+              <span className="font-medium">Project</span>
+              <p className="border border-gray-300 px-2 py-1 rounded bg-gray-50 text-gray-700">
+                {filledSheet.projectName ?? "—"}
+              </p>
+            </div>
+          ) : (
+            renderSelect("Project", "projectId", filledSheet, handleChange, false, projects)
+          )}
+          <div className="flex flex-col">
+            <span className="font-medium">Discipline</span>
+            <p className="border border-gray-300 px-2 py-1 rounded bg-gray-50 text-gray-700">
+              {filledSheet.disciplineName ?? "—"}
+            </p>
+          </div>
+          <div className="flex flex-col">
+            <span className="font-medium">Subtype</span>
+            <p className="border border-gray-300 px-2 py-1 rounded bg-gray-50 text-gray-700">
+              {filledSheet.subtypeName ?? "—"}
+            </p>
+          </div>
         </div>
       </fieldset>
 

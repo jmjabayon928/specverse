@@ -137,6 +137,19 @@ const asNonEmptyString = (v: unknown): string | undefined => {
   return undefined
 }
 
+/** Normalize InfoType for DB. Throws AppError 400 for non-empty unknown values. */
+function normalizeInfoType(v: unknown): string {
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : ''
+  if (s === 'int' || s === 'integer') return 'int'
+  if (s === 'decimal' || s === 'dec' || s === 'number') return 'decimal'
+  if (s === 'varchar' || s === 'vchar' || s === 'string' || s === 'text' || s === '') return 'varchar'
+  const raw = typeof v === 'string' ? v.trim() : String(v)
+  throw new AppError(
+    `Invalid infoType: '${raw}'. Allowed: int, decimal, varchar.`,
+    400
+  )
+}
+
 // ───────────────────────────────────────────
 // Attachment URL helper
 // ───────────────────────────────────────────
@@ -351,12 +364,13 @@ async function insertSubsheetTree(
 
     for (let j = 0; j < sub.fields.length; j += 1) {
       const f = sub.fields[j]
+      const infoType = normalizeInfoType(f.infoType)
 
       const infoRs = await tx
         .request()
         .input('SubID', sql.Int, newSubId)
         .input('Label', sql.VarChar(150), nv(f.label))
-        .input('InfoType', sql.VarChar(30), nv(f.infoType))
+        .input('InfoType', sql.VarChar(30), infoType)
         .input('OrderIndex', sql.Int, f.sortOrder ?? j)
         .input('UOM', sql.VarChar(50), nv(f.uom ?? ''))
         .input('Required', sql.Bit, f.required ? 1 : 0)
@@ -465,6 +479,30 @@ export async function assertTemplateStructureEditable(
   }
 }
 
+/**
+ * If template is Rejected, transition to Modified Draft and clear rejection fields.
+ * Call after a successful template edit (metadata or structure). No-op if status is not Rejected.
+ */
+async function bumpRejectedToModifiedDraft(
+  request: sql.Request,
+  sheetId: number,
+  userId: number
+): Promise<void> {
+  await request
+    .input('SheetID', sql.Int, sheetId)
+    .input('ModifiedByID', sql.Int, userId)
+    .query(`
+      UPDATE Sheets
+      SET Status = 'Modified Draft',
+          RejectedByID = NULL,
+          RejectedByDate = NULL,
+          RejectComment = NULL,
+          ModifiedByID = @ModifiedByID,
+          ModifiedByDate = SYSDATETIME()
+      WHERE SheetID = @SheetID AND IsTemplate = 1 AND Status = 'Rejected'
+    `)
+}
+
 // ───────────────────────────────────────────
 // Subsheet CRUD + reorder
 // ───────────────────────────────────────────
@@ -499,7 +537,8 @@ export async function createSubsheet(
       OUTPUT INSERTED.SubID
       VALUES (@SubName, @SheetID, @OrderIndex, NULL)
     `)
-  const subId = insertResult.recordset[0].SubID
+    const subId = insertResult.recordset[0].SubID
+  await bumpRejectedToModifiedDraft(pool.request(), sheetId, userId)
   return { subId, subName: subName.trim() || 'Subsheet', orderIndex }
 }
 
@@ -532,6 +571,7 @@ export async function updateSubsheet(
     .query(`
       UPDATE SubSheets SET SubName = @SubName WHERE SheetID = @SheetID AND SubID = @SubID
     `)
+  await bumpRejectedToModifiedDraft(pool.request(), sheetId, userId)
   const orderResult = await pool
     .request()
     .input('SheetID', sql.Int, sheetId)
@@ -568,6 +608,7 @@ export async function deleteSubsheet(
     await tx.request().input('SubID', sql.Int, subId).query(`
       DELETE FROM SubSheets WHERE SubID = @SubID
     `)
+    await bumpRejectedToModifiedDraft(tx.request(), sheetId, userId)
     await tx.commit()
     return { deletedSubId: subId }
   } catch (err) {
@@ -612,6 +653,7 @@ export async function reorderSubsheets(
         `)
       updated += result.rowsAffected[0] ?? 0
     }
+    await bumpRejectedToModifiedDraft(tx.request(), sheetId, userId)
     await tx.commit()
     return { updated }
   } catch (err) {
@@ -709,6 +751,7 @@ export async function createField(
         VALUES (@InfoTemplateID, @OptionValue, @SortOrder)
       `)
   }
+  await bumpRejectedToModifiedDraft(pool.request(), sheetId, userId)
   return { fieldId, label, infoType, uom, required, orderIndex, options }
 }
 
@@ -799,6 +842,10 @@ export async function updateField(
     .query<{ OptionValue: string }>(`SELECT OptionValue FROM InformationTemplateOptions WHERE InfoTemplateID = @InfoTemplateID ORDER BY SortOrder`)
   const options = (optResult.recordset ?? []).map((r) => r.OptionValue)
   const required = row?.Required === true || row?.Required === 1
+  const didMutate = updates.length > 0 || body.options !== undefined
+  if (didMutate) {
+    await bumpRejectedToModifiedDraft(pool.request(), sheetId, userId)
+  }
   return {
     fieldId,
     label: row?.Label ?? '',
@@ -836,6 +883,7 @@ export async function deleteField(
     await tx.request().input('InfoTemplateID', sql.Int, fieldId).input('SubID', sql.Int, subId).query(`
       DELETE FROM InformationTemplates WHERE SubID = @SubID AND InfoTemplateID = @InfoTemplateID
     `)
+    await bumpRejectedToModifiedDraft(tx.request(), sheetId, userId)
     await tx.commit()
     return { deletedFieldId: fieldId }
   } catch (err) {
@@ -882,6 +930,7 @@ export async function reorderFields(
         `)
       updated += result.rowsAffected[0] ?? 0
     }
+    await bumpRejectedToModifiedDraft(tx.request(), sheetId, userId)
     await tx.commit()
     return { updated }
   } catch (err) {
@@ -1186,6 +1235,7 @@ export async function updateTemplateNote(
       WHERE NoteID = @NoteID
         AND SheetID = @SheetID
     `)
+  await bumpRejectedToModifiedDraft(pool.request(), sheetId, userId)
 }
 
 export async function deleteTemplateNote(sheetId: number, noteId: number): Promise<void> {
@@ -1569,6 +1619,7 @@ export async function updateTemplate(
     `)
 
     await syncSubsheetTree(tx, sheetId, data)
+    await bumpRejectedToModifiedDraft(tx.request(), sheetId, userId)
 
     await tx.commit()
     didCommit = true
@@ -1819,10 +1870,10 @@ export async function getTemplateDetailsById(
           id: t.InfoTemplateID,
           label: t.Label,
           infoType: t.InfoType as 'int' | 'decimal' | 'varchar',
-          uom: displayUom,
+          uom: displayUom ?? '',
           sortOrder: t.OrderIndex ?? 1,
           required: t.Required === true || t.Required === 1,
-          options,
+          options: options ?? [],
         }
 
         return field
@@ -1970,47 +2021,91 @@ export async function verifyTemplate(
       createdBy: verifiedById,
     })
   }
+
+  const auditActionLabel = action === 'verify' ? 'Verify Template' : 'Reject Template'
+  await insertAuditLog({
+    PerformedBy: verifiedById,
+    TableName: 'Sheets',
+    RecordID: sheetId,
+    Action: auditActionLabel,
+    Route: undefined,
+    Method: 'POST',
+    StatusCode: 200,
+    Changes: JSON.stringify({
+      action,
+      rejectionComment: action === 'reject' ? rejectionComment : undefined,
+    }).slice(0, 1000),
+  }).catch((e: unknown) => {
+    console.error('insertAuditLog failed', e)
+  })
 }
 
 export async function approveTemplate(
   sheetId: number,
+  action: 'approve' | 'reject',
+  rejectionComment: string | undefined,
   approvedById: number
 ): Promise<number> {
   const pool = await poolPromise
 
-  const updateResult = await pool
+  const statusResult = await pool
     .request()
     .input('SheetID', sql.Int, sheetId)
-    .input('ApprovedByID', sql.Int, approvedById)
-    .input('ApprovedByDate', sql.DateTime, new Date())
-    .input('Status', sql.VarChar(50), 'Approved')
-    .query(`
-      UPDATE Sheets
-      SET Status = @Status,
-          ApprovedByID = @ApprovedByID,
-          ApprovedByDate = @ApprovedByDate
-      WHERE SheetID = @SheetID AND IsTemplate = 1 AND Status = 'Verified'
+    .query<{ Status: string }>(`
+      SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 1
     `)
-
-  if (updateResult.rowsAffected[0] === 0) {
-    const currentResult = await pool
-      .request()
-      .input('SheetID', sql.Int, sheetId)
-      .query<{ Status: string }>(`SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 1`)
-    const current = currentResult.recordset[0]
-    if (!current) {
-      throw new AppError('Template not found', 404)
-    }
+  const row = statusResult.recordset[0]
+  if (!row) {
+    throw new AppError('Template not found', 404)
+  }
+  if (row.Status !== 'Verified') {
     throw new AppError(
-      `Template can only be approved when status is Verified. Current status: ${current.Status}.`,
+      `Template can only be approved or rejected when status is Verified. Current status: ${row.Status}.`,
       409
     )
+  }
+
+  if (action === 'approve') {
+    await pool
+      .request()
+      .input('SheetID', sql.Int, sheetId)
+      .input('ApprovedByID', sql.Int, approvedById)
+      .input('ApprovedByDate', sql.DateTime, new Date())
+      .input('Status', sql.VarChar(50), 'Approved')
+      .query(`
+        UPDATE Sheets
+        SET Status = @Status,
+            ApprovedByID = @ApprovedByID,
+            ApprovedByDate = @ApprovedByDate,
+            RejectedByID = NULL,
+            RejectedByDate = NULL,
+            RejectComment = NULL
+        WHERE SheetID = @SheetID AND IsTemplate = 1 AND Status = 'Verified'
+      `)
+  } else {
+    await pool
+      .request()
+      .input('SheetID', sql.Int, sheetId)
+      .input('RejectedByID', sql.Int, approvedById)
+      .input('RejectedByDate', sql.DateTime, new Date())
+      .input('RejectComment', sql.NVarChar, rejectionComment ?? null)
+      .input('Status', sql.VarChar(50), 'Rejected')
+      .query(`
+        UPDATE Sheets
+        SET Status = @Status,
+            RejectedByID = @RejectedByID,
+            RejectedByDate = @RejectedByDate,
+            RejectComment = @RejectComment,
+            ApprovedByID = NULL,
+            ApprovedByDate = NULL
+        WHERE SheetID = @SheetID AND IsTemplate = 1 AND Status = 'Verified'
+      `)
   }
 
   const creatorResult = await pool
     .request()
     .input('SheetID', sql.Int, sheetId)
-    .query(`
+    .query<{ PreparedByID: number | null }>(`
       SELECT PreparedByID
       FROM Sheets
       WHERE SheetID = @SheetID
@@ -2025,14 +2120,33 @@ export async function approveTemplate(
         sheetId,
         createdBy: approvedById,
         category: 'Template',
-        title: 'Template Approved',
-        message: `Your template #${sheetId} has been approved.`,
+        title: action === 'approve' ? 'Template Approved' : 'Template Rejected',
+        message:
+          action === 'approve'
+            ? `Your template #${sheetId} has been approved.`
+            : `Your template #${sheetId} has been rejected.`,
       })
     } catch (err) {
-      // log only; do not break the approval
-      console.error('Failed to send approval notification', err)
+      console.error('Failed to send approval/rejection notification', err)
     }
   }
+
+  const auditActionLabel = action === 'approve' ? 'Approve Template' : 'Reject Template'
+  await insertAuditLog({
+    PerformedBy: approvedById,
+    TableName: 'Sheets',
+    RecordID: sheetId,
+    Action: auditActionLabel,
+    Route: undefined,
+    Method: 'POST',
+    StatusCode: 200,
+    Changes: JSON.stringify({
+      action,
+      rejectionComment: action === 'reject' ? rejectionComment : undefined,
+    }).slice(0, 1000),
+  }).catch((e: unknown) => {
+    console.error('insertAuditLog failed', e)
+  })
 
   return sheetId
 }

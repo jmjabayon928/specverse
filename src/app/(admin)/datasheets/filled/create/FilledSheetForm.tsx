@@ -22,6 +22,7 @@ export default function FilledSheetForm(props: Readonly<Props>) {
         template={template}
         translations={translations}
         language={language}
+        readOnlyHeader={true}
       />
     </SecurePage>
   );

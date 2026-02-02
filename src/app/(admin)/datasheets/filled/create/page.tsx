@@ -9,10 +9,7 @@ import { getSheetTranslations } from "@/backend/services/translationService";
 import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 
 interface PageProps {
-  searchParams: {
-    templateId?: string;
-    lang?: string;
-  };
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function FilledSheetCreatePage(props: Readonly<PageProps>) {
@@ -20,8 +17,9 @@ export default async function FilledSheetCreatePage(props: Readonly<PageProps>) 
 
   await requireAuth();
 
-  const idParam = searchParams?.templateId;
-  const lang = searchParams?.lang ?? "eng";
+  const sp = await searchParams;
+  const idParam = typeof sp.templateId === "string" ? sp.templateId : Array.isArray(sp.templateId) ? sp.templateId[0] : undefined;
+  const lang = (typeof sp.lang === "string" ? sp.lang : Array.isArray(sp.lang) ? sp.lang[0] : undefined) ?? "eng";
   const templateId = idParam ? Number(idParam) : NaN;
 
   if (!templateId || isNaN(templateId)) return notFound();

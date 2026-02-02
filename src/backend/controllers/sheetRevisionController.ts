@@ -185,7 +185,7 @@ export const restoreRevisionHandler: RequestHandler = async (req, res, next) => 
       sheetId,
       snapshot,
       user.userId,
-      { skipRevisionCreation: true }
+      { skipRevisionCreation: true, allowHeaderUpdate: true }
     )
 
     // Now create a new revision representing the restored state
@@ -209,9 +209,10 @@ export const restoreRevisionHandler: RequestHandler = async (req, res, next) => 
       const newRevisionId = await createRevision(transaction, {
         sheetId,
         snapshotJson: JSON.stringify(updatedSheet.datasheet),
-        createdBy: user.userId,
+        createdById: user.userId,
+        createdByDate: new Date(),
         status: updatedSheet.datasheet.status ?? 'Modified Draft',
-        comment: comment ?? `Restored from revision #${revision.revisionNumber}`,
+        notes: comment ?? `Restored from revision #${revision.revisionNumber}`,
       })
 
       await transaction.commit()

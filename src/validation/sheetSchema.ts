@@ -1,13 +1,19 @@
 // src/validation/sheetSchema.ts
 
 import { z } from "zod";
+import { normalizeUom } from "@/utils/normalizeUom";
+
+const uomSchema = z
+  .union([z.string(), z.array(z.string())])
+  .optional()
+  .transform((v) => (v === undefined ? undefined : normalizeUom(v)));
 
 export const infoFieldSchema = z
   .object({
     id: z.number().optional(),
     label: z.string().min(1, "Field label is required"),
     infoType: z.enum(["int", "decimal", "varchar"]),
-    uom: z.string().optional(),
+    uom: uomSchema,
     sortOrder: z.number(),
     required: z.boolean(),
     options: z.array(z.string()).optional(),
@@ -34,7 +40,7 @@ export const infoFieldTemplateSchema = z.object({
   id: z.number().optional(),
   label: z.string().min(1, "Field label is required"),
   infoType: z.enum(["int", "decimal", "varchar"]),
-  uom: z.string().optional(),
+  uom: uomSchema,
   sortOrder: z.number(),
   required: z.boolean(),
   options: z.array(z.string()).optional(),

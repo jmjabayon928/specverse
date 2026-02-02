@@ -199,6 +199,49 @@ export async function createFilledSheet(
     const valuesKeyedByTemplateId = buildValuesKeyedByTemplateId(data, templateRows)
     const valueErrors = validateFilledValues(fieldMetaByInfoTemplateId, valuesKeyedByTemplateId)
     if (valueErrors.length > 0) {
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        process.env.SPECVERSE_DEBUG_FILLED_VALIDATE === '1'
+      ) {
+        const watchIds = new Set([3792, 3795, 3796, 3797])
+        console.debug('[FILLED_VALIDATE]', {
+          templateId: data.templateId,
+          errorCount: valueErrors.length,
+        })
+        for (const err of valueErrors) {
+          if (!watchIds.has(err.infoTemplateId)) continue
+          const id = err.infoTemplateId
+          const raw = valuesKeyedByTemplateId[String(id)]
+          const rawType = typeof raw
+          const trimmed = String(raw ?? '').trim()
+          const trimmedLen = trimmed.length
+          const meta = fieldMetaByInfoTemplateId[id]
+          const optionsRaw = meta?.options ?? []
+          const optionsNormalized = optionsRaw.map((o: string) => String(o).trim())
+          const match = optionsNormalized.length > 0 && optionsNormalized.includes(trimmed)
+          const optionsCodePointsSample = optionsNormalized.slice(0, 3).map((o: string) => codePoints(o))
+          const logObj: Record<string, unknown> = {
+            id,
+            raw,
+            rawType,
+            trimmed,
+            trimmedLen,
+            trimmedCodePoints: codePoints(trimmed),
+            infoType: meta?.infoType,
+            required: meta?.required,
+            optionsRaw,
+            optionsNormalized,
+            optionsCodePointsSample,
+            match,
+          }
+          if (id === 3792 || id === 3795) {
+            const numberValue = typeof raw === 'number' ? raw : Number(trimmed)
+            logObj.numberValue = numberValue
+            logObj.isFinite = Number.isFinite(numberValue)
+          }
+          console.debug('[FILLED_VALIDATE]', logObj)
+        }
+      }
       throw new AppError('Validation failed', 400, true, { fieldErrors: valueErrors })
     }
 
@@ -371,11 +414,13 @@ function buildFieldMetaByInfoTemplateId(
 ): Record<number, FilledFieldMeta> {
   const map: Record<number, FilledFieldMeta> = {}
   for (const row of rows) {
+    const rawOptions = optionsMap[row.InfoTemplateID] ?? []
+    const options = rawOptions.map(o => (typeof o === 'string' ? o.trim() : String(o).trim()))
     map[row.InfoTemplateID] = {
       required: row.Required === true || row.Required === 1,
       label: row.Label ?? null,
       infoType: (row.InfoType ?? 'varchar').toString(),
-      options: optionsMap[row.InfoTemplateID] ?? [],
+      options,
     }
   }
   return map
@@ -383,7 +428,8 @@ function buildFieldMetaByInfoTemplateId(
 
 /**
  * Build values keyed by template InfoTemplateID from create payload.
- * Supports both create-from-template (fieldValues keyed by template ID) and clone (fieldValues keyed by source sheet ID) by matching payload subsheets/fields by SubName and OrderIndex.
+ * Primary/authoritative source: fieldValues[String(infoTemplateId)].
+ * Legacy (field.id / field.originalId) is fallback only; OrderIndex is not used for value lookup.
  */
 function buildValuesKeyedByTemplateId(
   data: UnifiedSheet & { fieldValues: Record<string, string> },
@@ -393,11 +439,14 @@ function buildValuesKeyedByTemplateId(
   const subsheets = data.subsheets ?? []
 
   for (const row of templateRows) {
+    const primary = data.fieldValues[String(row.InfoTemplateID)]
     const sub = subsheets.find(s => (s.name ?? '').trim() === (row.SubName ?? '').trim())
     const field = sub?.fields?.[row.OrderIndex]
-    const raw = field != null
-      ? data.fieldValues[String(field.id)] ?? data.fieldValues[String(field.originalId)] ?? data.fieldValues[String(row.OrderIndex)]
-      : data.fieldValues[String(row.InfoTemplateID)] ?? data.fieldValues[String(row.OrderIndex)]
+    const legacy =
+      field != null
+        ? data.fieldValues[String(field.id)] ?? data.fieldValues[String(field.originalId)]
+        : undefined
+    const raw = primary ?? legacy
     out[String(row.InfoTemplateID)] = typeof raw === 'string' ? raw : (raw != null ? String(raw) : '')
   }
 
@@ -473,6 +522,17 @@ function buildTemplateFieldMap(
    Filled value validation: type + options (BE authoritative)
    ────────────────────────────────────────────────────────────── */
 
+/** First up to 10 code points of a string (for debug / hidden-char detection). */
+function codePoints(s: string): number[] {
+  const out: number[] = []
+  for (let i = 0; i < s.length && out.length < 10; i += 1) {
+    const cp = s.codePointAt(i)
+    if (cp !== undefined) out.push(cp)
+    if (cp !== undefined && cp > 0xffff) i += 1
+  }
+  return out
+}
+
 /** Parse numeric string (allows commas, sign, decimals). Returns null if invalid. */
 function parseNumericBackend(value: string): number | null {
   const trimmed = value.trim()
@@ -520,8 +580,9 @@ export function validateFilledValues(
     const infoTemplateId = Number(idStr)
     if (!Number.isInteger(infoTemplateId)) continue
 
-    const raw = values[idStr] ?? values[String(infoTemplateId)] ?? ''
-    const trimmed = typeof raw === 'string' ? raw.trim() : String(raw).trim()
+    const key = String(infoTemplateId)
+    const raw = values[key]
+    const trimmed = typeof raw === 'string' ? raw.trim() : (typeof raw === 'number' ? (Number.isFinite(raw) ? String(raw) : '') : String(raw ?? '').trim())
 
     if (meta.required && trimmed === '') {
       errors.push({
@@ -537,7 +598,8 @@ export function validateFilledValues(
     const infoType = (meta.infoType ?? 'varchar').toLowerCase()
 
     if (infoType === 'int') {
-      const parsed = parseIntegerBackend(trimmed)
+      const parsed =
+        typeof raw === 'number' ? (Number.isInteger(raw) ? raw : null) : parseIntegerBackend(trimmed)
       if (parsed === null) {
         errors.push({
           infoTemplateId,
@@ -549,8 +611,9 @@ export function validateFilledValues(
     }
 
     if (infoType === 'decimal') {
-      const parsed = parseNumericBackend(trimmed)
-      if (parsed === null) {
+      const valid =
+        typeof raw === 'number' ? Number.isFinite(raw) : parseNumericBackend(trimmed) !== null
+      if (!valid) {
         errors.push({
           infoTemplateId,
           message: 'Enter a number.',
@@ -560,11 +623,11 @@ export function validateFilledValues(
       continue
     }
 
-    if (Array.isArray(meta.options) && meta.options.length > 0) {
-      const optionsTrimmed = meta.options.map(o => String(o).trim())
-      const allowed = new Set(optionsTrimmed)
-      if (!allowed.has(trimmed)) {
-        const optionsPreview = optionsTrimmed.slice(0, 5)
+    const normalizedOptions = (meta.options ?? []).map(o => String(o).trim())
+    if (normalizedOptions.length > 0) {
+      const received = trimmed
+      if (!normalizedOptions.includes(received)) {
+        const optionsPreview = normalizedOptions.slice(0, 5)
         errors.push({
           infoTemplateId,
           message: 'Choose a valid option.',
@@ -1439,11 +1502,76 @@ function buildUnifiedSheetFromRow(row: RawSheetRow): UnifiedSheet {
 const FILLED_EDITABLE_STATUSES = ['Draft', 'Modified Draft', 'Rejected'] as const
 const FILLED_VERIFIABLE_STATUSES = ['Draft', 'Modified Draft'] as const
 
+/**
+ * If filled sheet is Rejected, transition to Modified Draft and clear rejection fields.
+ * Call after a successful filled-sheet edit (metadata, values, notes, attachments). No-op if status is not Rejected.
+ */
+export async function bumpRejectedToModifiedDraftFilled(
+  sheetId: number,
+  userId: number
+): Promise<void> {
+  const pool = await poolPromise
+  await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .input('ModifiedByID', sql.Int, userId)
+    .query(`
+      UPDATE Sheets
+      SET Status = 'Modified Draft',
+          RejectedByID = NULL,
+          RejectedByDate = NULL,
+          RejectComment = NULL,
+          ModifiedByID = @ModifiedByID,
+          ModifiedByDate = SYSDATETIME()
+      WHERE SheetID = @SheetID AND IsTemplate = 0 AND Status = 'Rejected'
+    `)
+}
+
+/** Header fields that are read-only on filled sheet edit (values-only mode). */
+const FILLED_HEADER_GUARD_FIELDS: ReadonlyArray<keyof UnifiedSheet> = [
+  'sheetName',
+  'sheetDesc',
+  'sheetDesc2',
+  'clientDocNum',
+  'clientProjectNum',
+  'companyDocNum',
+  'companyProjectNum',
+  'areaId',
+  'packageName',
+  'revisionNum',
+  'revisionDate',
+  'itemLocation',
+  'requiredQty',
+  'equipmentName',
+  'equipmentTagNum',
+  'serviceName',
+  'manuId',
+  'suppId',
+  'installPackNum',
+  'equipSize',
+  'modelNum',
+  'driver',
+  'locationDwg',
+  'pid',
+  'installDwg',
+  'codeStd',
+  'categoryId',
+  'clientId',
+  'projectId',
+]
+
+function normalizeHeaderValueForCompare(value: unknown, key: string): string {
+  if (value === null || value === undefined) return ''
+  if (key === 'revisionDate' || key.endsWith('Date')) return String(value).trim()
+  if (typeof value === 'number') return Number.isNaN(value) ? '' : String(value)
+  return String(value).trim()
+}
+
 export const updateFilledSheet = async (
   sheetId: number,
   input: UnifiedSheet,
   updatedBy: number,
-  options?: { skipRevisionCreation?: boolean }
+  options?: { skipRevisionCreation?: boolean; allowHeaderUpdate?: boolean }
 ): Promise<{ sheetId: number }> => {
   const pool = await poolPromise
 
@@ -1497,76 +1625,197 @@ export const updateFilledSheet = async (
       throw new AppError('Validation failed', 400, true, { fieldErrors: updateValueErrors })
     }
 
-    const request = transaction.request()
+    const allowHeaderUpdate = options?.allowHeaderUpdate === true
 
-    request.input('SheetID', sheetId)
-    request.input('SheetName', input.sheetName)
-    request.input('SheetDesc', input.sheetDesc)
-    request.input('SheetDesc2', input.sheetDesc2)
-    request.input('ClientDocNum', input.clientDocNum)
-    request.input('ClientProjNum', input.clientProjectNum)
-    request.input('CompanyDocNum', input.companyDocNum)
-    request.input('CompanyProjNum', input.companyProjectNum)
-    request.input('AreaID', input.areaId)
-    request.input('PackageName', input.packageName)
-    request.input('RevisionNum', input.revisionNum)
-    request.input('RevisionDate', input.revisionDate)
-    request.input('ItemLocation', input.itemLocation)
-    request.input('RequiredQty', input.requiredQty)
-    request.input('EquipmentName', input.equipmentName)
-    request.input('EquipmentTagNum', input.equipmentTagNum)
-    request.input('ServiceName', input.serviceName)
-    request.input('ManuID', input.manuId)
-    request.input('SuppID', input.suppId)
-    request.input('InstallPackNum', input.installPackNum)
-    request.input('EquipSize', input.equipSize)
-    request.input('ModelNum', input.modelNum)
-    request.input('Driver', input.driver)
-    request.input('LocationDWG', input.locationDwg)
-    request.input('PID', input.pid)
-    request.input('InstallDWG', input.installDwg)
-    request.input('CodeStd', input.codeStd)
-    request.input('CategoryID', input.categoryId)
-    request.input('ClientID', input.clientId)
-    request.input('ProjectID', input.projectId)
-    request.input('ModifiedByID', updatedBy)
+    if (!allowHeaderUpdate && process.env.STRICT_FILLED_HEADER_GUARD === '1') {
+      const currentRowResult = await transaction
+        .request()
+        .input('SheetID', sql.Int, sheetId)
+        .query<{
+          SheetName: string | null
+          SheetDesc: string | null
+          SheetDesc2: string | null
+          ClientDocNum: number | null
+          ClientProjNum: number | null
+          CompanyDocNum: number | null
+          CompanyProjNum: number | null
+          AreaID: number | null
+          PackageName: string | null
+          RevisionNum: number | null
+          RevisionDate: string | null
+          ItemLocation: string | null
+          RequiredQty: number | null
+          EquipmentName: string | null
+          EquipmentTagNum: string | null
+          ServiceName: string | null
+          ManuID: number | null
+          SuppID: number | null
+          InstallPackNum: string | null
+          EquipSize: number | null
+          ModelNum: string | null
+          Driver: string | null
+          LocationDWG: string | null
+          PID: number | null
+          InstallDWG: string | null
+          CodeStd: string | null
+          CategoryID: number | null
+          ClientID: number | null
+          ProjectID: number | null
+        }>(`
+          SELECT
+            SheetName, SheetDesc, SheetDesc2,
+            ClientDocNum, ClientProjNum, CompanyDocNum, CompanyProjNum,
+            AreaID, PackageName, RevisionNum, RevisionDate,
+            ItemLocation, RequiredQty, EquipmentName, EquipmentTagNum, ServiceName,
+            ManuID, SuppID, InstallPackNum, EquipSize, ModelNum, Driver,
+            LocationDWG, PID, InstallDWG, CodeStd,
+            CategoryID, ClientID, ProjectID
+          FROM Sheets WHERE SheetID = @SheetID
+        `)
+      const currentRow = currentRowResult.recordset[0]
+      if (currentRow) {
+        const currentHeader: Record<string, unknown> = {
+          sheetName: currentRow.SheetName,
+          sheetDesc: currentRow.SheetDesc,
+          sheetDesc2: currentRow.SheetDesc2,
+          clientDocNum: currentRow.ClientDocNum,
+          clientProjectNum: currentRow.ClientProjNum,
+          companyDocNum: currentRow.CompanyDocNum,
+          companyProjectNum: currentRow.CompanyProjNum,
+          areaId: currentRow.AreaID,
+          packageName: currentRow.PackageName,
+          revisionNum: currentRow.RevisionNum,
+          revisionDate: currentRow.RevisionDate,
+          itemLocation: currentRow.ItemLocation,
+          requiredQty: currentRow.RequiredQty,
+          equipmentName: currentRow.EquipmentName,
+          equipmentTagNum: currentRow.EquipmentTagNum,
+          serviceName: currentRow.ServiceName,
+          manuId: currentRow.ManuID,
+          suppId: currentRow.SuppID,
+          installPackNum: currentRow.InstallPackNum,
+          equipSize: currentRow.EquipSize,
+          modelNum: currentRow.ModelNum,
+          driver: currentRow.Driver,
+          locationDwg: currentRow.LocationDWG,
+          pid: currentRow.PID,
+          installDwg: currentRow.InstallDWG,
+          codeStd: currentRow.CodeStd,
+          categoryId: currentRow.CategoryID,
+          clientId: currentRow.ClientID,
+          projectId: currentRow.ProjectID,
+        }
+        const headerFieldErrors: Array<{ field: string; message: string }> = []
+        for (const key of FILLED_HEADER_GUARD_FIELDS) {
+          const a = normalizeHeaderValueForCompare(input[key], key)
+          const b = normalizeHeaderValueForCompare(currentHeader[key], key)
+          if (a !== b) {
+            headerFieldErrors.push({
+              field: key,
+              message: 'Header fields are read-only on filled sheet edit.',
+            })
+          }
+        }
+        if (headerFieldErrors.length > 0) {
+          throw new AppError(
+            'Header fields are read-only for filled sheet edit. Changes are not allowed.',
+            400,
+            true,
+            { headerFieldErrors }
+          )
+        }
+      }
+    }
 
-    await request.query(`
-      UPDATE Sheets SET
-        SheetName = @SheetName,
-        SheetDesc = @SheetDesc,
-        SheetDesc2 = @SheetDesc2,
-        ClientDocNum = @ClientDocNum,
-        ClientProjNum = @ClientProjNum,
-        CompanyDocNum = @CompanyDocNum,
-        CompanyProjNum = @CompanyProjNum,
-        AreaID = @AreaID,
-        PackageName = @PackageName,
-        RevisionNum = @RevisionNum,
-        RevisionDate = @RevisionDate,
-        ItemLocation = @ItemLocation,
-        RequiredQty = @RequiredQty,
-        EquipmentName = @EquipmentName,
-        EquipmentTagNum = @EquipmentTagNum,
-        ServiceName = @ServiceName,
-        ManuID = @ManuID,
-        SuppID = @SuppID,
-        InstallPackNum = @InstallPackNum,
-        EquipSize = @EquipSize,
-        ModelNum = @ModelNum,
-        Driver = @Driver,
-        LocationDWG = @LocationDWG,
-        PID = @PID,
-        InstallDWG = @InstallDWG,
-        CodeStd = @CodeStd,
-        CategoryID = @CategoryID,
-        ClientID = @ClientID,
-        ProjectID = @ProjectID,
-        ModifiedByID = @ModifiedByID,
-        ModifiedByDate = GETDATE(),
-        Status = 'Modified Draft'
-      WHERE SheetID = @SheetID
-    `)
+    if (allowHeaderUpdate) {
+      const request = transaction.request()
+      request.input('SheetID', sheetId)
+      request.input('SheetName', input.sheetName)
+      request.input('SheetDesc', input.sheetDesc)
+      request.input('SheetDesc2', input.sheetDesc2)
+      request.input('ClientDocNum', input.clientDocNum)
+      request.input('ClientProjNum', input.clientProjectNum)
+      request.input('CompanyDocNum', input.companyDocNum)
+      request.input('CompanyProjNum', input.companyProjectNum)
+      request.input('AreaID', input.areaId)
+      request.input('PackageName', input.packageName)
+      request.input('RevisionNum', input.revisionNum)
+      request.input('RevisionDate', input.revisionDate)
+      request.input('ItemLocation', input.itemLocation)
+      request.input('RequiredQty', input.requiredQty)
+      request.input('EquipmentName', input.equipmentName)
+      request.input('EquipmentTagNum', input.equipmentTagNum)
+      request.input('ServiceName', input.serviceName)
+      request.input('ManuID', input.manuId)
+      request.input('SuppID', input.suppId)
+      request.input('InstallPackNum', input.installPackNum)
+      request.input('EquipSize', input.equipSize)
+      request.input('ModelNum', input.modelNum)
+      request.input('Driver', input.driver)
+      request.input('LocationDWG', input.locationDwg)
+      request.input('PID', input.pid)
+      request.input('InstallDWG', input.installDwg)
+      request.input('CodeStd', input.codeStd)
+      request.input('CategoryID', input.categoryId)
+      request.input('ClientID', input.clientId)
+      request.input('ProjectID', input.projectId)
+      request.input('ModifiedByID', updatedBy)
+
+      await request.query(`
+        UPDATE Sheets SET
+          SheetName = @SheetName,
+          SheetDesc = @SheetDesc,
+          SheetDesc2 = @SheetDesc2,
+          ClientDocNum = @ClientDocNum,
+          ClientProjNum = @ClientProjNum,
+          CompanyDocNum = @CompanyDocNum,
+          CompanyProjNum = @CompanyProjNum,
+          AreaID = @AreaID,
+          PackageName = @PackageName,
+          RevisionNum = @RevisionNum,
+          RevisionDate = @RevisionDate,
+          ItemLocation = @ItemLocation,
+          RequiredQty = @RequiredQty,
+          EquipmentName = @EquipmentName,
+          EquipmentTagNum = @EquipmentTagNum,
+          ServiceName = @ServiceName,
+          ManuID = @ManuID,
+          SuppID = @SuppID,
+          InstallPackNum = @InstallPackNum,
+          EquipSize = @EquipSize,
+          ModelNum = @ModelNum,
+          Driver = @Driver,
+          LocationDWG = @LocationDWG,
+          PID = @PID,
+          InstallDWG = @InstallDWG,
+          CodeStd = @CodeStd,
+          CategoryID = @CategoryID,
+          ClientID = @ClientID,
+          ProjectID = @ProjectID,
+          ModifiedByID = @ModifiedByID,
+          ModifiedByDate = GETDATE(),
+          Status = 'Modified Draft',
+          RejectedByID = NULL,
+          RejectedByDate = NULL,
+          RejectComment = NULL
+        WHERE SheetID = @SheetID
+      `)
+    } else {
+      const request = transaction.request()
+      request.input('SheetID', sheetId)
+      request.input('ModifiedByID', updatedBy)
+
+      await request.query(`
+        UPDATE Sheets SET
+          ModifiedByID = @ModifiedByID,
+          ModifiedByDate = GETDATE(),
+          Status = 'Modified Draft',
+          RejectedByID = NULL,
+          RejectedByDate = NULL,
+          RejectComment = NULL
+        WHERE SheetID = @SheetID
+      `)
+    }
 
     const oldValuesResult = await transaction.request()
       .input('SheetID', sql.Int, sheetId)
@@ -1718,9 +1967,10 @@ export const updateFilledSheet = async (
       await createRevision(transaction, {
         sheetId,
         snapshotJson,
-        createdBy: updatedBy,
+        createdById: updatedBy,
+        createdByDate: new Date(),
         status: snapshotStatus,
-        comment: null,
+        notes: null,
       })
     }
 
@@ -1848,62 +2098,128 @@ export async function verifyFilledSheet(
       createdBy: verifierId,
     })
   }
+
+  const auditActionLabel = action === 'verify' ? 'Verify Filled Sheet' : 'Reject Filled Sheet'
+  await insertAuditLog({
+    PerformedBy: verifierId,
+    TableName: 'Sheets',
+    RecordID: sheetId,
+    Action: auditActionLabel,
+    Route: undefined,
+    Method: 'POST',
+    StatusCode: 200,
+    Changes: JSON.stringify({
+      action,
+      rejectionComment: action === 'reject' ? rejectionComment : undefined,
+    }).slice(0, 1000),
+  }).catch((e: unknown) => {
+    console.error('insertAuditLog failed', e)
+  })
 }
 
-export async function approveFilledSheet(sheetId: number, approvedById: number): Promise<number> {
+export async function approveFilledSheet(
+  sheetId: number,
+  action: 'approve' | 'reject',
+  rejectionComment: string | undefined,
+  approvedById: number
+): Promise<number> {
   const pool = await poolPromise
 
-  const updateResult = await pool.request()
+  const statusResult = await pool
+    .request()
     .input('SheetID', sql.Int, sheetId)
-    .input('ApprovedByID', sql.Int, approvedById)
-    .input('ApprovedByDate', sql.DateTime, new Date())
-    .input('Status', sql.VarChar(50), 'Approved')
-    .query(`
-      UPDATE Sheets
-      SET Status = @Status,
-          ApprovedByID = @ApprovedByID,
-          ApprovedByDate = @ApprovedByDate
-      WHERE SheetID = @SheetID AND IsTemplate = 0 AND Status = 'Verified'
+    .query<{ Status: string }>(`
+      SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 0
     `)
-
-  const updatedCount = updateResult.rowsAffected[0] ?? 0
-  if (updatedCount === 0) {
-    const currentResult = await pool.request()
-      .input('SheetID', sql.Int, sheetId)
-      .query<{ Status: string }>(`SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 0`)
-    const current = currentResult.recordset[0]
-    if (!current) {
-      throw new AppError('Filled sheet not found', 404)
-    }
+  const row = statusResult.recordset[0]
+  if (!row) {
+    throw new AppError('Filled sheet not found', 404)
+  }
+  if (row.Status !== 'Verified') {
     throw new AppError(
-      `Filled sheet can only be approved when status is Verified. Current status: ${current.Status}.`,
+      `Filled sheet can only be approved or rejected when status is Verified. Current status: ${row.Status}.`,
       409
     )
   }
 
-  const creatorResult = await pool.request()
+  if (action === 'approve') {
+    await pool
+      .request()
+      .input('SheetID', sql.Int, sheetId)
+      .input('ApprovedByID', sql.Int, approvedById)
+      .input('ApprovedByDate', sql.DateTime, new Date())
+      .input('Status', sql.VarChar(50), 'Approved')
+      .query(`
+        UPDATE Sheets
+        SET Status = @Status,
+            ApprovedByID = @ApprovedByID,
+            ApprovedByDate = @ApprovedByDate,
+            RejectedByID = NULL,
+            RejectedByDate = NULL,
+            RejectComment = NULL
+        WHERE SheetID = @SheetID AND IsTemplate = 0 AND Status = 'Verified'
+      `)
+  } else {
+    await pool
+      .request()
+      .input('SheetID', sql.Int, sheetId)
+      .input('RejectedByID', sql.Int, approvedById)
+      .input('RejectedByDate', sql.DateTime, new Date())
+      .input('RejectComment', sql.NVarChar, rejectionComment ?? null)
+      .input('Status', sql.VarChar(50), 'Rejected')
+      .query(`
+        UPDATE Sheets
+        SET Status = @Status,
+            RejectedByID = @RejectedByID,
+            RejectedByDate = @RejectedByDate,
+            RejectComment = @RejectComment,
+            ApprovedByID = NULL,
+            ApprovedByDate = NULL
+        WHERE SheetID = @SheetID AND IsTemplate = 0 AND Status = 'Verified'
+      `)
+  }
+
+  const creatorResult = await pool
+    .request()
     .input('SheetID', sql.Int, sheetId)
-    .query('SELECT PreparedByID FROM Sheets WHERE SheetID = @SheetID')
+    .query<{ PreparedByID: number | null }>('SELECT PreparedByID FROM Sheets WHERE SheetID = @SheetID')
 
   const preparedById = creatorResult.recordset[0]?.PreparedByID
 
-  if (!preparedById) {
-    console.warn(`No PreparedByID found for Filled SheetID: ${sheetId}`)
-    return sheetId
+  if (preparedById != null) {
+    try {
+      await notifyUsers({
+        recipientUserIds: [preparedById],
+        sheetId,
+        createdBy: approvedById,
+        category: 'Datasheet',
+        title: action === 'approve' ? 'Filled Sheet Approved' : 'Filled Sheet Rejected',
+        message:
+          action === 'approve'
+            ? `Your filled sheet #${sheetId} has been approved.`
+            : `Your filled sheet #${sheetId} has been rejected.`,
+      })
+    } catch (error) {
+      console.error('Failed to send approval/rejection notification:', error)
+    }
   }
 
-  try {
-    await notifyUsers({
-      recipientUserIds: [preparedById],
-      sheetId,
-      createdBy: approvedById,
-      category: 'Datasheet',
-      title: 'Filled Sheet Approved',
-      message: `Your filled sheet #${sheetId} has been approved.`,
-    })
-  } catch (error) {
-    console.error('Failed to send approval notification:', error)
-  }
+  const auditActionLabel = action === 'approve' ? 'Approve Filled Sheet' : 'Reject Filled Sheet'
+  await insertAuditLog({
+    PerformedBy: approvedById,
+    TableName: 'Sheets',
+    RecordID: sheetId,
+    Action: auditActionLabel,
+    Route: undefined,
+    Method: 'POST',
+    StatusCode: 200,
+    Changes: JSON.stringify({
+      action,
+      rejectionComment: action === 'reject' ? rejectionComment : undefined,
+    }).slice(0, 1000),
+  }).catch((e: unknown) => {
+    console.error('insertAuditLog failed', e)
+  })
 
   return sheetId
 }
@@ -2015,7 +2331,11 @@ export async function getAttachmentsForSheet(
   return items
 }
 
-export async function deleteAttachmentById(sheetId: number, attachmentId: number): Promise<void> {
+export async function deleteAttachmentById(
+  sheetId: number,
+  attachmentId: number,
+  userId: number
+): Promise<void> {
   const pool = await poolPromise
   const req = pool.request()
   req.input('SheetID', sql.Int, sheetId)
@@ -2024,6 +2344,7 @@ export async function deleteAttachmentById(sheetId: number, attachmentId: number
   await req.query(`
     DELETE FROM Attachments WHERE AttachmentID = @AttachmentID AND SheetID = @SheetID
   `)
+  await bumpRejectedToModifiedDraftFilled(sheetId, userId)
 }
 
 type SheetAttachmentRow = {
@@ -2214,6 +2535,7 @@ export async function createNoteForSheet(
     ? new Date(row.CreatedAt).toISOString()
     : new Date().toISOString()
 
+  await bumpRejectedToModifiedDraftFilled(sheetId, userId)
   return {
     noteId: row?.NoteID ?? 0,
     sheetId,
@@ -2256,6 +2578,7 @@ export async function updateNoteForSheet(
     ? new Date(row.UpdatedAt).toISOString()
     : new Date().toISOString()
 
+  await bumpRejectedToModifiedDraftFilled(sheetId, userId)
   return {
     noteId,
     sheetId,
@@ -2265,7 +2588,11 @@ export async function updateNoteForSheet(
   }
 }
 
-export async function deleteNoteForSheet(sheetId: number, noteId: number): Promise<void> {
+export async function deleteNoteForSheet(
+  sheetId: number,
+  noteId: number,
+  userId: number
+): Promise<void> {
   const pool = await poolPromise
   const req = pool.request()
   req.input('SheetID', sql.Int, sheetId)
@@ -2274,6 +2601,7 @@ export async function deleteNoteForSheet(sheetId: number, noteId: number): Promi
   await req.query(`
     DELETE FROM SheetNotes WHERE NoteID = @NoteID AND SheetID = @SheetID
   `)
+  await bumpRejectedToModifiedDraftFilled(sheetId, userId)
 }
 
 /* ──────────────────────────────────────────────────────────────

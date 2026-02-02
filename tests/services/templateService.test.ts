@@ -158,6 +158,37 @@ describe('templateService.updateTemplate', () => {
       message: expect.stringContaining('only be edited when status'),
     })
   })
+
+  it('when status is Rejected, runs bump query to Modified Draft and clears rejection fields', async () => {
+    mockQuery.mockResolvedValueOnce({ recordset: [{ Status: 'Rejected' }] })
+    ;(notifyUsers as jest.Mock).mockResolvedValueOnce(undefined)
+    mockRequestChain.query.mockResolvedValue({ recordset: [] })
+
+    const sheetId = 1045
+    const userId = 1
+    await updateTemplate(sheetId, minimalUnifiedSheet as never, userId)
+
+    const queryCalls = (mockRequestChain.query as jest.Mock).mock.calls as [string][]
+    const bumpCall = queryCalls.find(
+      (call) =>
+        typeof call[0] === 'string' &&
+        call[0].includes('Modified Draft') &&
+        call[0].includes('RejectedByID = NULL')
+    )
+    expect(bumpCall).toBeDefined()
+  })
+
+  it('when status is Draft, updateTemplate resolves (Draft stays editable; bump no-op)', async () => {
+    mockQuery.mockResolvedValueOnce({ recordset: [{ Status: 'Draft' }] })
+    ;(notifyUsers as jest.Mock).mockResolvedValueOnce(undefined)
+    mockRequestChain.query.mockResolvedValue({ recordset: [] })
+
+    const sheetId = 1045
+    const userId = 1
+    const result = await updateTemplate(sheetId, minimalUnifiedSheet as never, userId)
+
+    expect(result).toBe(sheetId)
+  })
 })
 
 describe('templateService.verifyTemplate', () => {
@@ -187,18 +218,51 @@ describe('templateService.verifyTemplate', () => {
 
 describe('templateService.approveTemplate', () => {
   it('rejects with 409 when template status is Draft', async () => {
-    mockQuery
-      .mockResolvedValueOnce({ recordset: [] as unknown[], rowsAffected: [0] } as QueryResult & { rowsAffected: number[] })
-      .mockResolvedValueOnce({ recordset: [{ Status: 'Draft' }] })
+    mockQuery.mockResolvedValueOnce({ recordset: [{ Status: 'Draft' }] })
 
     const sheetId = 10
     const userId = 1
-    const p = approveTemplate(sheetId, userId)
+    const p = approveTemplate(sheetId, 'approve', undefined, userId)
     await expect(p).rejects.toThrow(AppError)
     await expect(p).rejects.toMatchObject({
       statusCode: 409,
-      message: expect.stringContaining('only be approved when status is Verified'),
+      message: expect.stringContaining('only be approved or rejected when status is Verified'),
     })
+  })
+
+  it('resolves with sheetId when action is approve and status is Verified', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ recordset: [{ Status: 'Verified' }] })
+      .mockResolvedValueOnce({ recordset: [] })
+      .mockResolvedValueOnce({ recordset: [{ PreparedByID: 1 }] })
+      .mockResolvedValueOnce({ recordset: [] })
+
+    const sheetId = 10
+    const userId = 1
+    const result = await approveTemplate(sheetId, 'approve', undefined, userId)
+    expect(result).toBe(sheetId)
+  })
+
+  it('persists Rejected and rejectComment when action is reject', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ recordset: [{ Status: 'Verified' }] })
+      .mockResolvedValueOnce({ recordset: [] })
+      .mockResolvedValueOnce({ recordset: [{ PreparedByID: 1 }] })
+      .mockResolvedValueOnce({ recordset: [] })
+
+    const sheetId = 10
+    const userId = 1
+    const rejectComment = 'Needs revision'
+    const result = await approveTemplate(sheetId, 'reject', rejectComment, userId)
+    expect(result).toBe(sheetId)
+    const queryCalls = mockQuery.mock.calls as [string][]
+    const rejectUpdate = queryCalls.find(
+      (call) =>
+        typeof call[0] === 'string' &&
+        call[0].includes('Rejected') &&
+        call[0].includes('RejectComment')
+    )
+    expect(rejectUpdate).toBeDefined()
   })
 })
 
@@ -267,5 +331,79 @@ describe('templateService.createTemplate', () => {
 
     expect(sheetId).toBe(1)
     expect(mockRequestChain.input).toHaveBeenCalledWith('TemplateSubID', 1, null)
+  })
+
+  it('persists int, decimal, and varchar info templates (normalizes vchar to varchar)', async () => {
+    (notifyUsers as jest.Mock).mockResolvedValueOnce(undefined)
+    mockRequestChain.input.mockClear()
+    mockRequestChain.query
+      .mockResolvedValueOnce({ recordset: [{ SheetID: 1 }] })
+      .mockResolvedValueOnce({ recordset: [{ SubID: 10 }] })
+      .mockResolvedValueOnce({ recordset: [{ InfoTemplateID: 101 }] })
+      .mockResolvedValueOnce({ recordset: [{ InfoTemplateID: 102 }] })
+      .mockResolvedValueOnce({ recordset: [{ InfoTemplateID: 103 }] })
+
+    const payloadWithAllTypes = {
+      ...minimalCreatePayload,
+      subsheets: [
+        {
+          name: 'Sub One',
+          fields: [
+            { label: 'Int Field', infoType: 'int' as const, uom: '', required: false, sortOrder: 0, options: [] },
+            { label: 'Dec Field', infoType: 'decimal' as const, uom: '', required: false, sortOrder: 1, options: [] },
+            { label: 'Vchar Field', infoType: 'vchar' as const, uom: '', required: false, sortOrder: 2, options: [] },
+          ],
+        },
+      ],
+    }
+
+    const userId = 1
+    const sheetId = await createTemplate(payloadWithAllTypes as never, userId)
+
+    expect(sheetId).toBe(1)
+    const infoTypeCalls = (mockRequestChain.input as jest.Mock).mock.calls.filter(
+      (call: unknown[]) => call[0] === 'InfoType'
+    )
+    expect(infoTypeCalls.length).toBe(3)
+    expect(infoTypeCalls[0][2]).toBe('int')
+    expect(infoTypeCalls[1][2]).toBe('decimal')
+    expect(infoTypeCalls[2][2]).toBe('varchar')
+  })
+
+  it('returns sheetId when notifyUsers fails (notification failure does not block template creation)', async () => {
+    (notifyUsers as jest.Mock).mockRejectedValueOnce(new Error('notifyUsers failed'))
+    mockRequestChain.query
+      .mockResolvedValueOnce({ recordset: [{ SheetID: 1 }] })
+      .mockResolvedValueOnce({ recordset: [{ SubID: 10 }] })
+      .mockResolvedValueOnce({ recordset: [{ InfoTemplateID: 100 }] })
+
+    const userId = 1
+    const sheetId = await createTemplate(minimalCreatePayload as never, userId)
+
+    expect(sheetId).toBe(1)
+  })
+
+  it('throws AppError 400 with structured message when a field has unknown infoType (e.g. bogus)', async () => {
+    (notifyUsers as jest.Mock).mockResolvedValueOnce(undefined)
+    mockRequestChain.query
+      .mockResolvedValueOnce({ recordset: [{ SheetID: 1 }] })
+      .mockResolvedValueOnce({ recordset: [{ SubID: 10 }] })
+
+    const payloadWithBogusType = {
+      ...minimalCreatePayload,
+      subsheets: [
+        {
+          name: 'Sub One',
+          fields: [
+            { label: 'Bad Type', infoType: 'bogus', uom: '', required: false, sortOrder: 0, options: [] },
+          ],
+        },
+      ],
+    }
+
+    await expect(createTemplate(payloadWithBogusType as never, 1)).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining("Invalid infoType: 'bogus'"),
+    })
   })
 })

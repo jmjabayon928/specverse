@@ -44,6 +44,7 @@ jest.mock('../../src/backend/services/filledSheetService', () => {
     ...actual,
     fetchAllFilled: jest.fn().mockResolvedValue([]),
     getFilledSheetDetailsById: jest.fn().mockResolvedValue(null),
+    approveFilledSheet: jest.fn().mockResolvedValue(1),
     fetchReferenceOptions: jest.fn().mockResolvedValue({
       categories: [
         { CategoryID: 1, CategoryName: 'Electrical' },
@@ -82,6 +83,16 @@ const FILLED_PERMISSIONS: string[] = [
 
 describe('Filled Sheets API', () => {
   const authCookie = createAuthCookie(FILLED_PERMISSIONS)
+
+  it('POST /api/backend/filledsheets/:id/approve returns 400 when action is reject and rejectComment is missing', async () => {
+    const res = await request(app)
+      .post('/api/backend/filledsheets/1/approve')
+      .set('Cookie', [authCookie])
+      .send({ action: 'reject' })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.body?.error ?? res.text).toMatch(/rejection reason|required when rejecting/i)
+  })
 
   it('GET /api/backend/filledsheets should return 200 and array with optional discipline fields', async () => {
     const res = await request(app)

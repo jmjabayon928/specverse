@@ -385,12 +385,13 @@ export default function TemplateViewer(props: Readonly<Props>) {
                 sub.name
               )
 
-              const midpoint = Math.ceil(sub.fields.length / 2)
-              const leftFields = sub.fields.slice(0, midpoint)
-              const rightFields = sub.fields.slice(midpoint)
+              const fields = sub.fields ?? []
+              const midpoint = Math.ceil(fields.length / 2)
+              const leftFields = fields.slice(0, midpoint)
+              const rightFields = fields.slice(midpoint)
 
               const renderTable = (
-                fields: typeof sub.fields,
+                fieldList: typeof fields,
                 tableKey: string
               ) => (
                 <table
@@ -414,7 +415,7 @@ export default function TemplateViewer(props: Readonly<Props>) {
                     </tr>
                   </thead>
                   <tbody>
-                    {fields.map((field, index) => {
+                    {fieldList.map((field, index) => {
                       const fieldKey =
                         field.originalId?.toString() ?? field.label
                       const fieldStableKey = stableFieldKey(field)
@@ -431,7 +432,7 @@ export default function TemplateViewer(props: Readonly<Props>) {
 
                       return (
                         <tr
-                          key={`row:${subsheetStableKey}:${fieldStableKey}`}
+                          key={`row:${subsheetStableKey}:${fieldStableKey}:${index}`}
                           className={
                             index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
                           }

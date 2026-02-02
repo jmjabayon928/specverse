@@ -243,6 +243,16 @@ const verifyTemplateBodySchema = z
     rejectionComment: value.rejectionComment,
   }))
 
+const approveTemplateBodySchema = z
+  .object({
+    action: z.enum(['approve', 'reject']).optional(),
+    rejectComment: z.string().optional(),
+  })
+  .transform((value): { action: 'approve' | 'reject'; rejectComment?: string } => ({
+    action: value.action ?? 'approve',
+    rejectComment: value.rejectComment,
+  }))
+
 const noteCreateSchema = z.object({
   text: z.string().min(1),
 })
@@ -660,10 +670,24 @@ export const approveTemplateHandler: RequestHandler = async (req, res, next) => 
       return
     }
 
-    const updatedId = await approveTemplate(sheetId, userId)
+    const body = approveTemplateBodySchema.parse(req.body ?? {})
+    if (body.action === 'reject') {
+      const trimmed = body.rejectComment?.trim() ?? ''
+      if (trimmed.length === 0) {
+        next(new AppError('Rejection reason is required when rejecting.', 400))
+        return
+      }
+    }
+
+    const updatedId = await approveTemplate(
+      sheetId,
+      body.action,
+      body.action === 'reject' ? (body.rejectComment?.trim() ?? '') : undefined,
+      userId
+    )
     res.status(200).json({ sheetId: updatedId })
   } catch (err: unknown) {
-    handleError(next, err, 'Failed to approve template')
+    handleError(next, err, 'Failed to approve or reject template')
   }
 }
 

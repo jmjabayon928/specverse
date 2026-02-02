@@ -67,6 +67,7 @@ import {
   createFilledSheet,
   approveFilledSheet,
   getLatestApprovedTemplateId,
+  bumpRejectedToModifiedDraftFilled,
 } from '../../src/backend/services/filledSheetService'
 import { AppError } from '../../src/backend/errors/AppError'
 
@@ -262,16 +263,71 @@ describe('approveFilledSheet lifecycle guards', () => {
   })
 
   it('rejects with 409 when filled sheet status is Draft', async () => {
-    queryResponses.push(
-      { recordset: [], rowsAffected: [0] },
-      { recordset: [{ Status: 'Draft' }] }
-    )
+    queryResponses.push({ recordset: [{ Status: 'Draft' }] })
 
-    const p = approveFilledSheet(1, 1)
+    const p = approveFilledSheet(1, 'approve', undefined, 1)
     await expect(p).rejects.toThrow(AppError)
     await expect(p).rejects.toMatchObject({
       statusCode: 409,
-      message: expect.stringContaining('only be approved when status is Verified'),
+      message: expect.stringContaining('only be approved or rejected when status is Verified'),
     })
+  })
+
+  it('resolves with sheetId when action is approve and status is Verified', async () => {
+    queryResponses.push(
+      { recordset: [{ Status: 'Verified' }] },
+      { rowsAffected: [1] },
+      { recordset: [{ PreparedByID: 1 }] },
+      { recordset: [] }
+    )
+
+    const result = await approveFilledSheet(1, 'approve', undefined, 1)
+    expect(result).toBe(1)
+  })
+
+  it('persists Rejected when action is reject with rejectComment', async () => {
+    queryResponses.push(
+      { recordset: [{ Status: 'Verified' }] },
+      { rowsAffected: [1] },
+      { recordset: [{ PreparedByID: 1 }] },
+      { recordset: [] }
+    )
+
+    const result = await approveFilledSheet(1, 'reject', 'Needs changes', 1)
+    expect(result).toBe(1)
+  })
+})
+
+describe('bumpRejectedToModifiedDraftFilled', () => {
+  beforeEach(() => {
+    queryResponses.length = 0
+    mockTransaction.request.mockImplementation(() => makeRequest())
+  })
+
+  it('runs UPDATE with Status = Modified Draft and RejectedByID = NULL for Rejected filled sheet', async () => {
+    const { poolPromise } = await import('../../src/backend/config/db')
+    const pool = (await poolPromise) as unknown as {
+      request: () => ReturnType<typeof makeRequest>
+    }
+    let requestChain: ReturnType<typeof makeRequest> | null = null
+    const originalRequest = pool.request
+    pool.request = () => {
+      requestChain = makeRequest()
+      return requestChain
+    }
+
+    await bumpRejectedToModifiedDraftFilled(10, 1)
+
+    expect(requestChain).not.toBeNull()
+    const chain = requestChain!
+    const queryCalls = (chain.query as jest.Mock).mock.calls as [string][]
+    const hasBump = queryCalls.some(
+      (call) =>
+        typeof call[0] === 'string' &&
+        call[0].includes('Modified Draft') &&
+        call[0].includes('RejectedByID = NULL')
+    )
+    expect(hasBump).toBe(true)
+    pool.request = originalRequest
   })
 })
