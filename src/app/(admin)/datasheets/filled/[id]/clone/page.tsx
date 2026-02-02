@@ -39,6 +39,7 @@ export default async function FilledClonePage(
   return (
     <SecurePage requiredPermission="DATASHEET_EDIT">
       <FilledSheetClonerForm
+        sourceSheetId={sheetId}
         defaultValues={defaultValues}
         areas={referenceData.areas.map((a) => ({ label: a.name, value: a.id }))}
         manufacturers={referenceData.manufacturers.map((m) => ({

@@ -95,21 +95,35 @@ function mapFieldErrorsToFormErrors(
   return out
 }
 
-function buildFieldValueMap(subsheets: UnifiedSubsheet[]): Record<string, string> {
-  const result: Record<string, string> = {}
+/** Build fieldValues from source subsheets using only field.value (not label/type/uom). Omit keys for null/undefined/blank to avoid FILLED_VALIDATE failures. Returns skipped count for fields with no id/originalId. */
+function buildFieldValueMap(subsheets: UnifiedSubsheet[]): {
+  fieldValues: Record<string, string>
+  skippedFieldsCount: number
+} {
+  const fieldValues: Record<string, string> = {}
+  let skippedFieldsCount = 0
 
   for (const subsheet of subsheets) {
     for (const field of subsheet.fields) {
-      const hasId = field.id !== undefined
-      const hasValue = field.value !== undefined && field.value !== null
-
-      if (hasId && hasValue) {
-        result[String(field.id)] = String(field.value)
+      const id = field.id ?? field.originalId
+      if (id === undefined || id === null) {
+        skippedFieldsCount += 1
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(
+            '[FilledSheetClonerForm] Field skipped (no id/originalId):',
+            field.label ?? 'unnamed'
+          )
+        }
+        continue
       }
+      const raw = field.value
+      if (raw === null || raw === undefined) continue
+      if (typeof raw === 'string' && raw.trim() === '') continue
+      fieldValues[String(id)] = String(raw)
     }
   }
 
-  return result
+  return { fieldValues, skippedFieldsCount }
 }
 
 function buildSheetToValidate(
@@ -174,6 +188,7 @@ function validateParsedSheetForClone(
 // -------------------------------------------------------------
 
 interface Props {
+  sourceSheetId: number
   defaultValues: UnifiedSheet
   areas: Option[]
   manufacturers: Option[]
@@ -196,11 +211,13 @@ export default function FilledSheetClonerForm(
     equipmentTagNum: '',
   }
 
+  const [initialBuild] = useState(() => buildFieldValueMap(initial.subsheets))
   const [datasheet, setDatasheet] = useState<UnifiedSheet>(initial)
   const [formErrors, setFormErrors] = useState<Record<string, string[]>>({})
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(
-    buildFieldValueMap(initial.subsheets)
+    initialBuild.fieldValues
   )
+  const skippedFieldsCount = initialBuild.skippedFieldsCount
 
   const handleChange = <K extends keyof UnifiedSheet>(
     field: K,
@@ -317,7 +334,7 @@ export default function FilledSheetClonerForm(
         fieldValues,
       }
 
-      const response = await fetch('/api/backend/filledsheets', {
+      const response = await fetch(`/api/backend/filledsheets/${props.sourceSheetId}/clone`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -362,6 +379,12 @@ export default function FilledSheetClonerForm(
       <div className='p-4 bg-blue-50 text-blue-800 border border-blue-200 rounded text-sm' role='status'>
         Template structure and units (UOM) are inherited from the template. Cloning creates a new filled sheet; edit values and identity fields only.
       </div>
+
+      {skippedFieldsCount > 0 && (
+        <div className='p-4 bg-amber-50 text-amber-800 border border-amber-200 rounded text-sm' role='alert'>
+          Some fields could not be copied because they have no identifier. They will use template defaults.
+        </div>
+      )}
 
       {formErrors && Object.keys(formErrors).length > 0 && (
         <div className='p-4 bg-red-100 text-red-700 border border-red-400 rounded'>
