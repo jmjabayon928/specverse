@@ -36,6 +36,7 @@ function createAuthCookie(
 
 const mockInsertExportJob = jest.fn()
 const mockGetExportJobById = jest.fn()
+const mockUpdateExportJobResetForRetry = jest.fn()
 const mockGetInventoryTransactionsPaged = jest.fn()
 const mockResolveExportFilePath = jest.fn()
 const mockCancelExportJob = jest.fn()
@@ -48,6 +49,8 @@ jest.mock('../../src/backend/database/exportJobQueries', () => ({
   updateExportJobCompleted: jest.fn(),
   updateExportJobFailed: jest.fn(),
   updateExportJobCancelled: jest.fn(),
+  updateExportJobResetForRetry: (...args: unknown[]) =>
+    mockUpdateExportJobResetForRetry(...args),
   listExportJobsForCleanup: jest.fn(),
 }))
 
@@ -102,6 +105,8 @@ function defaultJobRow(overrides: Partial<{
   FilePath: string | null
   FileName: string | null
   ExpiresAt: Date | null
+  ErrorMessage: string | null
+  CompletedAt: Date | null
 }> = {}) {
   const now = new Date()
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000)
@@ -353,6 +358,99 @@ describe('Export Jobs API', () => {
         .set('Cookie', [cookie])
       expect(res.statusCode).toBe(403)
       expect(mockCancelExportJob).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('POST /api/backend/exports/jobs/:jobId/retry', () => {
+    it('returns 404 when job does not exist', async () => {
+      mockGetExportJobById.mockResolvedValueOnce(null)
+      const app = buildTestApp()
+      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const res = await request(app)
+        .post('/api/backend/exports/jobs/999/retry')
+        .set('Cookie', [cookie])
+      expect(res.statusCode).toBe(404)
+      expect(mockUpdateExportJobResetForRetry).not.toHaveBeenCalled()
+    })
+
+    it('returns 403 for non-owner', async () => {
+      mockGetExportJobById.mockResolvedValueOnce(
+        defaultJobRow({ Status: 'failed', CreatedBy: 1 })
+      )
+      const app = buildTestApp()
+      const cookie = createAuthCookie(2, 'Viewer', [])
+      const res = await request(app)
+        .post('/api/backend/exports/jobs/123/retry')
+        .set('Cookie', [cookie])
+      expect(res.statusCode).toBe(403)
+      expect(mockUpdateExportJobResetForRetry).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 when job is completed (not retryable)', async () => {
+      mockGetExportJobById
+        .mockResolvedValueOnce(
+          defaultJobRow({ Status: 'completed', CreatedBy: 1 })
+        )
+        .mockResolvedValueOnce(
+          defaultJobRow({ Status: 'completed', CreatedBy: 1 })
+        )
+      const app = buildTestApp()
+      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const res = await request(app)
+        .post('/api/backend/exports/jobs/123/retry')
+        .set('Cookie', [cookie])
+      expect(res.statusCode).toBe(400)
+      expect(res.body.message).toMatch(/cannot be retried|only failed/)
+      expect(mockUpdateExportJobResetForRetry).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 when job is running (not retryable)', async () => {
+      mockGetExportJobById.mockResolvedValueOnce(
+        defaultJobRow({ Status: 'running', CreatedBy: 1 })
+      )
+      const app = buildTestApp()
+      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const res = await request(app)
+        .post('/api/backend/exports/jobs/123/retry')
+        .set('Cookie', [cookie])
+      expect(res.statusCode).toBe(400)
+      expect(mockUpdateExportJobResetForRetry).not.toHaveBeenCalled()
+    })
+
+    it('returns 200 and resets job when failed and owner (real retry path)', async () => {
+      const completedAt = new Date()
+      const expiresAt = new Date(completedAt.getTime() + 24 * 60 * 60 * 1000)
+      const failedRow = defaultJobRow({
+        Status: 'failed',
+        CreatedBy: 1,
+        ErrorMessage: 'Export failed',
+        FileName: 'old-export.csv',
+        FilePath: 'jobs/old-export.csv',
+        CompletedAt: completedAt,
+        ExpiresAt: expiresAt,
+      })
+      const rowAfterReset = defaultJobRow({
+        Status: 'queued',
+        CreatedBy: 1,
+      })
+      mockGetExportJobById
+        .mockResolvedValueOnce(failedRow)
+        .mockResolvedValueOnce(failedRow)
+        .mockResolvedValueOnce(rowAfterReset)
+      mockUpdateExportJobResetForRetry.mockResolvedValueOnce(undefined)
+      const app = buildTestApp()
+      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const res = await request(app)
+        .post('/api/backend/exports/jobs/123/retry')
+        .set('Cookie', [cookie])
+      expect(res.statusCode).toBe(200)
+      expect(res.body).toMatchObject({
+        jobId: 123,
+        jobType: 'inventory_transactions_csv',
+        status: 'queued',
+      })
+      expect(mockUpdateExportJobResetForRetry).toHaveBeenCalledTimes(1)
+      expect(mockUpdateExportJobResetForRetry).toHaveBeenCalledWith(123)
     })
   })
 

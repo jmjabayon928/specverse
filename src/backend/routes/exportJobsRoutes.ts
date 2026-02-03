@@ -10,6 +10,7 @@ import {
   downloadExportJobHandler,
   getDownloadUrlHandler,
   cancelExportJobHandler,
+  retryExportJobHandler,
   cleanupExportJobsHandler,
 } from '../controllers/exportJobsController'
 
@@ -63,6 +64,13 @@ router.post(
   '/:jobId/cancel',
   verifyToken,
   asyncHandler(cancelExportJobHandler as AsyncRequestHandler)
+)
+
+// POST /api/backend/exports/jobs/:jobId/retry — retry failed job (owner/admin)
+router.post(
+  '/:jobId/retry',
+  verifyToken,
+  asyncHandler(retryExportJobHandler as AsyncRequestHandler)
 )
 
 export default router

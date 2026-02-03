@@ -10,6 +10,7 @@ import {
   generateDownloadToken,
   verifyDownloadToken,
   cancelExportJob,
+  retryExportJob,
   cleanupExpiredExportJobs,
 } from '../services/exportJobService'
 
@@ -259,6 +260,48 @@ export const cancelExportJobHandler: RequestHandler = async (
     if (!cancelled) {
       res.status(400).json({
         message: 'Job cannot be cancelled (already completed or cancelled)',
+      })
+      return
+    }
+    const status = await getExportJobStatus(jobId)
+    res.status(200).json(status)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const retryExportJobHandler: RequestHandler = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    if (!req.user?.userId) {
+      next(new AppError('Missing user in request', 403))
+      return
+    }
+    const parsed = jobIdParamSchema.safeParse(req.params)
+    if (!parsed.success) {
+      next(new AppError('Invalid jobId', 400))
+      return
+    }
+    const { jobId } = parsed.data
+    const row = await getExportJobById(jobId)
+    if (!row) {
+      next(new AppError('Export job not found', 404))
+      return
+    }
+    if (
+      !isOwnerOrAdmin(req.user.userId, req.user.role, row.CreatedBy)
+    ) {
+      next(new AppError('Permission denied', 403))
+      return
+    }
+    const accepted = await retryExportJob(jobId)
+    if (!accepted) {
+      res.status(400).json({
+        message:
+          'Job cannot be retried (only failed jobs can be retried)',
       })
       return
     }

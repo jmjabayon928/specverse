@@ -9,6 +9,7 @@ import {
   updateExportJobCompleted,
   updateExportJobFailed,
   updateExportJobCancelled,
+  updateExportJobResetForRetry,
   listExportJobsForCleanup,
   type ExportJobRow,
   type ExportJobStatus,
@@ -297,6 +298,20 @@ export async function cancelExportJob(jobId: number): Promise<boolean> {
   if (!row) return false
   if (row.Status !== 'queued' && row.Status !== 'running') return false
   await updateExportJobCancelled(jobId)
+  return true
+}
+
+/** Retry a failed job: reset to queued and re-run using stored ParamsJson. Returns true if accepted. */
+export async function retryExportJob(jobId: number): Promise<boolean> {
+  const row = await getExportJobById(jobId)
+  if (!row) return false
+  if (row.Status !== 'failed') return false
+  await updateExportJobResetForRetry(jobId)
+  setImmediate(() => {
+    runExportJob(jobId).catch((err) => {
+      console.error('Export job retry failed:', jobId, err)
+    })
+  })
   return true
 }
 
