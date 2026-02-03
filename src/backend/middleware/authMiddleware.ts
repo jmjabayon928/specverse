@@ -59,14 +59,26 @@ function isPlatformSuperadmin(user: { userId: number; email?: string }): boolean
   return false
 }
 
+function getRequestPath(req: Request): string {
+  if (typeof req.path === 'string') {
+    return req.path
+  }
+  const raw = req.originalUrl || req.url || ''
+  const qIndex = raw.indexOf('?')
+  if (qIndex === -1) {
+    return raw
+  }
+  return raw.slice(0, qIndex)
+}
+
 function isPlatformOverrideRoute(req: Request): boolean {
-  const url = req.originalUrl || req.url || ''
-  return url.startsWith('/api/backend/platform/')
+  const path = getRequestPath(req)
+  return path.startsWith('/api/backend/platform/')
 }
 
 function isDiagnosticsOverrideRoute(req: Request): boolean {
-  const url = req.originalUrl || req.url || ''
-  return url.startsWith('/api/backend/diagnostics/')
+  const path = getRequestPath(req)
+  return path.startsWith('/api/backend/diagnostics/')
 }
 
 async function attachAccountContext(req: Request): Promise<void> {
@@ -89,43 +101,43 @@ async function attachAccountContext(req: Request): Promise<void> {
   const isDiagnosticsRoute = isDiagnosticsOverrideRoute(req)
 
   if (hasHeader) {
-    // Non-superadmin trying to use override on platform routes
-    if (!superadmin && (isPlatformRoute || isDiagnosticsRoute)) {
-      throw new AppError('Superadmin required for account override', 403)
+    if (!superadmin) {
+      throw new AppError('Account override is not permitted on this endpoint', 403)
     }
 
-    if (superadmin && (isPlatformRoute || isDiagnosticsRoute)) {
-      if (!headerAccountIdValue) {
-        throw new AppError('Missing x-specverse-account-id header', 400)
-      }
-      const parsed = Number.parseInt(headerAccountIdValue, 10)
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        throw new AppError('Invalid x-specverse-account-id header', 400)
-      }
-
-      // Diagnostics override is read-only: only allow GET
-      if (isDiagnosticsRoute && req.method.toUpperCase() !== 'GET') {
-        throw new AppError('Diagnostics override allowed for GET only', 403)
-      }
-
-      const activeId = await getActiveAccountId(parsed)
-      if (!activeId) {
-        throw new AppError('Account not found or inactive for override', 404)
-      }
-
-      console.warn(
-        '[SuperadminAccountOverride] userId=%s email=%s accountId=%s path=%s',
-        String(req.user.userId),
-        req.user.email ?? '',
-        String(activeId),
-        req.originalUrl ?? req.url ?? '',
-      )
-
-      req.user.accountId = activeId
-      req.user.isSuperadmin = true
-      return
+    if (!isPlatformRoute && !isDiagnosticsRoute) {
+      throw new AppError('Account override is not permitted on this endpoint', 403)
     }
-    // For non-platform/product routes, header is ignored (never trusted)
+
+    if (!headerAccountIdValue) {
+      throw new AppError('Missing x-specverse-account-id header', 400)
+    }
+
+    const parsed = Number.parseInt(headerAccountIdValue, 10)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new AppError('Invalid x-specverse-account-id header', 400)
+    }
+
+    if (isDiagnosticsRoute && req.method.toUpperCase() !== 'GET') {
+      throw new AppError('Diagnostics override allowed for GET only', 403)
+    }
+
+    const activeId = await getActiveAccountId(parsed)
+    if (!activeId) {
+      throw new AppError('Account not found or inactive for override', 404)
+    }
+
+    console.warn(
+      '[SuperadminAccountOverride] userId=%s email=%s accountId=%s path=%s',
+      String(req.user.userId),
+      req.user.email ?? '',
+      String(activeId),
+      req.originalUrl ?? req.url ?? '',
+    )
+
+    req.user.accountId = activeId
+    req.user.isSuperadmin = true
+    return
   }
 
   const ctx = await getAccountContextForUser(req.user.userId)
@@ -190,6 +202,11 @@ export const verifyToken: RequestHandler = async (req: Request, res: Response, n
     await attachAccountContext(req)
     next()
   } catch (error) {
+    if (error instanceof AppError) {
+      next(error)
+      return
+    }
+  
     console.error('❌ Token verification error:', error)
     next(new AppError('Invalid or expired session', 403))
   }
