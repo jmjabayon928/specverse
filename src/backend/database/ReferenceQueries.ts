@@ -5,19 +5,32 @@ import { poolPromise } from "@/backend/config/db";
  * ✅ Centralized shared reference data query service
  * Used by ALL forms across SpecVerse
  */
-export async function fetchReferenceOptions() {
+export async function fetchReferenceOptions(accountId: number) {
   const pool = await poolPromise;
 
-  const [areasRes, usersRes, manufacturersRes, suppliersRes, categoriesRes, clientsRes, projectsRes, warehousesRes] = await Promise.all([
-    pool.request().query(`SELECT AreaID, AreaName FROM Areas ORDER BY AreaName`),
-    pool.request().query(`SELECT UserID, FirstName, LastName FROM Users ORDER BY FirstName`),
-    pool.request().query(`SELECT ManuID, ManuName FROM Manufacturers ORDER BY ManuName`),
-    pool.request().query(`SELECT SuppID, SuppName FROM Suppliers ORDER BY SuppName`),
-    pool.request().query(`SELECT CategoryID, CategoryName FROM Categories ORDER BY CategoryName`),
-    pool.request().query(`SELECT ClientID, ClientCode, ClientName, ClientLogo FROM Clients ORDER BY ClientCode`),
-    pool.request().query(`SELECT ProjectID, ProjNum, ProjName FROM Projects ORDER BY ProjNum`),
-    pool.request().query(`SELECT WarehouseID, WarehouseName FROM Warehouses ORDER BY WarehouseName`)
-  ]);
+  const r = pool.request().input("AccountID", accountId);
+
+  const [areasRes, usersRes, manufacturersRes, suppliersRes, categoriesRes, clientsRes, projectsRes, warehousesRes] =
+    await Promise.all([
+      r.query(`SELECT AreaID, AreaName FROM dbo.Areas WHERE AccountID = @AccountID ORDER BY AreaName`),
+      r.query(`
+        SELECT u.UserID, u.FirstName, u.LastName
+        FROM dbo.Users u
+        INNER JOIN dbo.AccountMembers am ON am.UserID = u.UserID
+        WHERE am.AccountID = @AccountID AND am.IsActive = 1
+        ORDER BY u.FirstName
+      `),
+      r.query(`SELECT ManuID, ManuName FROM dbo.Manufacturers WHERE AccountID = @AccountID ORDER BY ManuName`),
+      r.query(`SELECT SuppID, SuppName FROM dbo.Suppliers WHERE AccountID = @AccountID ORDER BY SuppName`),
+      r.query(`SELECT CategoryID, CategoryName FROM dbo.Categories ORDER BY CategoryName`),
+      r.query(
+        `SELECT ClientID, ClientCode, ClientName, ClientLogo FROM dbo.Clients WHERE AccountID = @AccountID ORDER BY ClientCode`,
+      ),
+      r.query(`SELECT ProjectID, ProjNum, ProjName FROM dbo.Projects WHERE AccountID = @AccountID ORDER BY ProjNum`),
+      r.query(
+        `SELECT WarehouseID, WarehouseName FROM dbo.Warehouses WHERE AccountID = @AccountID ORDER BY WarehouseName`,
+      ),
+    ]);
 
   return {
     areas: areasRes.recordset.map(row => ({
@@ -56,14 +69,15 @@ export async function fetchReferenceOptions() {
   };
 }
 
-export async function getInventoryItemOptions() {
+export async function getInventoryItemOptions(accountId: number) {
   const pool = await poolPromise;
-  const result = await pool.request().query(`
+  const result = await pool.request().input("AccountID", accountId).query(`
     SELECT 
       i.InventoryID AS ItemID,
       s.SheetName
     FROM Inventory i
     JOIN Sheets s ON i.SheetID = s.SheetID
+    WHERE i.AccountID = @AccountID AND s.AccountID = @AccountID
     ORDER BY s.SheetName
   `);
 

@@ -128,11 +128,17 @@ const firstIssueMessage = (result: z.SafeParseError<unknown>): string => {
 /** GET /api/backend/settings/suppliers */
 export const listSuppliers: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const page = Math.max(qint(req.query.page, 1), 1)
     const pageSize = Math.min(Math.max(qint(req.query.pageSize, 20), 1), 100)
     const search = qstr(req.query.search, '').trim()
 
     const params: ListSuppliersParams = {
+      accountId,
       page,
       pageSize,
       search,
@@ -150,6 +156,11 @@ export const listSuppliers: RequestHandler = async (req, res, next) => {
 /** GET /api/backend/settings/suppliers/:id */
 export const getSupplier: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     // Original code only checked Number.isFinite
@@ -157,7 +168,7 @@ export const getSupplier: RequestHandler = async (req, res, next) => {
       throw new AppError('Invalid id', 400)
     }
 
-    const row = await getSupplierByIdService(id)
+    const row = await getSupplierByIdService(accountId, id)
 
     if (!row) {
       throw new AppError('Not found', 404)
@@ -181,6 +192,11 @@ export const getSupplier: RequestHandler = async (req, res, next) => {
 /** POST /api/backend/settings/suppliers */
 export const createSupplier: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const parsed = supplierCreateSchema.safeParse(req.body ?? {})
 
     if (!parsed.success) {
@@ -200,7 +216,7 @@ export const createSupplier: RequestHandler = async (req, res, next) => {
       Notes: body.Notes ?? null,
     }
 
-    const newId = await createSupplierService(input)
+    const newId = await createSupplierService(accountId, input)
 
     res.status(201).json({ SuppID: newId })
   } catch (error) {
@@ -219,6 +235,11 @@ export const createSupplier: RequestHandler = async (req, res, next) => {
 /** PATCH /api/backend/settings/suppliers/:id */
 export const updateSupplier: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     if (!Number.isFinite(id)) {
@@ -235,7 +256,7 @@ export const updateSupplier: RequestHandler = async (req, res, next) => {
     const payload = buildUpdatePayload(parsed.data)
     ensureHasUpdatableFields(payload)
 
-    const updated = await updateSupplierService(id, payload)
+    const updated = await updateSupplierService(accountId, id, payload)
 
     if (!updated) {
       throw new AppError('Not found', 404)
@@ -259,13 +280,18 @@ export const updateSupplier: RequestHandler = async (req, res, next) => {
 /** DELETE /api/backend/settings/suppliers/:id */
 export const deleteSupplier: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     if (!Number.isFinite(id)) {
       throw new AppError('Invalid id', 400)
     }
 
-    const ok = await deleteSupplierService(id)
+    const ok = await deleteSupplierService(accountId, id)
 
     if (!ok) {
       throw new AppError('Not found', 404)

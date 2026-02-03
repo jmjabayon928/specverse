@@ -120,11 +120,17 @@ const ensureHasUpdatableFields = (payload: UpdateProjectInput): void => {
 /** GET /api/backend/settings/projects */
 export const listProjects: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const page = Math.max(qint(req.query.page, 1), 1)
     const pageSize = Math.min(Math.max(qint(req.query.pageSize, 20), 1), 100)
     const search = qstr(req.query.search, '').trim()
 
     const params: ListProjectsParams = {
+      accountId,
       page,
       pageSize,
       search,
@@ -142,13 +148,18 @@ export const listProjects: RequestHandler = async (req, res, next) => {
 /** GET /api/backend/settings/projects/:id */
 export const getProject: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     if (!Number.isFinite(id)) {
       throw new AppError('Invalid id', 400)
     }
 
-    const row = await getProjectByIdService(id)
+    const row = await getProjectByIdService(accountId, id)
 
     if (!row) {
       throw new AppError('Not found', 404)
@@ -172,6 +183,11 @@ export const getProject: RequestHandler = async (req, res, next) => {
 /** POST /api/backend/settings/projects */
 export const createProject: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const parsed = projectCreateSchema.safeParse(req.body ?? {})
 
     if (!parsed.success) {
@@ -192,7 +208,7 @@ export const createProject: RequestHandler = async (req, res, next) => {
       EndDate: body.EndDate ?? null,
     }
 
-    const created = await createProjectService(input)
+    const created = await createProjectService(accountId, input)
 
     res.status(201).json(created)
   } catch (error) {
@@ -208,6 +224,11 @@ export const createProject: RequestHandler = async (req, res, next) => {
 /** PATCH /api/backend/settings/projects/:id */
 export const updateProject: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     if (!Number.isFinite(id)) {
@@ -226,7 +247,7 @@ export const updateProject: RequestHandler = async (req, res, next) => {
 
     // keep the semantic behavior: length constraints (≤ 15, ≤ 255) are already enforced via Zod
 
-    const updated = await updateProjectService(id, payload)
+    const updated = await updateProjectService(accountId, id, payload)
 
     if (!updated) {
       throw new AppError('Not found', 404)
@@ -244,13 +265,18 @@ export const updateProject: RequestHandler = async (req, res, next) => {
 /** DELETE /api/backend/settings/projects/:id */
 export const deleteProject: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     if (!Number.isFinite(id)) {
       throw new AppError('Invalid id', 400)
     }
 
-    const ok = await deleteProjectService(id)
+    const ok = await deleteProjectService(accountId, id)
 
     if (!ok) {
       throw new AppError('Not found', 404)

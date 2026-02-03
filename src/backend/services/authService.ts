@@ -2,7 +2,7 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { poolPromise, sql } from '../config/db'
-import { getUserPermissions } from '../database/permissionQueries'
+import { getAccountContextForUser } from '../database/accountContextQueries'
 import type { JwtPayload as CustomJwtPayload } from '../../domain/auth/JwtTypes'
 
 const JWT_SECRET = process.env.JWT_SECRET
@@ -53,16 +53,31 @@ const findUserByEmail = async (email: string): Promise<DbUser | null> => {
 }
 
 const buildTokenPayload = async (user: DbUser): Promise<CustomJwtPayload> => {
-  const permissions = await getUserPermissions(user.UserID)
+  const ctx = await getAccountContextForUser(user.UserID)
+
+  // If user has no membership yet, keep legacy payload (role from Users.RoleID) and empty permissions.
+  // Bundle 1 should have backfilled AccountMembers; this fallback is defensive.
+  if (!ctx) {
+    return {
+      userId: user.UserID,
+      roleId: user.RoleID,
+      role: user.RoleName,
+      email: user.Email,
+      name: `${user.FirstName} ${user.LastName}`,
+      profilePic: user.ProfilePic,
+      permissions: [],
+    }
+  }
 
   return {
     userId: user.UserID,
-    roleId: user.RoleID,
-    role: user.RoleName,
+    roleId: ctx.roleId,
+    role: ctx.roleName,
     email: user.Email,
     name: `${user.FirstName} ${user.LastName}`,
     profilePic: user.ProfilePic,
-    permissions,
+    permissions: ctx.permissions,
+    accountId: ctx.accountId,
   }
 }
 

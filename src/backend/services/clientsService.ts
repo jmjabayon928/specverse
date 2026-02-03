@@ -32,6 +32,7 @@ export interface ClientDTO {
 }
 
 export interface ListClientsParams {
+  accountId: number
   page: number
   pageSize: number
   search?: string
@@ -101,18 +102,23 @@ const isUniqueViolation = (error: unknown): boolean => {
   return false
 }
 
-const bindSearch = (request: sql.Request, search: string | undefined): { where: string } => {
+const bindSearch = (
+  request: sql.Request,
+  accountId: number,
+  search: string | undefined,
+): { where: string } => {
+  request.input('AccountID', sql.Int, accountId)
   const trimmed = (search ?? '').trim()
 
   if (trimmed.length === 0) {
-    return { where: '' }
+    return { where: 'WHERE c.AccountID = @AccountID' }
   }
 
   request.input('q', sql.NVarChar(255), `%${trimmed}%`)
 
   return {
     where:
-      'WHERE (c.ClientName LIKE @q OR c.ClientCode LIKE @q OR c.ClientEmail LIKE @q OR c.ClientPhone LIKE @q)',
+      'WHERE c.AccountID = @AccountID AND (c.ClientName LIKE @q OR c.ClientCode LIKE @q OR c.ClientEmail LIKE @q OR c.ClientPhone LIKE @q)',
   }
 }
 
@@ -128,7 +134,7 @@ export const listClients = async (params: ListClientsParams): Promise<ListClient
   dataRequest.input('Offset', sql.Int, offset)
   dataRequest.input('PageSize', sql.Int, pageSize)
 
-  const { where } = bindSearch(dataRequest, search)
+  const { where } = bindSearch(dataRequest, params.accountId, search)
 
   const data = await dataRequest.query<ClientRowSQL>(`
     SELECT
@@ -151,7 +157,7 @@ export const listClients = async (params: ListClientsParams): Promise<ListClient
   const rows = data.recordset.map((row) => mapRow(row))
 
   const countRequest = pool.request()
-  bindSearch(countRequest, search)
+  bindSearch(countRequest, params.accountId, search)
 
   const count = await countRequest.query<CountRow>(`
     SELECT COUNT(1) AS Total
@@ -169,11 +175,15 @@ export const listClients = async (params: ListClientsParams): Promise<ListClient
   }
 }
 
-export const getClientById = async (id: number): Promise<ClientDTO | null> => {
+export const getClientById = async (
+  accountId: number,
+  id: number,
+): Promise<ClientDTO | null> => {
   const pool = await poolPromise
 
   const result = await pool
     .request()
+    .input('AccountID', sql.Int, accountId)
     .input('id', sql.Int, id)
     .query<ClientRowSQL>(`
       SELECT
@@ -188,7 +198,7 @@ export const getClientById = async (id: number): Promise<ClientDTO | null> => {
         c.CreatedAt,
         c.UpdatedAt
       FROM dbo.Clients c
-      WHERE c.ClientID = @id;
+      WHERE c.AccountID = @AccountID AND c.ClientID = @id;
     `)
 
   const row = result.recordset[0]
@@ -200,12 +210,16 @@ export const getClientById = async (id: number): Promise<ClientDTO | null> => {
   return mapRow(row)
 }
 
-export const createClient = async (input: CreateClientInput): Promise<number> => {
+export const createClient = async (
+  accountId: number,
+  input: CreateClientInput,
+): Promise<number> => {
   try {
     const pool = await poolPromise
 
     const result = await pool
       .request()
+      .input('AccountID', sql.Int, accountId)
       .input('ClientCode', sql.VarChar(20), input.ClientCode)
       .input('ClientName', sql.VarChar(150), input.ClientName)
       .input('ClientEmail', sql.VarChar(150), input.ClientEmail)
@@ -215,6 +229,7 @@ export const createClient = async (input: CreateClientInput): Promise<number> =>
       .input('ClientLogo', sql.VarChar(150), input.ClientLogo)
       .query<{ ClientID: number }>(`
         INSERT INTO dbo.Clients (
+          AccountID,
           ClientCode,
           ClientName,
           ClientEmail,
@@ -227,6 +242,7 @@ export const createClient = async (input: CreateClientInput): Promise<number> =>
         )
         OUTPUT inserted.ClientID
         VALUES (
+          @AccountID,
           @ClientCode,
           @ClientName,
           @ClientEmail,
@@ -252,6 +268,7 @@ export const createClient = async (input: CreateClientInput): Promise<number> =>
 }
 
 export const updateClient = async (
+  accountId: number,
   id: number,
   input: UpdateClientInput,
 ): Promise<boolean> => {
@@ -259,7 +276,7 @@ export const updateClient = async (
     const pool = await poolPromise
 
     const sets: string[] = []
-    const request = pool.request().input('id', sql.Int, id)
+    const request = pool.request().input('AccountID', sql.Int, accountId).input('id', sql.Int, id)
 
     if (Object.hasOwn(input, 'ClientCode')) {
       sets.push('ClientCode = @ClientCode')
@@ -305,7 +322,7 @@ export const updateClient = async (
     const result = await request.query<{ Affected: number }>(`
       UPDATE dbo.Clients
       SET ${sets.join(', ')}
-      WHERE ClientID = @id;
+      WHERE AccountID = @AccountID AND ClientID = @id;
       SELECT @@ROWCOUNT AS Affected;
     `)
 
@@ -323,15 +340,16 @@ export const updateClient = async (
   }
 }
 
-export const deleteClient = async (id: number): Promise<boolean> => {
+export const deleteClient = async (accountId: number, id: number): Promise<boolean> => {
   const pool = await poolPromise
 
   const result = await pool
     .request()
+    .input('AccountID', sql.Int, accountId)
     .input('id', sql.Int, id)
     .query<{ Affected: number }>(`
       DELETE FROM dbo.Clients
-      WHERE ClientID = @id;
+      WHERE AccountID = @AccountID AND ClientID = @id;
       SELECT @@ROWCOUNT AS Affected;
     `)
 

@@ -11,6 +11,8 @@ declare module "express-serve-static-core" {
       name?: string;
       profilePic?: string;
       permissions: string[];
+      accountId?: number;
+      isSuperadmin?: boolean;
     };
     skipAuth?: boolean; // ← Add this line
   }

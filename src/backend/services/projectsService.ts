@@ -41,6 +41,7 @@ export interface ProjectDTO {
 }
 
 export interface ListProjectsParams {
+  accountId: number
   page: number
   pageSize: number
   search?: string
@@ -104,18 +105,23 @@ const mapRow = (row: ProjectRowSQL): ProjectDTO => ({
   UpdatedAt: toISO(row.UpdatedAt ?? null) ?? undefined,
 })
 
-const bindSearch = (request: sql.Request, search?: string): { where: string } => {
+const bindSearch = (
+  request: sql.Request,
+  accountId: number,
+  search?: string,
+): { where: string } => {
+  request.input('AccountID', sql.Int, accountId)
   const trimmed = search?.trim() ?? ''
 
   if (trimmed.length === 0) {
-    return { where: '' }
+    return { where: 'WHERE p.AccountID = @AccountID' }
   }
 
   const q = `%${trimmed}%`
   request.input('Q', sql.NVarChar(sql.MAX), q)
 
   const where = `
-    WHERE (
+    WHERE p.AccountID = @AccountID AND (
       p.ProjNum LIKE @Q OR
       p.ProjName LIKE @Q OR
       p.ClientProjNum LIKE @Q OR
@@ -142,7 +148,7 @@ export const listProjects = async (
   const dataRequest = pool.request()
   dataRequest.input('Offset', sql.Int, offset)
   dataRequest.input('PageSize', sql.Int, pageSize)
-  const { where } = bindSearch(dataRequest, search)
+  const { where } = bindSearch(dataRequest, params.accountId, search)
 
   const dataResult = await dataRequest.query<ProjectRowSQL>(`
     SELECT
@@ -171,7 +177,7 @@ export const listProjects = async (
 
   // Count
   const countRequest = pool.request()
-  bindSearch(countRequest, search)
+  bindSearch(countRequest, params.accountId, search)
 
   const countResult = await countRequest.query<CountRow>(`
     SELECT COUNT(1) AS A
@@ -191,11 +197,15 @@ export const listProjects = async (
   }
 }
 
-export const getProjectById = async (projectId: number): Promise<ProjectDTO | null> => {
+export const getProjectById = async (
+  accountId: number,
+  projectId: number,
+): Promise<ProjectDTO | null> => {
   const pool = await poolPromise
 
   const result = await pool
     .request()
+    .input('AccountID', sql.Int, accountId)
     .input('ProjectID', sql.Int, projectId)
     .query<ProjectRowSQL>(`
       SELECT
@@ -215,7 +225,7 @@ export const getProjectById = async (projectId: number): Promise<ProjectDTO | nu
       FROM dbo.Projects p
       INNER JOIN dbo.Clients c ON c.ClientID = p.ClientID
       INNER JOIN dbo.Users u ON u.UserID = p.ManagerID
-      WHERE p.ProjectID = @ProjectID;
+      WHERE p.AccountID = @AccountID AND p.ProjectID = @ProjectID;
     `)
 
   const row = result.recordset[0]
@@ -228,12 +238,14 @@ export const getProjectById = async (projectId: number): Promise<ProjectDTO | nu
 }
 
 export const createProject = async (
+  accountId: number,
   input: CreateProjectInput,
 ): Promise<ProjectDTO> => {
   const pool = await poolPromise
 
   const request = pool
     .request()
+    .input('AccountID', sql.Int, accountId)
     .input('ClientID', sql.Int, input.ClientID)
     .input('ClientProjNum', sql.NVarChar(sql.MAX), input.ClientProjNum)
     .input('ProjNum', sql.NVarChar(sql.MAX), input.ProjNum)
@@ -250,6 +262,7 @@ export const createProject = async (
 
   const result = await request.query<ProjectRowSQL>(`
     INSERT INTO dbo.Projects (
+      AccountID,
       ClientID,
       ClientProjNum,
       ProjNum,
@@ -263,6 +276,7 @@ export const createProject = async (
     )
     OUTPUT
       inserted.ProjectID,
+      inserted.AccountID,
       inserted.ClientID,
       inserted.ClientProjNum,
       inserted.ProjNum,
@@ -274,6 +288,7 @@ export const createProject = async (
       inserted.CreatedAt,
       inserted.UpdatedAt
     VALUES (
+      @AccountID,
       @ClientID,
       @ClientProjNum,
       @ProjNum,
@@ -293,13 +308,14 @@ export const createProject = async (
 }
 
 export const updateProject = async (
+  accountId: number,
   projectId: number,
   input: UpdateProjectInput,
 ): Promise<ProjectDTO | null> => {
   const pool = await poolPromise
 
   const fields: string[] = []
-  const request = pool.request().input('ProjectID', sql.Int, projectId)
+  const request = pool.request().input('AccountID', sql.Int, accountId).input('ProjectID', sql.Int, projectId)
 
   if (input.ClientID !== undefined) {
     fields.push('ClientID = @ClientID')
@@ -348,21 +364,22 @@ export const updateProject = async (
   await request.query(`
     UPDATE dbo.Projects
     SET ${fields.join(', ')}, UpdatedAt = SYSUTCDATETIME()
-    WHERE ProjectID = @ProjectID;
+    WHERE AccountID = @AccountID AND ProjectID = @ProjectID;
   `)
 
-  return getProjectById(projectId)
+  return getProjectById(accountId, projectId)
 }
 
-export const deleteProject = async (projectId: number): Promise<boolean> => {
+export const deleteProject = async (accountId: number, projectId: number): Promise<boolean> => {
   const pool = await poolPromise
 
   const result = await pool
     .request()
+    .input('AccountID', sql.Int, accountId)
     .input('ProjectID', sql.Int, projectId)
     .query<{ affected: number }>(`
       DELETE FROM dbo.Projects
-      WHERE ProjectID = @ProjectID;
+      WHERE AccountID = @AccountID AND ProjectID = @ProjectID;
       SELECT @@ROWCOUNT AS affected;
     `)
 

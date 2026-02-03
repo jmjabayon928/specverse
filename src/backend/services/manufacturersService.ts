@@ -24,6 +24,7 @@ export interface ManufacturerDTO {
 }
 
 export interface ListManufacturersParams {
+  accountId: number
   page: number
   pageSize: number
   search?: string
@@ -80,17 +81,22 @@ const isUniqueViolation = (error: unknown): boolean => {
   return false
 }
 
-const bindSearch = (request: sql.Request, search: string | undefined): { where: string } => {
+const bindSearch = (
+  request: sql.Request,
+  accountId: number,
+  search: string | undefined,
+): { where: string } => {
+  request.input('AccountID', sql.Int, accountId)
   const query = (search ?? '').trim()
 
   if (query.length === 0) {
-    return { where: '' }
+    return { where: 'WHERE m.AccountID = @AccountID' }
   }
 
   request.input('q', sql.NVarChar(255), `%${query}%`)
 
   return {
-    where: 'WHERE (m.ManuName LIKE @q OR m.ManuAddress LIKE @q)',
+    where: 'WHERE m.AccountID = @AccountID AND (m.ManuName LIKE @q OR m.ManuAddress LIKE @q)',
   }
 }
 
@@ -109,7 +115,7 @@ export const listManufacturers = async (
   const dataRequest = pool.request()
   dataRequest.input('Offset', sql.Int, offset)
   dataRequest.input('PageSize', sql.Int, pageSize)
-  const { where } = bindSearch(dataRequest, search)
+  const { where } = bindSearch(dataRequest, params.accountId, search)
 
   const data = await dataRequest.query<ManufacturerRowSQL>(`
     SELECT
@@ -128,7 +134,7 @@ export const listManufacturers = async (
 
   // Count
   const countRequest = pool.request()
-  bindSearch(countRequest, search)
+  bindSearch(countRequest, params.accountId, search)
 
   const count = await countRequest.query<CountRow>(`
     SELECT COUNT(1) AS Total
@@ -147,11 +153,15 @@ export const listManufacturers = async (
 }
 
 /** Get single manufacturer by id, or null if not found */
-export const getManufacturerById = async (id: number): Promise<ManufacturerDTO | null> => {
+export const getManufacturerById = async (
+  accountId: number,
+  id: number,
+): Promise<ManufacturerDTO | null> => {
   const pool = await poolPromise
 
   const result = await pool
     .request()
+    .input('AccountID', sql.Int, accountId)
     .input('id', sql.Int, id)
     .query<ManufacturerRowSQL>(`
       SELECT
@@ -161,7 +171,7 @@ export const getManufacturerById = async (id: number): Promise<ManufacturerDTO |
         m.CreatedAt,
         m.UpdatedAt
       FROM dbo.Manufacturers m
-      WHERE m.ManuID = @id;
+      WHERE m.AccountID = @AccountID AND m.ManuID = @id;
     `)
 
   const row = result.recordset[0]
@@ -175,6 +185,7 @@ export const getManufacturerById = async (id: number): Promise<ManufacturerDTO |
 
 /** Create — returns new ManuID */
 export const createManufacturer = async (
+  accountId: number,
   input: CreateManufacturerInput,
 ): Promise<number> => {
   try {
@@ -182,10 +193,12 @@ export const createManufacturer = async (
 
     const result = await pool
       .request()
+      .input('AccountID', sql.Int, accountId)
       .input('ManuName', sql.VarChar(150), input.ManuName)
       .input('ManuAddress', sql.VarChar(255), input.ManuAddress)
       .query<{ ManuID: number }>(`
         INSERT INTO dbo.Manufacturers (
+          AccountID,
           ManuName,
           ManuAddress,
           CreatedAt,
@@ -193,6 +206,7 @@ export const createManufacturer = async (
         )
         OUTPUT inserted.ManuID
         VALUES (
+          @AccountID,
           @ManuName,
           @ManuAddress,
           SYSUTCDATETIME(),
@@ -214,6 +228,7 @@ export const createManufacturer = async (
 
 /** Update — returns true if updated */
 export const updateManufacturer = async (
+  accountId: number,
   id: number,
   input: UpdateManufacturerInput,
 ): Promise<boolean> => {
@@ -221,7 +236,7 @@ export const updateManufacturer = async (
     const pool = await poolPromise
 
     const sets: string[] = []
-    const request = pool.request().input('id', sql.Int, id)
+    const request = pool.request().input('AccountID', sql.Int, accountId).input('id', sql.Int, id)
 
     if (Object.hasOwn(input, 'ManuName')) {
       sets.push('ManuName = @ManuName')
@@ -242,7 +257,7 @@ export const updateManufacturer = async (
     const result = await request.query<{ Affected: number }>(`
       UPDATE dbo.Manufacturers
       SET ${sets.join(', ')}
-      WHERE ManuID = @id;
+      WHERE AccountID = @AccountID AND ManuID = @id;
       SELECT @@ROWCOUNT AS Affected;
     `)
 
@@ -261,15 +276,16 @@ export const updateManufacturer = async (
 }
 
 /** Delete — returns true if a row was deleted */
-export const deleteManufacturer = async (id: number): Promise<boolean> => {
+export const deleteManufacturer = async (accountId: number, id: number): Promise<boolean> => {
   const pool = await poolPromise
 
   const result = await pool
     .request()
+    .input('AccountID', sql.Int, accountId)
     .input('id', sql.Int, id)
     .query<{ Affected: number }>(`
       DELETE FROM dbo.Manufacturers
-      WHERE ManuID = @id;
+      WHERE AccountID = @AccountID AND ManuID = @id;
       SELECT @@ROWCOUNT AS Affected;
     `)
 

@@ -9,6 +9,8 @@ export interface JwtPayload extends DefaultJwtPayload {
   name?: string
   profilePic?: string | null
   permissions?: string[]
+  accountId?: number
+  isSuperadmin?: boolean
 }
 
 // For places that still reference "access token payload" by name
