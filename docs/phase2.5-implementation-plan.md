@@ -1,6 +1,6 @@
 # Phase 2.5 — Step C: Implementation Plan
 
-**Status:** Planning document — no code or migrations created in this step.  
+**Status:** Planning document. Bundle 1 and Bundle 2 migrations are implemented; backend/UI wiring (Bundle 3/4) is planned.  
 **Contracts:** This plan implements the frozen contracts from:
 - **Step A:** `docs/phase2.5-roles-permissions.md` (RBAC: roles, permissions, matrix, Superadmin).
 - **Step B:** `docs/phase2.5-tenant-model-and-table-scope.md` (tenant model, table classification, schema scope; Manufacturers/Suppliers/Areas tenant-owned).
@@ -48,6 +48,24 @@ Migrations are to be created in a later step; this is the ordered plan. Each ste
 | 8 | `phase2_5_indexes_accountid_queries.sql` | Add non-unique indexes for AccountID-filtered queries: e.g. (AccountID, CreatedAt), (AccountID, Status), (AccountID, SheetID), etc., per query patterns in §4 of Step B doc. | N/A | Low | Drop indexes. |
 
 **Dependency order:** 1 → 2 → 3 → 4a → 4b → 4c → 4d → 4e → 4f → 4g → 5 → 6 → 7 → 8. Application code that threads `accountId` and filters by AccountID should be deployed after migrations and backfill are verified.
+
+### Bundle 2 implementation status (implemented)
+
+Bundle 2 (Add AccountID columns + backfill + constraints/indexes) is **implemented** with the following files.
+
+**Forward migrations (run in order):**
+
+1. `migrations/phase2_5_bundle2_add_accountid_columns.sql` — Add `AccountID INT NULL` to all tenant-owned tables.
+2. `migrations/phase2_5_bundle2_backfill_accountid.sql` — Backfill `AccountID` with default account (Slug = 'default'); set `AccountID` to NOT NULL.
+3. `migrations/phase2_5_bundle2_constraints_and_indexes.sql` — Add FK `AccountID` → `Accounts(AccountID)`, account-scoped uniques (e.g. Clients, Projects, Manufacturers, Suppliers, Areas, Warehouses), and AccountID-aware indexes.
+
+**Rollback migrations (run in order to undo Bundle 2):**
+
+1. `migrations/rollback_phase2_5_bundle2_constraints_and_indexes.sql` — Drop FKs, account-scoped uniques, and Bundle 2 indexes.
+2. `migrations/rollback_phase2_5_bundle2_backfill_accountid.sql` — No-op (documented); no row-level revert.
+3. `migrations/rollback_phase2_5_bundle2_drop_accountid_columns.sql` — Drop `AccountID` column from all tenant-owned tables.
+
+**Verification:** `docs/phase2.5-bundle2-verification.md` — How to confirm default AccountID, NULL counts, spot checks, constraint/index checks, and rollback checklist.
 
 ---
 
