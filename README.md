@@ -385,6 +385,16 @@ npm run dev
 .env.production for deployment
 ```
 
+### Demo reset (local / dev only)
+
+For local development or recruiter demos, you can seed an admin user and reset the admin password via dev-only API endpoints. **These are disabled in production.**
+
+See **[docs/demo-reset.md](docs/demo-reset.md)** for:
+
+- Required env flags (`DEV_ADMIN_UTILS=1`, `NODE_ENV` not production)
+- cURL and PowerShell examples for seed-admin and reset-admin-password
+- Recommended demo workflow
+
 ---
 
 ## Contributing
