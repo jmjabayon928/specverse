@@ -134,9 +134,7 @@ describe("verifyToken middleware", () => {
       .set("Cookie", [`token=${token}`])
       .set("x-specverse-account-id", "5");
 
-    expect(res.statusCode).toBe(200);
-    // account comes from membership context, not override
-    expect(res.body.accountId).toBe(1);
+    expect(res.statusCode).toBe(403);
   });
 
   it("rejects non-superadmin using override header on platform route", async () => {
@@ -225,5 +223,35 @@ describe("verifyToken middleware", () => {
       .set("x-specverse-account-id", "999");
 
     expect(res.statusCode).toBe(404);
+  });
+
+  it("honors override on platform route when URL has query string", async () => {
+    const app = express();
+    app.use(express.json());
+    app.use(cookieParser());
+
+    process.env.SUPERADMIN_USER_IDS = "1";
+
+    app.get("/api/backend/platform/accounts", verifyToken, (req, res) => {
+      res.json({ accountId: req.user?.accountId ?? null });
+    });
+
+    const token = makeToken({
+      userId: 1,
+      roleId: 1,
+      role: "admin",
+      email: "admin@example.com",
+      name: "Admin",
+      profilePic: null,
+      permissions: [],
+    });
+
+    const res = await request(app)
+      .get("/api/backend/platform/accounts?foo=bar")
+      .set("Cookie", [`token=${token}`])
+      .set("x-specverse-account-id", "5");
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.accountId).toBe(5);
   });
 });
