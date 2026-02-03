@@ -5,7 +5,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
 
-// Mock auth so no real DB (permissionQueries) runs.
+// Mock auth so no real DB (permissionQueries) runs. accountId required for list/get-details.
 const mockAuthUser = {
   userId: 1,
   roleId: 1,
@@ -18,6 +18,7 @@ const mockAuthUser = {
     'DATASHEET_ATTACHMENT_UPLOAD',
     'DATASHEET_NOTE_EDIT',
   ] as string[],
+  accountId: 1,
 }
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({

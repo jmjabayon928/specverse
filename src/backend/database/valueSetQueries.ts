@@ -91,7 +91,8 @@ export async function ensureRequirementValueSet(
 export async function ensureRequirementValueSetInTransaction(
   tx: Transaction,
   sheetId: number,
-  userId: number | null | undefined
+  userId: number | null | undefined,
+  accountId: number
 ): Promise<number> {
   const contextIdResult = await tx.request().input('Code', sql.NVarChar(30), 'Requirement').query<{ ContextID: number }>(`
     SELECT ContextID FROM dbo.ValueContexts WHERE Code = @Code
@@ -115,10 +116,11 @@ export async function ensureRequirementValueSetInTransaction(
     .input('SheetID', sql.Int, sheetId)
     .input('ContextID', sql.Int, contextId)
     .input('CreatedBy', sql.Int, userId ?? null)
+    .input('AccountID', sql.Int, accountId)
     .query<{ ValueSetID: number }>(`
-      INSERT INTO dbo.InformationValueSets (SheetID, ContextID, PartyID, Status, CreatedAt, CreatedBy)
+      INSERT INTO dbo.InformationValueSets (SheetID, ContextID, PartyID, Status, CreatedAt, CreatedBy, AccountID)
       OUTPUT INSERTED.ValueSetID
-      VALUES (@SheetID, @ContextID, NULL, 'Draft', GETDATE(), @CreatedBy)
+      VALUES (@SheetID, @ContextID, NULL, 'Draft', GETDATE(), @CreatedBy, @AccountID)
     `)
   const row = insertResult.recordset[0]
   if (row?.ValueSetID == null) {

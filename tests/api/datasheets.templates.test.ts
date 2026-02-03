@@ -12,6 +12,7 @@ const mockAuthUser = {
   roleId: 1,
   role: 'Admin',
   permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT', 'DATASHEET_VERIFY', 'DATASHEET_APPROVE', 'DATASHEET_ATTACHMENT_UPLOAD', 'DATASHEET_NOTE_EDIT'] as string[],
+  accountId: 1,
 }
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
@@ -63,7 +64,7 @@ jest.mock('../../src/backend/services/templateService', () => {
         { id: 1, disciplineId: 1, code: 'Pressure Transmitter', name: 'Pressure Transmitter' },
       ],
     }),
-    createTemplate: jest.fn().mockImplementation((data: Record<string, unknown>) => {
+    createTemplate: jest.fn().mockImplementation((data: Record<string, unknown>, _userId?: number, _accountId?: number) => {
       const newId = nextCreateId++
       templateStore[newId] = { ...data, sheetId: newId }
       return Promise.resolve(newId)
@@ -80,7 +81,7 @@ jest.mock('../../src/backend/services/templateService', () => {
         return Promise.resolve(sheetId)
       }
     ),
-    getTemplateDetailsById: jest.fn().mockImplementation((templateId: number) => {
+    getTemplateDetailsById: jest.fn().mockImplementation((templateId: number, _lang?: string, _uom?: string, _accountId?: number) => {
       const stored = templateStore[templateId]
       const datasheet = stored
         ? { ...defaultDatasheet(templateId), ...stored }

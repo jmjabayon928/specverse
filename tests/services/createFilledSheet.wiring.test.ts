@@ -244,11 +244,14 @@ function buildPayloadFourFields(fieldValues: Record<string, string>): UnifiedShe
   }
 }
 
+const sheetBelongsToAccountResult = { recordset: [{ Ex: 1 }], recordsets: [[]], rowsAffected: [0] }
+
 function enqueueSuccessResponses(): void {
   queryResultQueue.length = 0
-  // Order matches createFilledSheet: template meta/fields/options, templateSheetRow, insertSheet,
+  // Order matches createFilledSheet: sheetBelongsToAccount (gate), then template meta/fields/options, templateSheetRow, insertSheet,
   // then cloneSubsheetsAndFields: insertSubsheet, per-field insertInfoTemplate, insertInfoValue, insertInfoOptions.
   queryResultQueue.push(
+    sheetBelongsToAccountResult,
     templateMetaResult,
     templateFieldsResult,
     optionsResult,
@@ -267,12 +270,13 @@ function enqueueSuccessResponses(): void {
 
 function enqueueValidationOnlyResponses(): void {
   queryResultQueue.length = 0
-  queryResultQueue.push(templateMetaResult, templateFieldsResult, optionsResult)
+  queryResultQueue.push(sheetBelongsToAccountResult, templateMetaResult, templateFieldsResult, optionsResult)
 }
 
 function enqueueSuccessResponsesFourFields(): void {
   queryResultQueue.length = 0
   queryResultQueue.push(
+    sheetBelongsToAccountResult,
     templateMetaResult,
     templateFieldsResult4,
     optionsResult4,
@@ -310,7 +314,7 @@ describe('createFilledSheet wiring (stubbed DB)', () => {
       [String(INFO_TEMPLATE_ID_OPTION)]: 'D',
     })
 
-    await createFilledSheet(payload, { userId: 1, route: '/test', method: 'POST' })
+    await createFilledSheet(payload, { userId: 1, route: '/test', method: 'POST' }, 1)
 
     expect(mockCreateRevision).not.toHaveBeenCalled()
   })
@@ -323,7 +327,7 @@ describe('createFilledSheet wiring (stubbed DB)', () => {
       [String(INFO_TEMPLATE_ID_OPTION)]: 'D',
     })
 
-    const result = await createFilledSheet(payload, { userId: 1, route: '/test', method: 'POST' })
+    const result = await createFilledSheet(payload, { userId: 1, route: '/test', method: 'POST' }, 1)
 
     expect(result).toEqual({ sheetId: 999 })
   })
@@ -336,7 +340,7 @@ describe('createFilledSheet wiring (stubbed DB)', () => {
       [String(INFO_TEMPLATE_ID_OPTION)]: 'D',
     })
 
-    const err = await createFilledSheet(payload, { userId: 1, route: '/test', method: 'POST' }).catch(
+    const err = await createFilledSheet(payload, { userId: 1, route: '/test', method: 'POST' }, 1).catch(
       (e: unknown) => e
     )
     expect(err).toBeInstanceOf(AppError)
@@ -358,7 +362,7 @@ describe('createFilledSheet wiring (stubbed DB)', () => {
     }
     const payload = buildPayloadFourFields(fieldValues)
 
-    const result = await createFilledSheet(payload, { userId: 1, route: '/test', method: 'POST' })
+    const result = await createFilledSheet(payload, { userId: 1, route: '/test', method: 'POST' }, 1)
 
     expect(result).toEqual({ sheetId: 999 })
   })

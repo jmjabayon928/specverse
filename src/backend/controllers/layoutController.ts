@@ -3,6 +3,8 @@ import type { RequestHandler } from 'express'
 import { z } from 'zod'
 import { poolPromise } from '../config/db'
 import * as svc from '@/backend/services/layoutService'
+import { sheetBelongsToAccount } from '@/backend/services/filledSheetService'
+import { AppError } from '../errors/AppError'
 import type {
   PaperSize,
   Orientation,
@@ -164,7 +166,7 @@ function toBodySlotRow(raw: unknown): BodySlotRow | { error: string } {
 
 // ───────────────────────── controllers ─────────────────────────
 
-export const listLayouts: RequestHandler = async (req, res) => {
+export const listLayouts: RequestHandler = async (req, res, next) => {
   const parsed = listLayoutsQuerySchema.safeParse(req.query)
 
   if (!parsed.success) {
@@ -172,17 +174,38 @@ export const listLayouts: RequestHandler = async (req, res) => {
   }
 
   const { templateId = null, clientId = null } = parsed.data
+  const accountId = req.user!.accountId!
 
-  const rows = await svc.listLayouts({ templateId, clientId })
+  if (templateId !== null) {
+    const belongs = await sheetBelongsToAccount(templateId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+  }
+
+  const rows = await svc.listLayouts(accountId, { templateId, clientId })
   res.json(rows)
 }
 
-export const getSubsheetInfoTemplates: RequestHandler = async (req, res) => {
+export const getSubsheetInfoTemplates: RequestHandler = async (req, res, next) => {
   const subIdNumeric = Number(req.params.subId)
   const hasValidSubId = Number.isFinite(subIdNumeric) && subIdNumeric > 0
 
   if (!hasValidSubId) {
     return res.status(400).json({ error: 'Invalid subId' })
+  }
+
+  const sheetId = await svc.getSheetIdBySubId(subIdNumeric)
+  if (sheetId == null) {
+    next(new AppError('Not found', 404))
+    return
+  }
+  const accountId = req.user!.accountId!
+  const belongs = await sheetBelongsToAccount(sheetId, accountId)
+  if (!belongs) {
+    next(new AppError('Sheet not found', 404))
+    return
   }
 
   try {
@@ -203,7 +226,7 @@ export const getSubsheetInfoTemplates: RequestHandler = async (req, res) => {
   }
 }
 
-export const createLayout: RequestHandler = async (req, res) => {
+export const createLayout: RequestHandler = async (req, res, next) => {
   const parsed = createLayoutBodySchema.safeParse(req.body ?? {})
 
   if (!parsed.success) {
@@ -211,6 +234,15 @@ export const createLayout: RequestHandler = async (req, res) => {
   }
 
   const body = parsed.data
+  const templateId = body.templateId ?? null
+  if (templateId !== null) {
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(templateId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+  }
 
   const args: {
     templateId: number | null
@@ -218,7 +250,7 @@ export const createLayout: RequestHandler = async (req, res) => {
     paperSize: PaperSize
     orientation: Orientation
   } = {
-    templateId: body.templateId ?? null,
+    templateId,
     clientId: body.clientId ?? null,
     paperSize: (body.paperSize ?? 'A4') as PaperSize,
     orientation: (body.orientation ?? 'portrait') as Orientation,
@@ -228,8 +260,14 @@ export const createLayout: RequestHandler = async (req, res) => {
   res.status(201).json({ layoutId: id })
 }
 
-export const getLayout: RequestHandler = async (req, res) => {
+export const getLayout: RequestHandler = async (req, res, next) => {
   const layoutIdNumeric = Number(req.params.layoutId)
+  const accountId = req.user!.accountId!
+  const belongs = await svc.layoutBelongsToAccount(layoutIdNumeric, accountId)
+  if (!belongs) {
+    next(new AppError('Layout not found', 404))
+    return
+  }
 
   const bundle: LayoutBundle | null = await svc.getLayoutBundle(layoutIdNumeric)
   if (!bundle) {
@@ -239,12 +277,19 @@ export const getLayout: RequestHandler = async (req, res) => {
   res.json(bundle)
 }
 
-export const getLayoutStructure: RequestHandler = async (req, res) => {
+export const getLayoutStructure: RequestHandler = async (req, res, next) => {
   const layoutIdNumeric = Number(req.params.layoutId)
   const hasValidId = Number.isFinite(layoutIdNumeric) && layoutIdNumeric > 0
 
   if (!hasValidId) {
     return res.status(400).json({ error: 'Invalid layoutId' })
+  }
+
+  const accountId = req.user!.accountId!
+  const belongs = await svc.layoutBelongsToAccount(layoutIdNumeric, accountId)
+  if (!belongs) {
+    next(new AppError('Layout not found', 404))
+    return
   }
 
   try {
@@ -256,37 +301,82 @@ export const getLayoutStructure: RequestHandler = async (req, res) => {
   }
 }
 
-export const updateLayoutMeta: RequestHandler = async (req, res) => {
+export const updateLayoutMeta: RequestHandler = async (req, res, next) => {
   const layoutIdNumeric = Number(req.params.layoutId)
+  const accountId = req.user!.accountId!
+  const belongs = await svc.layoutBelongsToAccount(layoutIdNumeric, accountId)
+  if (!belongs) {
+    next(new AppError('Layout not found', 404))
+    return
+  }
   await svc.updateLayoutMeta(layoutIdNumeric, req.body)
   res.json({ ok: true })
 }
 
-export const addRegion: RequestHandler = async (req, res) => {
+export const addRegion: RequestHandler = async (req, res, next) => {
   const layoutIdNumeric = Number(req.params.layoutId)
+  const accountId = req.user!.accountId!
+  const belongs = await svc.layoutBelongsToAccount(layoutIdNumeric, accountId)
+  if (!belongs) {
+    next(new AppError('Layout not found', 404))
+    return
+  }
   const regionId = await svc.addRegion(layoutIdNumeric, req.body)
   res.status(201).json({ regionId })
 }
 
-export const updateRegion: RequestHandler = async (req, res) => {
+export const updateRegion: RequestHandler = async (req, res, next) => {
   const regionIdNumeric = Number(req.params.regionId)
+  const layoutId = await svc.getLayoutIdByRegionId(regionIdNumeric)
+  if (layoutId == null) {
+    next(new AppError('Not found', 404))
+    return
+  }
+  const accountId = req.user!.accountId!
+  const belongs = await svc.layoutBelongsToAccount(layoutId, accountId)
+  if (!belongs) {
+    next(new AppError('Layout not found', 404))
+    return
+  }
   await svc.updateRegion(regionIdNumeric, req.body)
   res.json({ ok: true })
 }
 
-export const addBlock: RequestHandler = async (req, res) => {
+export const addBlock: RequestHandler = async (req, res, next) => {
   const regionIdNumeric = Number(req.params.regionId)
+  const layoutId = await svc.getLayoutIdByRegionId(regionIdNumeric)
+  if (layoutId == null) {
+    next(new AppError('Not found', 404))
+    return
+  }
+  const accountId = req.user!.accountId!
+  const belongs = await svc.layoutBelongsToAccount(layoutId, accountId)
+  if (!belongs) {
+    next(new AppError('Layout not found', 404))
+    return
+  }
   const blockId = await svc.addBlock(regionIdNumeric, req.body)
   res.status(201).json({ blockId })
 }
 
-export const updateBlock: RequestHandler = async (req, res) => {
+export const updateBlock: RequestHandler = async (req, res, next) => {
   const blockIdNumeric = Number(req.params.blockId)
+  const layoutId = await svc.getLayoutIdByBlockId(blockIdNumeric)
+  if (layoutId == null) {
+    next(new AppError('Not found', 404))
+    return
+  }
+  const accountId = req.user!.accountId!
+  const belongs = await svc.layoutBelongsToAccount(layoutId, accountId)
+  if (!belongs) {
+    next(new AppError('Layout not found', 404))
+    return
+  }
   await svc.updateBlock(blockIdNumeric, req.body)
   res.json({ ok: true })
 }
 
-export const saveSubsheetSlots: RequestHandler = async (req, res) => {
+export const saveSubsheetSlots: RequestHandler = async (req, res, next) => {
   const layoutIdNumeric = Number(req.params.layoutId)
   const subIdNumeric = Number(req.params.subId)
 
@@ -295,6 +385,13 @@ export const saveSubsheetSlots: RequestHandler = async (req, res) => {
 
   if (!hasValidLayoutId || !hasValidSubId) {
     return res.status(400).json({ error: 'Invalid layoutId or subId' })
+  }
+
+  const accountId = req.user!.accountId!
+  const belongs = await svc.layoutBelongsToAccount(layoutIdNumeric, accountId)
+  if (!belongs) {
+    next(new AppError('Layout not found', 404))
+    return
   }
 
   const parsed = subsheetSlotsBodySchema.safeParse(req.body ?? {})
@@ -315,12 +412,19 @@ export const saveSubsheetSlots: RequestHandler = async (req, res) => {
   }
 }
 
-export const saveLayoutBodySlots: RequestHandler = async (req, res) => {
+export const saveLayoutBodySlots: RequestHandler = async (req, res, next) => {
   const layoutIdNumeric = Number(req.params.layoutId)
   const hasValidId = Number.isFinite(layoutIdNumeric) && layoutIdNumeric > 0
 
   if (!hasValidId) {
     return res.status(400).json({ error: 'Invalid layoutId' })
+  }
+
+  const accountId = req.user!.accountId!
+  const belongs = await svc.layoutBelongsToAccount(layoutIdNumeric, accountId)
+  if (!belongs) {
+    next(new AppError('Layout not found', 404))
+    return
   }
 
   const parsed = saveLayoutBodySlotsBodySchema.safeParse(req.body ?? {})
@@ -380,12 +484,19 @@ export const saveLayoutBodySlots: RequestHandler = async (req, res) => {
   }
 }
 
-export const getLayoutBodySlots: RequestHandler = async (req, res) => {
+export const getLayoutBodySlots: RequestHandler = async (req, res, next) => {
   const layoutIdNumeric = Number(req.params.layoutId)
   const hasValidId = Number.isFinite(layoutIdNumeric) && layoutIdNumeric > 0
 
   if (!hasValidId) {
     return res.status(400).json({ error: 'Invalid layoutId' })
+  }
+
+  const accountId = req.user!.accountId!
+  const belongs = await svc.layoutBelongsToAccount(layoutIdNumeric, accountId)
+  if (!belongs) {
+    next(new AppError('Layout not found', 404))
+    return
   }
 
   try {
@@ -397,7 +508,7 @@ export const getLayoutBodySlots: RequestHandler = async (req, res) => {
   }
 }
 
-export const renderLayout: RequestHandler = async (req, res) => {
+export const renderLayout: RequestHandler = async (req, res, next) => {
   const layoutIdMaybe = parseNumberParam(req.params?.layoutId)
   if (layoutIdMaybe === undefined) {
     return res
@@ -413,6 +524,18 @@ export const renderLayout: RequestHandler = async (req, res) => {
       .json({ error: 'sheetId (query) is required and must be a number' })
   }
   const sheetId = sheetIdMaybe
+
+  const accountId = req.user!.accountId!
+  const sheetBelongs = await sheetBelongsToAccount(sheetId, accountId)
+  if (!sheetBelongs) {
+    next(new AppError('Sheet not found', 404))
+    return
+  }
+  const layoutBelongs = await svc.layoutBelongsToAccount(layoutId, accountId)
+  if (!layoutBelongs) {
+    next(new AppError('Layout not found', 404))
+    return
+  }
 
   const uom: UomSystem = parseUomParam(req.query?.uom) ?? 'SI'
   const lang: LangCode = parseLangParam(req.query?.lang) ?? 'eng'
@@ -456,7 +579,7 @@ export const getStructure: RequestHandler = async (req, res) => {
   }
 }
 
-export const getSubsheetSlots: RequestHandler = async (req, res) => {
+export const getSubsheetSlots: RequestHandler = async (req, res, next) => {
   const layoutIdNumeric = Number(req.params.layoutId)
   const subIdNumeric = Number(req.params.subId)
 
@@ -465,6 +588,13 @@ export const getSubsheetSlots: RequestHandler = async (req, res) => {
 
   if (!hasValidLayoutId || !hasValidSubId) {
     res.status(400).json({ error: 'Invalid layoutId or subId' })
+    return
+  }
+
+  const accountId = req.user!.accountId!
+  const belongs = await svc.layoutBelongsToAccount(layoutIdNumeric, accountId)
+  if (!belongs) {
+    next(new AppError('Layout not found', 404))
     return
   }
 

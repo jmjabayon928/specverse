@@ -202,7 +202,7 @@ describe('valueSetQueries', () => {
         .mockResolvedValueOnce({ recordset: [] })
         .mockResolvedValueOnce({ recordset: [{ ValueSetID: 50 }] })
 
-      const id = await ensureRequirementValueSetInTransaction(mockTransaction as never, 42, 1)
+      const id = await ensureRequirementValueSetInTransaction(mockTransaction as never, 42, 1, 1)
       expect(id).toBe(50)
       expect(mockTransaction.request).toHaveBeenCalled()
     })
@@ -212,7 +212,7 @@ describe('valueSetQueries', () => {
         .mockResolvedValueOnce({ recordset: [{ ContextID: 1 }] })
         .mockResolvedValueOnce({ recordset: [{ ValueSetID: 50 }] })
 
-      const id = await ensureRequirementValueSetInTransaction(mockTransaction as never, 42, 1)
+      const id = await ensureRequirementValueSetInTransaction(mockTransaction as never, 42, 1, 1)
       expect(id).toBe(50)
     })
   })

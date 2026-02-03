@@ -97,10 +97,13 @@ export type CreateAttachmentInput = {
    Queries for filled sheet listing and template metadata
    ────────────────────────────────────────────────────────────── */
 
-export const fetchAllFilled = async () => {
+export const fetchAllFilled = async (accountId: number) => {
   const pool = await poolPromise
 
-  const result = await pool.query(`
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .query(`
     SELECT 
       s.SheetID AS sheetId,
       s.SheetName AS sheetName,
@@ -120,11 +123,26 @@ export const fetchAllFilled = async () => {
     LEFT JOIN Users u ON s.PreparedByID = u.UserID
     LEFT JOIN dbo.Disciplines d ON d.DisciplineID = s.DisciplineID
     LEFT JOIN dbo.DatasheetSubtypes st ON st.SubtypeID = s.SubtypeID
-    WHERE s.IsTemplate = 0
+    WHERE s.IsTemplate = 0 AND s.AccountID = @AccountID
     ORDER BY s.SheetID DESC
   `)
 
   return result.recordset ?? []
+}
+
+/**
+ * Returns true if the sheet exists and belongs to the given account (for value-set / sheet-gate).
+ */
+export async function sheetBelongsToAccount(sheetId: number, accountId: number): Promise<boolean> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .input('AccountID', sql.Int, accountId)
+    .query<{ Ex: number }>(`
+      SELECT 1 AS Ex FROM dbo.Sheets WHERE SheetID = @SheetID AND AccountID = @AccountID
+    `)
+  return (result.recordset?.length ?? 0) > 0
 }
 
 export async function getRequiredTemplateFields(templateId: number): Promise<RequiredTemplateField[]> {
@@ -159,11 +177,16 @@ export async function getRequiredTemplateFields(templateId: number): Promise<Req
 
 export async function createFilledSheet(
   data: UnifiedSheet & { fieldValues: Record<string, string> },
-  context: AuditContext
+  context: AuditContext,
+  accountId: number
 ): Promise<{ sheetId: number }> {
-  return runInTransaction(async tx => {
-    const templateIdNum = validateTopLevel(data)
+  const templateIdNum = validateTopLevel(data)
+  const templateBelongs = await sheetBelongsToAccount(templateIdNum, accountId)
+  if (!templateBelongs) {
+    throw new AppError('Template not found.', 404)
+  }
 
+  return runInTransaction(async tx => {
     const templateMetaResult = await tx.request()
       .input('TemplateID', sql.Int, templateIdNum)
       .query<{ Status: string; IsLatest: number; IsTemplate: number }>(`
@@ -259,9 +282,9 @@ export async function createFilledSheet(
       subtypeId: subtypeId ?? undefined,
     }
 
-    const sheetId = await insertSheet(tx, dataWithDiscipline, context.userId, templateIdNum)
-    const valueSetId = await ensureRequirementValueSetInTransaction(tx, sheetId, context.userId)
-    await cloneSubsheetsAndFields(tx, sheetId, dataWithDiscipline, fieldMap, valueSetId)
+    const sheetId = await insertSheet(tx, dataWithDiscipline, context.userId, templateIdNum, accountId)
+    const valueSetId = await ensureRequirementValueSetInTransaction(tx, sheetId, context.userId, accountId)
+    await cloneSubsheetsAndFields(tx, sheetId, dataWithDiscipline, fieldMap, valueSetId, accountId)
 
     await writeAuditAndNotify(sheetId, dataWithDiscipline, context)
 
@@ -650,9 +673,11 @@ async function insertSheet(
   tx: sql.Transaction,
   data: UnifiedSheet,
   userId: number | undefined,
-  templateIdNum: number
+  templateIdNum: number,
+  accountId: number
 ): Promise<number> {
   const rs = await tx.request()
+    .input('AccountID', sql.Int, accountId)
     .input('SheetName', sql.VarChar(255), nv(data.sheetName))
     .input('SheetDesc', sql.VarChar(255), nv(data.sheetDesc))
     .input('SheetDesc2', sql.VarChar(255), nv(data.sheetDesc2))
@@ -697,7 +722,7 @@ async function insertSheet(
         AreaID, PackageName, RevisionNum, RevisionDate, PreparedByID, PreparedByDate,
         EquipmentName, EquipmentTagNum, ServiceName, RequiredQty, ItemLocation,
         ManuID, SuppID, InstallPackNum, EquipSize, ModelNum, Driver, LocationDwg, PID, InstallDwg, CodeStd,
-        CategoryID, ClientID, ProjectID, DisciplineID, SubtypeID, Status, IsLatest, IsTemplate, AutoCADImport, TemplateID
+        CategoryID, ClientID, ProjectID, DisciplineID, SubtypeID, Status, IsLatest, IsTemplate, AutoCADImport, TemplateID, AccountID
       )
       OUTPUT INSERTED.SheetID
       VALUES (
@@ -705,7 +730,7 @@ async function insertSheet(
         @AreaID, @PackageName, @RevisionNum, @RevisionDate, @PreparedByID, @PreparedByDate,
         @EquipmentName, @EquipmentTagNum, @ServiceName, @RequiredQty, @ItemLocation,
         @ManuID, @SuppID, @InstallPackNum, @EquipSize, @ModelNum, @Driver, @LocationDwg, @PID, @InstallDwg, @CodeStd,
-        @CategoryID, @ClientID, @ProjectID, @DisciplineID, @SubtypeID, @Status, @IsLatest, @IsTemplate, @AutoCADImport, @TemplateID
+        @CategoryID, @ClientID, @ProjectID, @DisciplineID, @SubtypeID, @Status, @IsLatest, @IsTemplate, @AutoCADImport, @TemplateID, @AccountID
       );
     `)
 
@@ -717,11 +742,12 @@ async function cloneSubsheetsAndFields(
   sheetId: number,
   data: UnifiedSheet & { fieldValues: Record<string, string> },
   fieldMap: Record<string, Record<number, { required: boolean; uom: string | null; label?: string | null }>>,
-  valueSetId: number
+  valueSetId: number,
+  accountId: number
 ): Promise<void> {
   for (let i = 0; i < data.subsheets.length; i += 1) {
     const subsheet = data.subsheets[i]
-    const newSubId = await insertSubsheet(tx, sheetId, subsheet.name, subsheet.id, i)
+    const newSubId = await insertSubsheet(tx, sheetId, subsheet.name, subsheet.id, i, accountId)
 
     for (let j = 0; j < subsheet.fields.length; j += 1) {
       const field = subsheet.fields[j]
@@ -738,11 +764,12 @@ async function cloneSubsheetsAndFields(
         tx,
         newSubId,
         enrichedField,
-        enrichedField.sortOrder ?? j
+        enrichedField.sortOrder ?? j,
+        accountId
       )
 
       if (Array.isArray(enrichedField.options) && enrichedField.options.length > 0) {
-        await insertInfoOptions(tx, newInfoId, enrichedField.options)
+        await insertInfoOptions(tx, newInfoId, enrichedField.options, accountId)
       }
 
       const originalId = enrichedField.id
@@ -753,7 +780,7 @@ async function cloneSubsheetsAndFields(
       const raw = data.fieldValues[String(originalId)]
       if (!isBlank(raw)) {
         const uom = enrichedField.uom ?? ''
-        await insertInfoValue(tx, newInfoId, sheetId, String(raw), valueSetId, uom)
+        await insertInfoValue(tx, newInfoId, sheetId, String(raw), valueSetId, uom, accountId)
       }
     }
   }
@@ -764,17 +791,19 @@ async function insertSubsheet(
   sheetId: number,
   subName: string,
   templateSubId: number | undefined,
-  orderIndex: number
+  orderIndex: number,
+  accountId: number
 ): Promise<number> {
   const rs = await tx.request()
+    .input('AccountID', sql.Int, accountId)
     .input('SubName', sql.VarChar(150), nv(subName))
     .input('SheetID', sql.Int, sheetId)
     .input('OrderIndex', sql.Int, orderIndex)
     .input('TemplateSubID', sql.Int, iv(templateSubId))
     .query<{ SubID: number }>(`
-      INSERT INTO SubSheets (SubName, SheetID, OrderIndex, TemplateSubID)
+      INSERT INTO SubSheets (SubName, SheetID, OrderIndex, TemplateSubID, AccountID)
       OUTPUT INSERTED.SubID
-      VALUES (@SubName, @SheetID, @OrderIndex, @TemplateSubID);
+      VALUES (@SubName, @SheetID, @OrderIndex, @TemplateSubID, @AccountID);
     `)
 
   return rs.recordset[0].SubID
@@ -784,12 +813,14 @@ async function insertInfoTemplate(
   tx: sql.Transaction,
   subId: number,
   field: InfoField,
-  orderIndex: number
+  orderIndex: number,
+  accountId: number
 ): Promise<number> {
   const required = Boolean(field.required)
   const uom = field.uom ?? ''
 
   const rs = await tx.request()
+    .input('AccountID', sql.Int, accountId)
     .input('SubID', sql.Int, subId)
     .input('Label', sql.VarChar(150), nv(field.label))
     .input('InfoType', sql.VarChar(30), nv(field.infoType))
@@ -799,10 +830,10 @@ async function insertInfoTemplate(
     .input('TemplateInfoTemplateID', sql.Int, iv(field.id))
     .query<{ InfoTemplateID: number }>(`
       INSERT INTO InformationTemplates
-        (SubID, Label, InfoType, OrderIndex, UOM, Required, TemplateInfoTemplateID)
+        (SubID, Label, InfoType, OrderIndex, UOM, Required, TemplateInfoTemplateID, AccountID)
       OUTPUT INSERTED.InfoTemplateID
       VALUES
-        (@SubID, @Label, @InfoType, @OrderIndex, @UOM, @Required, @TemplateInfoTemplateID);
+        (@SubID, @Label, @InfoType, @OrderIndex, @UOM, @Required, @TemplateInfoTemplateID, @AccountID);
     `)
 
   return rs.recordset[0].InfoTemplateID
@@ -811,16 +842,18 @@ async function insertInfoTemplate(
 async function insertInfoOptions(
   tx: sql.Transaction,
   infoTemplateId: number,
-  options: string[]
+  options: string[],
+  accountId: number
 ): Promise<void> {
   for (let k = 0; k < options.length; k += 1) {
     await tx.request()
+      .input('AccountID', sql.Int, accountId)
       .input('InfoTemplateID', sql.Int, infoTemplateId)
       .input('OptionValue', sql.VarChar(100), nv(options[k]))
       .input('SortOrder', sql.Int, k)
       .query(`
-        INSERT INTO InformationTemplateOptions (InfoTemplateID, OptionValue, SortOrder)
-        VALUES (@InfoTemplateID, @OptionValue, @SortOrder);
+        INSERT INTO InformationTemplateOptions (InfoTemplateID, OptionValue, SortOrder, AccountID)
+        VALUES (@InfoTemplateID, @OptionValue, @SortOrder, @AccountID);
       `)
   }
 }
@@ -830,29 +863,32 @@ async function insertInfoValue(
   infoTemplateId: number,
   sheetId: number,
   value: string,
-  valueSetId?: number | null,
-  uom?: string | null
+  valueSetId: number | null | undefined,
+  uom: string | null | undefined,
+  accountId: number
 ): Promise<void> {
   if (valueSetId != null) {
     await tx.request()
+      .input('AccountID', sql.Int, accountId)
       .input('InfoTemplateID', sql.Int, infoTemplateId)
       .input('SheetID', sql.Int, sheetId)
       .input('InfoValue', sql.VarChar(sql.MAX), value)
       .input('ValueSetID', sql.Int, valueSetId)
       .input('UOM', sql.NVarChar(50), uom ?? '')
       .query(`
-        INSERT INTO InformationValues (InfoTemplateID, SheetID, InfoValue, ValueSetID, UOM)
-        VALUES (@InfoTemplateID, @SheetID, @InfoValue, @ValueSetID, @UOM);
+        INSERT INTO InformationValues (InfoTemplateID, SheetID, InfoValue, ValueSetID, UOM, AccountID)
+        VALUES (@InfoTemplateID, @SheetID, @InfoValue, @ValueSetID, @UOM, @AccountID);
       `)
     return
   }
   await tx.request()
+    .input('AccountID', sql.Int, accountId)
     .input('InfoTemplateID', sql.Int, infoTemplateId)
     .input('SheetID', sql.Int, sheetId)
     .input('InfoValue', sql.VarChar(sql.MAX), value)
     .query(`
-      INSERT INTO InformationValues (InfoTemplateID, SheetID, InfoValue)
-      VALUES (@InfoTemplateID, @SheetID, @InfoValue);
+      INSERT INTO InformationValues (InfoTemplateID, SheetID, InfoValue, AccountID)
+      VALUES (@InfoTemplateID, @SheetID, @InfoValue, @AccountID);
     `)
 }
 
@@ -1010,12 +1046,15 @@ export async function getLatestApprovedTemplateId(sourceTemplateId: number): Pro
 export async function getFilledSheetDetailsById(
   sheetId: number,
   lang: string = 'eng',
-  uom: UOM = 'SI'
+  uom: UOM = 'SI',
+  accountId: number
 ) {
   const pool = await poolPromise
 
-  const sheetResult = await pool.request()
+  const sheetResult = await pool
+    .request()
     .input('SheetID', sql.Int, sheetId)
+    .input('AccountID', sql.Int, accountId)
     .query(`
       SELECT 
         s.*,
@@ -1048,7 +1087,7 @@ export async function getFilledSheetDetailsById(
       LEFT JOIN Projects p ON s.ProjectID = p.ProjectID
       LEFT JOIN dbo.Disciplines d ON s.DisciplineID = d.DisciplineID
       LEFT JOIN dbo.DatasheetSubtypes ds ON s.SubtypeID = ds.SubtypeID
-      WHERE s.SheetID = @SheetID
+      WHERE s.SheetID = @SheetID AND s.AccountID = @AccountID
     `)
 
   const row = sheetResult.recordset[0]
@@ -2615,14 +2654,15 @@ export async function deleteNoteForSheet(
 export async function exportPDF(
   sheetId: number,
   lang: string = 'eng',
-  uom: UOM = 'SI'
+  uom: UOM = 'SI',
+  accountId: number
 ): Promise<{ filePath: string; fileName: string }> {
   const dir = path.resolve(process.cwd(), 'public', 'exports')
   await ensureDir(dir)
 
-  const details = await getFilledSheetDetailsById(sheetId, lang, uom)
+  const details = await getFilledSheetDetailsById(sheetId, lang, uom, accountId)
   if (!details) {
-    throw new Error(`Sheet ${sheetId} not found`)
+    throw new AppError('Sheet not found', 404)
   }
 
   const { datasheet } = details
@@ -2637,14 +2677,15 @@ export async function exportPDF(
 export async function exportExcel(
   sheetId: number,
   lang: string = 'eng',
-  uom: UOM = 'SI'
+  uom: UOM = 'SI',
+  accountId: number
 ): Promise<{ filePath: string; fileName: string }> {
   const dir = path.resolve(process.cwd(), 'public', 'exports')
   await ensureDir(dir)
 
-  const details = await getFilledSheetDetailsById(sheetId, lang, uom)
+  const details = await getFilledSheetDetailsById(sheetId, lang, uom, accountId)
   if (!details) {
-    throw new Error(`Sheet ${sheetId} not found`)
+    throw new AppError('Sheet not found', 404)
   }
 
   const { datasheet } = details

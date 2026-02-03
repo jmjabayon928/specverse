@@ -250,9 +250,11 @@ export async function fetchTemplateStructure(sheetId: number): Promise<TemplateS
 function applySheetInputsForInsert(
   req: sql.Request,
   data: UnifiedSheet,
-  userId: number
+  userId: number,
+  accountId: number
 ): sql.Request {
   return req
+    .input('AccountID', sql.Int, accountId)
     .input('SheetName', sql.VarChar(255), nv(data.sheetName) ?? '')
     .input('SheetDesc', sql.VarChar(255), nv(data.sheetDesc) ?? '')
     .input('SheetDesc2', sql.VarChar(255), nv(data.sheetDesc2) ?? '')
@@ -339,7 +341,8 @@ function applySheetInputsForUpdate(
 async function insertSubsheetTree(
   tx: sql.Transaction,
   sheetId: number,
-  data: UnifiedSheet
+  data: UnifiedSheet,
+  accountId: number
 ): Promise<void> {
   for (let i = 0; i < data.subsheets.length; i += 1) {
     const sub = data.subsheets[i]
@@ -350,14 +353,15 @@ async function insertSubsheetTree(
 
     const subRs = await tx
       .request()
+      .input('AccountID', sql.Int, accountId)
       .input('SubName', sql.VarChar(150), nv(sub.name))
       .input('SheetID', sql.Int, sheetId)
       .input('OrderIndex', sql.Int, i)
       .input('TemplateSubID', sql.Int, templateSubId)
       .query<{ SubID: number }>(`
-        INSERT INTO SubSheets (SubName, SheetID, OrderIndex, TemplateSubID)
+        INSERT INTO SubSheets (SubName, SheetID, OrderIndex, TemplateSubID, AccountID)
         OUTPUT INSERTED.SubID
-        VALUES (@SubName, @SheetID, @OrderIndex, @TemplateSubID)
+        VALUES (@SubName, @SheetID, @OrderIndex, @TemplateSubID, @AccountID)
       `)
 
     const newSubId = subRs.recordset[0].SubID
@@ -368,6 +372,7 @@ async function insertSubsheetTree(
 
       const infoRs = await tx
         .request()
+        .input('AccountID', sql.Int, accountId)
         .input('SubID', sql.Int, newSubId)
         .input('Label', sql.VarChar(150), nv(f.label))
         .input('InfoType', sql.VarChar(30), infoType)
@@ -377,9 +382,9 @@ async function insertSubsheetTree(
         .input('TemplateInfoTemplateID', sql.Int, iv(f.originalId ?? f.id))
         .query<{ InfoTemplateID: number }>(`
           INSERT INTO InformationTemplates
-            (SubID, Label, InfoType, OrderIndex, UOM, Required, TemplateInfoTemplateID)
+            (SubID, Label, InfoType, OrderIndex, UOM, Required, TemplateInfoTemplateID, AccountID)
           OUTPUT INSERTED.InfoTemplateID
-          VALUES (@SubID, @Label, @InfoType, @OrderIndex, @UOM, @Required, @TemplateInfoTemplateID)
+          VALUES (@SubID, @Label, @InfoType, @OrderIndex, @UOM, @Required, @TemplateInfoTemplateID, @AccountID)
         `)
 
       const newInfoId = infoRs.recordset[0].InfoTemplateID
@@ -388,12 +393,13 @@ async function insertSubsheetTree(
         for (let k = 0; k < f.options.length; k += 1) {
           await tx
             .request()
+            .input('AccountID', sql.Int, accountId)
             .input('InfoTemplateID', sql.Int, newInfoId)
             .input('OptionValue', sql.VarChar(100), nv(f.options[k]))
             .input('SortOrder', sql.Int, k)
             .query(`
-              INSERT INTO InformationTemplateOptions (InfoTemplateID, OptionValue, SortOrder)
-              VALUES (@InfoTemplateID, @OptionValue, @SortOrder)
+              INSERT INTO InformationTemplateOptions (InfoTemplateID, OptionValue, SortOrder, AccountID)
+              VALUES (@InfoTemplateID, @OptionValue, @SortOrder, @AccountID)
             `)
         }
       }
@@ -431,7 +437,14 @@ async function syncSubsheetTree(
       DELETE FROM SubSheets WHERE SheetID = @SheetID;
     `)
 
-  await insertSubsheetTree(tx, sheetId, data)
+  const accountRow = await tx.request().input('SheetID', sql.Int, sheetId).query<{ AccountID: number }>(`
+    SELECT AccountID FROM dbo.Sheets WHERE SheetID = @SheetID
+  `)
+  const accountId = accountRow.recordset[0]?.AccountID
+  if (accountId == null) {
+    throw new Error('Sheet not found for syncSubsheetTree')
+  }
+  await insertSubsheetTree(tx, sheetId, data, accountId)
 }
 
 // ───────────────────────────────────────────
@@ -1016,10 +1029,13 @@ export const fetchTemplateReferenceOptions = async () => {
 // Template list
 // ───────────────────────────────────────────
 
-export const fetchAllTemplates = async () => {
+export const fetchAllTemplates = async (accountId: number) => {
   const pool = await poolPromise
 
-  const result = await pool.query(`
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .query(`
     SELECT 
       s.SheetID AS sheetId,
       s.SheetName AS sheetName,
@@ -1039,7 +1055,7 @@ export const fetchAllTemplates = async () => {
     LEFT JOIN Users u ON s.PreparedByID = u.UserID
     LEFT JOIN dbo.Disciplines d ON d.DisciplineID = s.DisciplineID
     LEFT JOIN dbo.DatasheetSubtypes st ON st.SubtypeID = s.SubtypeID
-    WHERE s.IsTemplate = 1
+    WHERE s.IsTemplate = 1 AND s.AccountID = @AccountID
     ORDER BY s.SheetID DESC
   `)
 
@@ -1487,7 +1503,8 @@ export async function deleteTemplateAttachment(sheetId: number, attachmentId: nu
 
 export async function createTemplate(
   data: UnifiedSheet,
-  userId: number
+  userId: number,
+  accountId: number
 ): Promise<number> {
   const pool = await poolPromise
   const tx = new sql.Transaction(pool)
@@ -1498,14 +1515,14 @@ export async function createTemplate(
     await tx.begin()
     didBegin = true
 
-    const insertReq = applySheetInputsForInsert(tx.request(), data, userId)
+    const insertReq = applySheetInputsForInsert(tx.request(), data, userId, accountId)
     const sheetRs = await insertReq.query<{ SheetID: number }>(`
       INSERT INTO Sheets (
         SheetName, SheetDesc, SheetDesc2, ClientDocNum, ClientProjNum, CompanyDocNum, CompanyProjNum,
         AreaID, PackageName, RevisionNum, RevisionDate, PreparedByID, PreparedByDate,
         EquipmentName, EquipmentTagNum, ServiceName, RequiredQty, ItemLocation,
         ManuID, SuppID, InstallPackNum, EquipSize, ModelNum, Driver, LocationDwg, PID, InstallDwg, CodeStd,
-        CategoryID, ClientID, ProjectID, DisciplineID, SubtypeID, Status, IsLatest, IsTemplate, AutoCADImport
+        CategoryID, ClientID, ProjectID, DisciplineID, SubtypeID, Status, IsLatest, IsTemplate, AutoCADImport, AccountID
       )
       OUTPUT INSERTED.SheetID
       VALUES (
@@ -1513,13 +1530,13 @@ export async function createTemplate(
         @AreaID, @PackageName, @RevisionNum, @RevisionDate, @PreparedByID, @PreparedByDate,
         @EquipmentName, @EquipmentTagNum, @ServiceName, @RequiredQty, @ItemLocation,
         @ManuID, @SuppID, @InstallPackNum, @EquipSize, @ModelNum, @Driver, @LocationDwg, @PID, @InstallDwg, @CodeStd,
-        @CategoryID, @ClientID, @ProjectID, @DisciplineID, @SubtypeID, @Status, @IsLatest, @IsTemplate, @AutoCADImport
+        @CategoryID, @ClientID, @ProjectID, @DisciplineID, @SubtypeID, @Status, @IsLatest, @IsTemplate, @AutoCADImport, @AccountID
       );
     `)
 
     const sheetId = sheetRs.recordset[0].SheetID
 
-    await insertSubsheetTree(tx, sheetId, data)
+    await insertSubsheetTree(tx, sheetId, data, accountId)
 
     await tx.commit()
     didCommit = true
@@ -1657,13 +1674,15 @@ export async function updateTemplate(
 export async function getTemplateDetailsById(
   templateId: number,
   lang: string = 'eng',
-  uom: Uom = 'SI'
+  uom: Uom = 'SI',
+  accountId: number
 ): Promise<{ datasheet: UnifiedSheet; translations: unknown } | null> {
   const pool = await poolPromise
 
   const sheetResult = await pool
     .request()
     .input('SheetID', sql.Int, templateId)
+    .input('AccountID', sql.Int, accountId)
     .query(`
       SELECT 
         s.SheetID,
@@ -1744,7 +1763,7 @@ export async function getTemplateDetailsById(
       LEFT JOIN Projects p ON s.ProjectID = p.ProjectID
       LEFT JOIN dbo.Disciplines d ON s.DisciplineID = d.DisciplineID
       LEFT JOIN dbo.DatasheetSubtypes ds ON s.SubtypeID = ds.SubtypeID
-      WHERE s.SheetID = @SheetID
+      WHERE s.SheetID = @SheetID AND s.AccountID = @AccountID
     `)
 
   const row = sheetResult.recordset[0]
@@ -2173,11 +2192,12 @@ function toSheetId(result: unknown): number {
 export async function cloneTemplateFrom(
   sourceTemplateId: number,
   overrides: Partial<UnifiedSheet>,
-  userId: number
+  userId: number,
+  accountId: number
 ): Promise<{ sheetId: number }> {
-  const details = await getTemplateDetailsById(sourceTemplateId)
+  const details = await getTemplateDetailsById(sourceTemplateId, 'eng', 'SI', accountId)
   if (details?.datasheet == null) {
-    throw new Error('Source template not found')
+    throw new AppError('Source template not found', 404)
   }
 
   const src = details.datasheet
@@ -2196,7 +2216,7 @@ export async function cloneTemplateFrom(
     approvedDate: null,
   }
 
-  const created = (await createTemplate(payload, userId)) as unknown
+  const created = (await createTemplate(payload, userId, accountId)) as unknown
   const newId = toSheetId(created)
   return { sheetId: newId }
 }
@@ -2208,14 +2228,15 @@ export async function cloneTemplateFrom(
 export async function exportTemplatePDF(
   templateId: number,
   lang: string = 'eng',
-  uom: Uom = 'SI'
+  uom: Uom = 'SI',
+  accountId: number
 ): Promise<{ filePath: string; fileName: string }> {
   const dir = path.resolve(process.cwd(), 'public', 'exports')
   await fs.mkdir(dir, { recursive: true })
 
-  const templateDetails = await getTemplateDetailsById(templateId, lang, uom)
+  const templateDetails = await getTemplateDetailsById(templateId, lang, uom, accountId)
   if (templateDetails == null) {
-    throw new Error(`Template ${templateId} not found`)
+    throw new AppError('Template not found', 404)
   }
 
   const datasheetLike: UnifiedSheet = hasDatasheet(templateDetails)
@@ -2232,14 +2253,15 @@ export async function exportTemplatePDF(
 export async function exportTemplateExcel(
   templateId: number,
   lang: string = 'eng',
-  uom: Uom = 'SI'
+  uom: Uom = 'SI',
+  accountId: number
 ): Promise<{ filePath: string; fileName: string }> {
   const dir = path.resolve(process.cwd(), 'public', 'exports')
   await fs.mkdir(dir, { recursive: true })
 
-  const templateDetails = await getTemplateDetailsById(templateId, lang, uom)
+  const templateDetails = await getTemplateDetailsById(templateId, lang, uom, accountId)
   if (templateDetails == null) {
-    throw new Error(`Template ${templateId} not found`)
+    throw new AppError('Template not found', 404)
   }
 
   const datasheetLike: UnifiedSheet = hasDatasheet(templateDetails)

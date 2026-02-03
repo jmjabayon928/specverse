@@ -30,6 +30,7 @@ import {
   doesEquipmentTagExist,
   getFilledSheetTemplateId,
   getLatestApprovedTemplateId,
+  sheetBelongsToAccount,
 
   // attachments (canonical + legacy helpers)
   getAttachmentsForSheet,
@@ -225,9 +226,10 @@ const checkTagQuerySchema = z.object({
    Lists & reference
    ─────────────────────────────────────────── */
 
-export const getAllFilled: RequestHandler = async (_req, res, next) => {
+export const getAllFilled: RequestHandler = async (req, res, next) => {
   try {
-    const rows = await fetchAllFilled()
+    const accountId = req.user!.accountId!
+    const rows = await fetchAllFilled(accountId)
     res.status(200).json(rows)
   } catch (err: unknown) {
     handleError(next, err, "Failed to fetch filled sheets")
@@ -249,6 +251,8 @@ export const getReferenceOptions: RequestHandler = async (_req, res, next) => {
 
 export const getFilledSheetById: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user!.accountId!
+
     const parsedParams = idParamsSchema.parse(req.params)
     const sheetId = parseId(parsedParams.id)
 
@@ -262,7 +266,11 @@ export const getFilledSheetById: RequestHandler = async (req, res, next) => {
     res.set("Cache-Control", "private, no-store")
     res.set("Vary", "Accept-Language, Cookie")
 
-    const data = await getFilledSheetDetailsById(sheetId, lang)
+    const data = await getFilledSheetDetailsById(sheetId, lang, "SI", accountId)
+    if (data == null) {
+      next(new AppError("Sheet not found", 404))
+      return
+    }
     res.status(200).json(data)
   } catch (err: unknown) {
     handleError(next, err, "Failed to get filled sheet")
@@ -286,8 +294,9 @@ export const createFilledSheetHandler: RequestHandler = async (req, res, next) =
       isTemplate: false,
     }
 
+    const accountId = req.user!.accountId!
     const ctx = { userId: user.userId, route: req.originalUrl, method: req.method }
-    const result = (await createFilledSheet(createInput, ctx)) as CreateFilledSheetResult
+    const result = (await createFilledSheet(createInput, ctx, accountId)) as CreateFilledSheetResult
 
     res.status(201).json({ sheetId: result.sheetId })
   } catch (err: unknown) {
@@ -314,7 +323,9 @@ export const updateFilledSheetHandler: RequestHandler = async (req, res, next) =
     updateFilledSheetBodySchema.parse(req.body)
     const body = req.body as UpdateFilledSheetBody
 
-    const current = await getFilledSheetDetailsById(sheetId)
+    const accountId = req.user!.accountId!
+
+    const current = await getFilledSheetDetailsById(sheetId, "eng", "SI", accountId)
     const existing = current?.datasheet
     if (existing == null) {
       next(new AppError("Sheet not found", 404))
@@ -352,6 +363,13 @@ export const verifyFilledSheetHandler: RequestHandler = async (req, res, next) =
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
+      return
+    }
+
     const { action, rejectionComment } = verifyFilledSheetBodySchema.parse(req.body)
 
     await verifyFilledSheet(sheetId, action, rejectionComment, userId)
@@ -375,6 +393,13 @@ export const approveFilledSheetHandler: RequestHandler = async (req, res, next) 
     const userId = user?.userId
     if (userId == null) {
       next(new AppError("Unauthorized", 401))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
       return
     }
 
@@ -449,6 +474,13 @@ export const cloneFilledSheetHandler: RequestHandler = async (req, res, next) =>
       return
     }
 
+    const accountId = req.user!.accountId!
+    const sourceBelongs = await sheetBelongsToAccount(sourceId, accountId)
+    if (!sourceBelongs) {
+      next(new AppError("Sheet not found", 404))
+      return
+    }
+
     const sourceTemplateRow = await getFilledSheetTemplateId(sourceId)
     if (!sourceTemplateRow?.TemplateID) {
       next(new AppError("Source sheet is not a filled sheet or has no template.", 400))
@@ -467,7 +499,7 @@ export const cloneFilledSheetHandler: RequestHandler = async (req, res, next) =>
       fieldValues: body.fieldValues ?? {},
     }
 
-    const created = (await createFilledSheet(createInput, ctx)) as CreateFilledSheetResult
+    const created = (await createFilledSheet(createInput, ctx, accountId)) as CreateFilledSheetResult
     res.status(201).json({ sheetId: created.sheetId })
   } catch (err: unknown) {
     handleError(next, err, "Failed to clone filled sheet")
@@ -491,6 +523,13 @@ export const uploadFilledSheetAttachmentHandler: RequestHandler = async (req, re
     const user = asUser(req)
     if (user?.userId == null) {
       next(new AppError("Unauthorized", 401))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
       return
     }
 
@@ -521,6 +560,13 @@ export const listFilledSheetAttachmentsHandler: RequestHandler = async (req, res
 
     if (sheetId == null) {
       next(new AppError("Invalid sheet ID", 400))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
       return
     }
 
@@ -558,6 +604,13 @@ export const deleteFilledSheetAttachmentHandler: RequestHandler = async (req, re
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
+      return
+    }
+
     const deletedCanonical = await deleteSheetAttachmentLink(sheetId, attachmentId)
     if (deletedCanonical) {
       await bumpRejectedToModifiedDraftFilled(sheetId, user.userId)
@@ -586,6 +639,13 @@ export const listFilledSheetNotesHandler: RequestHandler = async (req, res, next
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
+      return
+    }
+
     const items = await getNotesForSheet(sheetId)
     res.status(200).json(items)
   } catch (err: unknown) {
@@ -606,6 +666,13 @@ export const createFilledSheetNoteHandler: RequestHandler = async (req, res, nex
     const user = asUser(req)
     if (user?.userId == null) {
       next(new AppError("Unauthorized", 401))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
       return
     }
 
@@ -632,6 +699,13 @@ export const updateFilledSheetNoteHandler: RequestHandler = async (req, res, nex
     const user = asUser(req)
     if (user?.userId == null) {
       next(new AppError("Unauthorized", 401))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
       return
     }
 
@@ -662,6 +736,13 @@ export const deleteFilledSheetNoteHandler: RequestHandler = async (req, res, nex
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
+      return
+    }
+
     await deleteNoteForSheet(sheetId, noteId, userId)
     res.status(204).end()
   } catch (err: unknown) {
@@ -675,6 +756,8 @@ export const deleteFilledSheetNoteHandler: RequestHandler = async (req, res, nex
 
 export const exportFilledSheetPDF: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user!.accountId!
+
     const parsedParams = idParamsSchema.parse(req.params)
     const sheetId = parseId(parsedParams.id)
 
@@ -686,7 +769,7 @@ export const exportFilledSheetPDF: RequestHandler = async (req, res, next) => {
     const lang = parseLang(req.query.lang)
     const uom = parseUom(req.query.uom)
 
-    const { filePath, fileName } = await exportPDF(sheetId, lang, uom)
+    const { filePath, fileName } = await exportPDF(sheetId, lang, uom, accountId)
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
     res.status(200).sendFile(filePath)
@@ -697,6 +780,8 @@ export const exportFilledSheetPDF: RequestHandler = async (req, res, next) => {
 
 export const exportFilledSheetExcel: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user!.accountId!
+
     const parsedParams = idParamsSchema.parse(req.params)
     const sheetId = parseId(parsedParams.id)
 
@@ -708,7 +793,7 @@ export const exportFilledSheetExcel: RequestHandler = async (req, res, next) => 
     const lang = parseLang(req.query.lang)
     const uom = parseUom(req.query.uom)
 
-    const { filePath, fileName } = await exportExcel(sheetId, lang, uom)
+    const { filePath, fileName } = await exportExcel(sheetId, lang, uom, accountId)
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
     res.status(200).sendFile(filePath)

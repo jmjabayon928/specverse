@@ -3,7 +3,7 @@ import type { Request, RequestHandler } from 'express'
 import { z } from 'zod'
 import { AppError } from '../errors/AppError'
 import { listRevisionsPaged, getRevisionById, createRevision, REVISION_SNAPSHOT_INVALID_MESSAGE } from '../database/sheetRevisionQueries'
-import { updateFilledSheet, getFilledSheetDetailsById } from '../services/filledSheetService'
+import { updateFilledSheet, getFilledSheetDetailsById, sheetBelongsToAccount } from '../services/filledSheetService'
 import { poolPromise, sql } from '../config/db'
 import { unifiedSheetSchema } from '@/validation/sheetSchema'
 import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
@@ -62,6 +62,13 @@ export const listRevisionsHandler: RequestHandler = async (req, res, next) => {
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+
     const parsedQuery = listRevisionsQuerySchema.parse(req.query)
     const page = Math.max(1, parsedQuery.page ?? 1)
     const pageSize = Math.min(100, Math.max(1, parsedQuery.pageSize ?? 20))
@@ -105,6 +112,13 @@ export const getRevisionHandler: RequestHandler = async (req, res, next) => {
 
     if (sheetId == null || revisionId == null) {
       next(new AppError('Invalid sheet ID or revision ID', 400))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
       return
     }
 
@@ -157,6 +171,13 @@ export const restoreRevisionHandler: RequestHandler = async (req, res, next) => 
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+
     const parsedBody = restoreBodySchema.parse(req.body)
     const comment = parsedBody.comment
 
@@ -177,7 +198,7 @@ export const restoreRevisionHandler: RequestHandler = async (req, res, next) => 
     const snapshot = snapshotValidation.data
 
     // Verify the sheet still exists
-    const currentSheet = await getFilledSheetDetailsById(sheetId)
+    const currentSheet = await getFilledSheetDetailsById(sheetId, 'eng', 'SI', accountId)
     if (currentSheet == null) {
       next(new AppError('Sheet not found', 404))
       return
@@ -194,7 +215,7 @@ export const restoreRevisionHandler: RequestHandler = async (req, res, next) => 
 
     // Now create a new revision representing the restored state
     // Get the updated sheet to create the revision snapshot
-    const updatedSheet = await getFilledSheetDetailsById(sheetId)
+    const updatedSheet = await getFilledSheetDetailsById(sheetId, 'eng', 'SI', accountId)
     if (updatedSheet == null) {
       next(new AppError('Failed to retrieve updated sheet', 500))
       return
