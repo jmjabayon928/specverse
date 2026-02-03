@@ -2,10 +2,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import toast from "react-hot-toast";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import SecurePage from "@/components/security/SecurePage";
+import { getAuditEntityLink } from "@/utils/auditEntityLink";
 
 type AuditLogDTO = {
   auditLogId: number;
@@ -244,7 +246,9 @@ export default function AuditLogsPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {rows.map((r) => {
+                  const entityLink = getAuditEntityLink(r.entityType, r.entityId, r.action);
+                  return (
                   <tr
                     key={r.auditLogId}
                     className="border-b hover:bg-gray-50 cursor-pointer"
@@ -256,7 +260,21 @@ export default function AuditLogsPage() {
                     </td>
                     <td className="py-2 px-4">{r.action}</td>
                     <td className="py-2 px-4">{r.entityType ?? "—"}</td>
-                    <td className="py-2 px-4">{r.entityId ?? "—"}</td>
+                    <td className="py-2 px-4">
+                      {r.entityId ?? "—"}
+                      {entityLink && (
+                        <>
+                          {" · "}
+                          <Link
+                            href={entityLink.href}
+                            className="text-blue-600 hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            View
+                          </Link>
+                        </>
+                      )}
+                    </td>
                     <td className="py-2 px-4">
                       {r.route && r.method
                         ? `${r.method} ${r.route}`
@@ -265,7 +283,8 @@ export default function AuditLogsPage() {
                         : "—"}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {rows.length === 0 && (
                   <tr>
                     <td colSpan={6} className="py-6 text-center text-slate-500">
@@ -368,6 +387,16 @@ function AuditLogDetailDrawer({
           <div>
             <strong>Entity ID:</strong> {log.entityId ?? "—"}
           </div>
+          {(() => {
+            const entityLink = getAuditEntityLink(log.entityType, log.entityId, log.action);
+            return entityLink ? (
+              <div className="col-span-2">
+                <Link href={entityLink.href} className="text-blue-600 hover:underline">
+                  {entityLink.label} →
+                </Link>
+              </div>
+            ) : null;
+          })()}
           <div>
             <strong>Route:</strong> {log.route ?? "—"}
           </div>
