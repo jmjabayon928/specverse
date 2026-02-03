@@ -10,21 +10,23 @@
 
 ### 1.1 Accounts table (minimal)
 
+**Platform:** SQL Server (database `DataSheets`). PK and identity columns use **INT IDENTITY**; datetimes use **DATETIME2** with **GETDATE()** or **SYSUTCDATETIME()**.
+
 | Column       | Type         | Notes |
 |-------------|--------------|--------|
 | AccountID   | INT IDENTITY | PK. |
 | AccountName | NVARCHAR(255)| Display name. |
-| Slug        | NVARCHAR(64) | Optional; for URL/subdomain if needed. |
-| IsActive    | BIT          | Default 1. |
-| CreatedAt   | DATETIME2    | Default GETDATE(). |
-| UpdatedAt   | DATETIME2    | Nullable. |
+| Slug        | NVARCHAR(64) | Unique; for URL/subdomain if needed. |
+| IsActive    | BIT          | NOT NULL, default 1. |
+| CreatedAt   | DATETIME2    | NOT NULL, default GETDATE(). |
+| UpdatedAt   | DATETIME2    | NOT NULL, default GETDATE(). |
 
-No schema change is made in this step; the above is the target minimal shape for the **Accounts** table when implemented.
+No schema change is made in this step; the above is the target minimal shape for the **Accounts** table when implemented (see Bundle 1 migration).
 
 ### 1.2 AccountMembers (or equivalent) and relationship to Users
 
 - **AccountMembers** (or equivalent) links **Users** to **Accounts** with a **per-account role**.
-- Recommended minimal columns: `AccountID`, `UserID`, `RoleID`, `CreatedAt`. Optional: `InvitedBy`, `InvitedAt`.
+- Minimal columns (SQL Server): `AccountMemberID` (INT IDENTITY PK), `AccountID` (INT FK → Accounts), `UserID` (INT FK → Users), `RoleID` (INT FK → Roles), `IsActive`, `CreatedAt`, `UpdatedAt` (DATETIME2, GETDATE()). Optional: `InvitedBy`, `InvitedAt`.
 - **Relationship:** Many-to-many between Users and Accounts: one user can belong to multiple accounts, with one role per account (one row per (AccountID, UserID)).
 - **Users** remain the global identity (one row per human). They do **not** hold AccountID; membership is only in AccountMembers. This supports the same person in multiple tenants with different roles.
 

@@ -26,13 +26,15 @@
 
 ## 2) Schema migration plan (exact ordered list)
 
+**Platform:** SQL Server (database `DataSheets`). All migrations use T-SQL: **INT IDENTITY** for PKs, **DATETIME2** for timestamps, **GETDATE()** / **SYSUTCDATETIME()** for defaults. Bundle 1 is implemented as `phase2_5_bundle1_accounts_account_members.sql` (Accounts + AccountMembers + seed + backfill).
+
 Migrations are to be created in a later step; this is the ordered plan. Each step: migration name (filename pattern), tables/constraints affected, backfill approach, risk level, rollback strategy.
 
 | # | Migration name (suggested filename) | Tables/constraints affected | Backfill approach | Risk | Rollback |
 |---|------------------------------------|-----------------------------|-------------------|------|----------|
-| 1 | `phase2_5_create_accounts.sql` | Create `dbo.Accounts` (AccountID, AccountName, Slug, IsActive, CreatedAt, UpdatedAt). PK, indexes as needed. | N/A | Low | Drop table Accounts. |
-| 2 | `phase2_5_create_account_members.sql` | Create `dbo.AccountMembers` (AccountID, UserID, RoleID, CreatedAt; optional InvitedBy, InvitedAt). PK, UQ(AccountID, UserID), FKs to Accounts, Users, Roles. | N/A | Low | Drop table AccountMembers. |
-| 3 | `phase2_5_seed_default_account_and_members.sql` | Insert one default Account; for each existing User, insert one AccountMembers row (AccountID = default, UserID, RoleID = user’s current RoleID). | Backfill membership from Users.RoleID. | Medium | Delete default account rows and AccountMembers rows; optionally restore Users.RoleID from backup if removed later. |
+| 1 | `phase2_5_create_accounts.sql` (or Bundle 1) | Create `dbo.Accounts` (AccountID INT IDENTITY, AccountName, Slug, IsActive, CreatedAt, UpdatedAt DATETIME2). PK, UQ(Slug), indexes. | N/A | Low | Drop table Accounts. |
+| 2 | `phase2_5_create_account_members.sql` (or Bundle 1) | Create `dbo.AccountMembers` (AccountMemberID INT IDENTITY, AccountID, UserID, RoleID INT; IsActive, CreatedAt, UpdatedAt DATETIME2). PK, UQ(AccountID, UserID), FKs to Accounts, Users, Roles. | N/A | Low | Drop table AccountMembers. |
+| 3 | `phase2_5_seed_default_account_and_members.sql` (or Bundle 1) | Insert one default Account; for each existing User, insert one AccountMembers row (AccountID = default, UserID, RoleID from Users.RoleID; if RoleID NULL, use Viewer role only—fail migration if Viewer missing). | Backfill from Users.RoleID; deterministic fallback to Viewer when RoleID is null; idempotent (no duplicate AccountID, UserID). | Medium | Delete default account rows and AccountMembers rows; optionally restore Users.RoleID from backup if removed later. |
 | 4a | `phase2_5_add_accountid_reference_tables.sql` | Add `AccountID INT NOT NULL` (+ FK to Accounts) to: Clients, Projects, Warehouses, **Manufacturers, Suppliers, Areas**. Add index (AccountID) or (AccountID, …) for list queries. | SET AccountID = (default AccountID) for all existing rows. | Medium | Add column as NULL, backfill, then NOT NULL; rollback = drop column and FK (after reverting app). |
 | 4b | `phase2_5_add_accountid_sheets.sql` | Add AccountID to Sheets; FK to Accounts; index (AccountID). | SET AccountID = default for all existing Sheets. | High | Same pattern (nullable → backfill → NOT NULL); rollback drop column/FK. |
 | 4c | `phase2_5_add_accountid_sheet_children.sql` | Add AccountID to SubSheets, SheetNotes, Attachments, SheetAttachments, DatasheetLayouts, LayoutRegions, LayoutBlocks, LayoutSubsheetSlots, LayoutBodySlots, SheetHeaderKV, InfoTemplateGrouping, SheetRevisions. FK to Accounts where applied. | Set from parent Sheet (join on SheetID) or set to default. | High | Same; ensure dependency order (Sheets before children). |
