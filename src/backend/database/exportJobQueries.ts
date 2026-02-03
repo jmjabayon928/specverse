@@ -144,6 +144,20 @@ export async function updateExportJobCancelled(jobId: number): Promise<void> {
     `)
 }
 
+/** Reset a failed job for retry: set status to queued, clear error and completion fields. */
+export async function updateExportJobResetForRetry(jobId: number): Promise<void> {
+  const pool = await poolPromise
+  await pool
+    .request()
+    .input('Id', sql.Int, jobId)
+    .query(`
+      UPDATE dbo.ExportJobs
+      SET Status = 'queued', ErrorMessage = NULL, Progress = 0,
+          CompletedAt = NULL, ExpiresAt = NULL, FileName = NULL, FilePath = NULL
+      WHERE Id = @Id
+    `)
+}
+
 /** List jobs for cleanup: completed/failed/cancelled with ExpiresAt < cutoff */
 export async function listExportJobsForCleanup(
   cutoff: Date

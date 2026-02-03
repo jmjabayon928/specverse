@@ -41,6 +41,7 @@ export default function InventoryTransactionsClient() {
   const [exportFileName, setExportFileName] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportDownloadUrl, setExportDownloadUrl] = useState<string | null>(null);
+  const [exportRetrying, setExportRetrying] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Filters
@@ -327,6 +328,32 @@ export default function InventoryTransactionsClient() {
     router.replace(q ? `?${q}` : "/inventory/transactions", { scroll: false });
   }, [router, searchParams]);
 
+  const handleRetryExport = useCallback(async () => {
+    if (exportJobId == null || exportStatus !== "failed") return;
+    setExportRetrying(true);
+    setExportError(null);
+    try {
+      const r = await fetch(
+        `/api/backend/exports/jobs/${exportJobId}/retry`,
+        { method: "POST", credentials: "include" }
+      );
+      const data = await r.json().catch(() => ({} as Record<string, unknown>));
+      if (!r.ok) {
+        const msg = (data as { message?: string }).message ?? "Failed to retry export";
+        toast.error(msg);
+        setExportError(msg);
+        return;
+      }
+      setExportStatus((data as { status?: string }).status as ExportJobStatus ?? "queued");
+      toast.success("Export retry started");
+    } catch (err) {
+      console.error("Retry export error:", err);
+      toast.error("Failed to retry export");
+    } finally {
+      setExportRetrying(false);
+    }
+  }, [exportJobId, exportStatus]);
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -362,6 +389,16 @@ export default function InventoryTransactionsClient() {
                 >
                   Download {exportFileName || "CSV"}
                 </a>
+              )}
+              {exportStatus === "failed" && (
+                <button
+                  type="button"
+                  onClick={handleRetryExport}
+                  disabled={exportRetrying}
+                  className="border rounded px-3 py-2 bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 text-sm"
+                >
+                  {exportRetrying ? "Retrying…" : "Retry"}
+                </button>
               )}
               {(exportStatus === "failed" ||
                 exportStatus === "cancelled" ||
