@@ -327,7 +327,7 @@ describe('templateService.createTemplate', () => {
       .mockResolvedValueOnce({ recordset: [{ InfoTemplateID: 100 }] })
 
     const userId = 1
-    const sheetId = await createTemplate(minimalCreatePayload as never, userId)
+    const sheetId = await createTemplate(minimalCreatePayload as never, userId, 1)
 
     expect(sheetId).toBe(1)
     expect(mockRequestChain.input).toHaveBeenCalledWith('TemplateSubID', 1, null)
@@ -358,7 +358,7 @@ describe('templateService.createTemplate', () => {
     }
 
     const userId = 1
-    const sheetId = await createTemplate(payloadWithAllTypes as never, userId)
+    const sheetId = await createTemplate(payloadWithAllTypes as never, userId, 1)
 
     expect(sheetId).toBe(1)
     const infoTypeCalls = (mockRequestChain.input as jest.Mock).mock.calls.filter(
@@ -378,7 +378,7 @@ describe('templateService.createTemplate', () => {
       .mockResolvedValueOnce({ recordset: [{ InfoTemplateID: 100 }] })
 
     const userId = 1
-    const sheetId = await createTemplate(minimalCreatePayload as never, userId)
+    const sheetId = await createTemplate(minimalCreatePayload as never, userId, 1)
 
     expect(sheetId).toBe(1)
   })
@@ -401,7 +401,7 @@ describe('templateService.createTemplate', () => {
       ],
     }
 
-    await expect(createTemplate(payloadWithBogusType as never, 1)).rejects.toMatchObject({
+    await expect(createTemplate(payloadWithBogusType as never, 1, 1)).rejects.toMatchObject({
       statusCode: 400,
       message: expect.stringContaining("Invalid infoType: 'bogus'"),
     })

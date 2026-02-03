@@ -8,6 +8,7 @@ import TemplateEditorForm from './TemplateEditorForm'
 import { fetchReferenceOptions } from '@/backend/database/ReferenceQueries'
 import { getTemplateDetailsById } from '@/backend/services/templateService'
 import { mapToUnifiedSheet } from '@/utils/templateViewMapper'
+import { requireAuth } from '@/utils/sessionUtils.server'
 
 type TemplateEditPageParams = Readonly<{
   id: string
@@ -35,10 +36,14 @@ const TemplateEditPage = async (props: TemplateEditPageProps) => {
     notFound()
   }
 
+  const session = await requireAuth()
+  const accountId = session.accountId
+  if (accountId == null) notFound()
+
   const [sessionCookies, referenceData, templateData] = await Promise.all([
     cookies(),
-    fetchReferenceOptions(),
-    getTemplateDetailsById(templateId),
+    fetchReferenceOptions(accountId),
+    getTemplateDetailsById(templateId, 'eng', 'SI', accountId),
   ])
 
   if (templateData == null) {

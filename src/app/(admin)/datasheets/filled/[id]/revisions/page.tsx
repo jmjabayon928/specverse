@@ -40,7 +40,10 @@ export default async function RevisionsPage({ params }: PageProps) {
   const unitCookie = cookieStore.get('unitSystem')?.value
   const defaultUnitSystem = unitCookie === 'USC' ? ('USC' as const) : ('SI' as const)
 
-  const result = await getFilledSheetDetailsById(sheetId, defaultLanguage)
+  const accountId = session.accountId
+  if (accountId == null) return notFound()
+
+  const result = await getFilledSheetDetailsById(sheetId, defaultLanguage, defaultUnitSystem, accountId)
   const initialTranslations: SheetTranslations | null =
     result && isSheetTranslations(result.translations) ? result.translations : null
 

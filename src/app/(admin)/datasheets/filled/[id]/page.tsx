@@ -51,7 +51,10 @@ export default async function FilledSheetDetailPage({
   // Enforce the union expected by the client prop
   const defaultUnitSystem: "SI" | "USC" = uomParam === "USC" ? "USC" : "SI";
 
-  const result = await getFilledSheetDetailsById(sheetId, defaultLanguage);
+  const accountId = session.accountId;
+  if (accountId == null) return notFound();
+
+  const result = await getFilledSheetDetailsById(sheetId, defaultLanguage, defaultUnitSystem, accountId);
   if (!result) notFound();
 
   const { datasheet: filledSheet, translations } = result;

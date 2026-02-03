@@ -358,7 +358,7 @@ export const updateProject = async (
   }
 
   if (fields.length === 0) {
-    return getProjectById(projectId)
+    return getProjectById(accountId, projectId)
   }
 
   await request.query(`

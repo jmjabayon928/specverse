@@ -15,6 +15,10 @@ const mockAuthUser = {
   accountId: 1,
 }
 
+jest.mock('../../src/backend/services/filledSheetService', () => ({
+  sheetBelongsToAccount: jest.fn(async () => true),
+}))
+
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
   verifyToken: (req: Request, _res: Response, next: NextFunction) => {
     const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]

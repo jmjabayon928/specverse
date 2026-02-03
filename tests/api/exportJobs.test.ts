@@ -6,21 +6,93 @@ import cookieParser from 'cookie-parser'
 import path from 'path'
 import fs from 'fs/promises'
 import os from 'os'
+import type { Request, Response, NextFunction } from 'express'
+import { AppError } from '../../src/backend/errors/AppError'
 import { errorHandler } from '../../src/backend/middleware/errorHandler'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'secret'
 
+jest.mock('../../src/backend/middleware/authMiddleware', () => ({
+  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+    if (!token) {
+      next(new AppError('Unauthorized - No token', 401))
+      return
+    }
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET ?? 'secret') as {
+        userId: number
+        accountId?: number
+        role?: string
+        roleId?: number
+        permissions?: string[]
+      }
+      req.user = {
+        userId: decoded.userId,
+        ...(decoded.accountId !== undefined && { accountId: decoded.accountId }),
+        role: decoded.role ?? 'Engineer',
+        roleId: decoded.roleId ?? 1,
+        email: 'test@example.com',
+        name: 'Test User',
+        profilePic: undefined,
+        permissions: decoded.permissions ?? [],
+      }
+      next()
+    } catch {
+      next(new AppError('Invalid or expired session', 403))
+    }
+  },
+  requirePermission: (permissionKey: string) => (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user?.permissions?.includes(permissionKey)) {
+      next(new AppError('Permission denied', 403))
+      return
+    }
+    next()
+  },
+  optionalVerifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET ?? 'secret') as {
+          userId: number
+          accountId?: number
+          role?: string
+          roleId?: number
+          permissions?: string[]
+        }
+        req.user = {
+          userId: decoded.userId,
+          ...(decoded.accountId !== undefined && { accountId: decoded.accountId }),
+          role: decoded.role ?? 'Engineer',
+          roleId: decoded.roleId ?? 1,
+          email: 'test@example.com',
+          name: 'Test User',
+          profilePic: undefined,
+          permissions: decoded.permissions ?? [],
+        }
+      } catch {
+        // leave req.user unset
+      }
+    }
+    next()
+  },
+}))
+
 globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
   setTimeout(fn, 0, ...args)) as unknown as typeof setImmediate
 
+/** Builds an authenticated cookie; always includes accountId (default 1) so the auth mock sets req.user.accountId. */
 function createAuthCookie(
   userId: number,
   role: string,
-  permissions: string[] = []
+  permissions: string[] = [],
+  accountId: number = 1
 ): string {
   const token = jwt.sign(
     {
+      id: userId,
       userId,
+      accountId,
       email: 'test@example.com',
       fullName: 'Test User',
       role,
@@ -66,8 +138,8 @@ jest.mock('../../src/backend/database/inventoryTransactionQueries', () => ({
 }))
 
 jest.mock('../../src/backend/database/permissionQueries', () => ({
-  checkUserPermission: jest.fn((userId: number, permissionKey: string) => {
-    if (permissionKey === 'INVENTORY_VIEW' && userId === 1) return Promise.resolve(true)
+  checkUserPermission: jest.fn((userId: number, _permissionKey: string) => {
+    if (userId === 1) return Promise.resolve(true)
     return Promise.resolve(false)
   }),
 }))

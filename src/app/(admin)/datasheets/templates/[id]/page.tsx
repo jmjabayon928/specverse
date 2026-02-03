@@ -72,10 +72,13 @@ const resolveFilters = async (searchParamsPromise: Promise<SearchParamsRecord>) 
 
 const TemplateDetailPage = async (props: TemplateDetailPageProps) => {
   const session = await requireAuth()
+  const accountId = session.accountId
+  if (accountId == null) notFound()
+
   const sheetId = await resolveSheetId(props.params)
   const { defaultLanguage, defaultUnitSystem } = await resolveFilters(props.searchParams)
 
-  const result = await getTemplateDetailsById(sheetId, defaultLanguage)
+  const result = await getTemplateDetailsById(sheetId, defaultLanguage, defaultUnitSystem, accountId)
 
   if (result == null) {
     notFound()

@@ -10,7 +10,9 @@ import app from '../../src/backend/app'
 process.env.JWT_SECRET ??= 'secret'
 
 const mockAuthUser = {
+  id: 1,
   userId: 1,
+  accountId: 1,
   roleId: 1,
   role: 'Admin',
   permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT'] as string[],
@@ -32,6 +34,12 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
 
 jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),
+}))
+
+jest.mock('../../src/backend/services/filledSheetService', () => ({
+  sheetBelongsToAccount: jest.fn().mockImplementation((templateId: number, accountId: number) =>
+    Promise.resolve(accountId === 1 && (templateId === 1 || templateId === 999))
+  ),
 }))
 
 const APPROVED_TEMPLATE_ID = 999
@@ -99,6 +107,7 @@ function createAuthCookie(permissions: string[]): string {
   const token = jwt.sign(
     {
       userId: 1,
+      accountId: 1,
       email: 'test@example.com',
       fullName: 'Test User',
       role: 'Admin',

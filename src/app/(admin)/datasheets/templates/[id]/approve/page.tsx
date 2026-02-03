@@ -43,8 +43,10 @@ const TemplateApprovePage = async (props: TemplateApprovePageProps) => {
   if (!canSeeApproveUI(sessionUser)) {
     redirect('/unauthorized')
   }
+  const accountId = sessionUser.accountId
+  if (accountId == null) notFound()
 
-  const rawData = await getTemplateDetailsById(templateId)
+  const rawData = await getTemplateDetailsById(templateId, 'eng', 'SI', accountId)
 
   if (rawData == null) {
     notFound()

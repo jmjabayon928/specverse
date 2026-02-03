@@ -15,7 +15,9 @@ interface PageProps {
 export default async function FilledSheetCreatePage(props: Readonly<PageProps>) {
   const { searchParams } = props;
 
-  await requireAuth();
+  const session = await requireAuth();
+  const accountId = session.accountId;
+  if (accountId == null) return notFound();
 
   const sp = await searchParams;
   const idParam = typeof sp.templateId === "string" ? sp.templateId : Array.isArray(sp.templateId) ? sp.templateId[0] : undefined;
@@ -24,7 +26,7 @@ export default async function FilledSheetCreatePage(props: Readonly<PageProps>) 
 
   if (!templateId || isNaN(templateId)) return notFound();
 
-  const rawData = await getTemplateDetailsById(templateId);
+  const rawData = await getTemplateDetailsById(templateId, lang, "SI", accountId);
   if (!rawData) return notFound();
 
   // 👇 Fetch translations only if lang is not English

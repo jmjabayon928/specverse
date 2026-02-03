@@ -10,7 +10,9 @@ import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
 
 const mockAuthUser = {
+  id: 1,
   userId: 1,
+  accountId: 1,
   roleId: 1,
   role: 'Admin',
   permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT', 'DATASHEET_VERIFY', 'DATASHEET_APPROVE'] as string[],
@@ -42,6 +44,9 @@ jest.mock('../../src/backend/services/filledSheetService', () => {
     )
   return {
     ...actual,
+    sheetBelongsToAccount: jest.fn().mockImplementation((sheetId: number, accountId: number) =>
+      Promise.resolve(accountId === 1 && (sheetId === 5 || sheetId === 200))
+    ),
     getFilledSheetTemplateId: (...args: unknown[]) => mockGetFilledSheetTemplateId(...args),
     getLatestApprovedTemplateId: (...args: unknown[]) => mockGetLatestApprovedTemplateId(...args),
     createFilledSheet: (...args: unknown[]) => mockCreateFilledSheet(...args),
@@ -67,7 +72,9 @@ process.env.JWT_SECRET ??= 'secret'
 function createAuthCookie(): string {
   const token = jwt.sign(
     {
+      id: 1,
       userId: 1,
+      accountId: 1,
       email: 'test@example.com',
       fullName: 'Test User',
       role: 'Admin',
