@@ -1,6 +1,7 @@
 // src/backend/routes/filledSheetRoutes.ts
 import { Router } from 'express'
 
+import { PERMISSIONS } from '@/constants/permissions'
 import { verifyToken, requirePermission } from '@/backend/middleware/authMiddleware'
 import { auditAction } from '@/backend/middleware/auditMiddleware'
 import { uploadAttachment } from '@/backend/utils/attachmentUpload'
@@ -61,7 +62,7 @@ router.get('/health', (_req, res) => {
 router.get(
   '/',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getAllFilled
 )
 
@@ -69,7 +70,7 @@ router.get(
 router.get(
   '/reference-options',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getReferenceOptions
 )
 
@@ -81,7 +82,7 @@ router.get(
 router.get(
   '/check-equipment-tag',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   checkEquipmentTag
 )
 
@@ -92,14 +93,14 @@ router.get(
 router.get(
   '/export/:id/pdf',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_EXPORT),
   exportFilledSheetPDF
 )
 
 router.get(
   '/export/:id/excel',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_EXPORT),
   exportFilledSheetExcel
 )
 
@@ -111,7 +112,7 @@ router.get(
 router.post(
   '/',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   createFilledSheetHandler
 )
 
@@ -119,7 +120,7 @@ router.post(
 router.post(
   '/:id/clone',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   auditAction('Clone Filled Sheet'),
   cloneFilledSheetHandler
 )
@@ -132,7 +133,7 @@ router.post(
 router.get(
   '/:id/attachments',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   listFilledSheetAttachmentsHandler
 )
 
@@ -140,7 +141,7 @@ router.get(
 router.post(
   '/:id/attachments',
   verifyToken,
-  requirePermission('DATASHEET_ATTACHMENT_UPLOAD'),
+  requirePermission(PERMISSIONS.DATASHEET_ATTACHMENT_UPLOAD),
   uploadAttachment.single('file'),
   auditAction('Upload Filled Sheet Attachment'),
   uploadFilledSheetAttachmentHandler
@@ -150,7 +151,7 @@ router.post(
 router.delete(
   '/:id/attachments/:attachmentId',
   verifyToken,
-  requirePermission('DATASHEET_ATTACHMENT_DELETE'),
+  requirePermission(PERMISSIONS.DATASHEET_ATTACHMENT_DELETE),
   auditAction('Delete Filled Sheet Attachment'),
   deleteFilledSheetAttachmentHandler
 )
@@ -163,7 +164,7 @@ router.delete(
 router.get(
   '/:id/notes',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   listFilledSheetNotesHandler
 )
 
@@ -171,7 +172,7 @@ router.get(
 router.post(
   '/:id/notes',
   verifyToken,
-  requirePermission('DATASHEET_NOTE_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_NOTE_EDIT),
   auditAction('Create Filled Sheet Note'),
   createFilledSheetNoteHandler
 )
@@ -180,7 +181,7 @@ router.post(
 router.put(
   '/:id/notes/:noteId',
   verifyToken,
-  requirePermission('DATASHEET_NOTE_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_NOTE_EDIT),
   auditAction('Update Filled Sheet Note'),
   updateFilledSheetNoteHandler
 )
@@ -189,7 +190,7 @@ router.put(
 router.delete(
   '/:id/notes/:noteId',
   verifyToken,
-  requirePermission('DATASHEET_NOTE_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_NOTE_EDIT),
   auditAction('Delete Filled Sheet Note'),
   deleteFilledSheetNoteHandler
 )
@@ -202,7 +203,7 @@ router.delete(
 router.get(
   '/:id/revisions',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   listRevisionsHandler
 )
 
@@ -210,7 +211,7 @@ router.get(
 router.get(
   '/:id/revisions/:revisionId',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getRevisionHandler
 )
 
@@ -218,7 +219,7 @@ router.get(
 router.post(
   '/:id/revisions/:revisionId/restore',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   auditAction('Restore Filled Sheet Revision', { tableName: 'Sheets', recordIdParam: 'id' }),
   restoreRevisionHandler
 )
@@ -230,14 +231,14 @@ router.post(
 router.get(
   '/:id',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getFilledSheetById
 )
 
 router.put(
   '/:id',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   auditAction('Update Filled Sheet', { tableName: 'Sheets', recordIdParam: 'id' }),
   updateFilledSheetHandler
 )
@@ -245,14 +246,14 @@ router.put(
 router.post(
   '/:id/verify',
   verifyToken,
-  requirePermission('DATASHEET_VERIFY'),
+  requirePermission(PERMISSIONS.DATASHEET_VERIFY),
   verifyFilledSheetHandler
 )
 
 router.post(
   '/:id/approve',
   verifyToken,
-  requirePermission('DATASHEET_APPROVE'),
+  requirePermission(PERMISSIONS.DATASHEET_APPROVE),
   approveFilledSheetHandler
 )
 

@@ -2,6 +2,7 @@
 
 import { Router } from 'express'
 
+import { PERMISSIONS } from '@/constants/permissions'
 import { verifyToken, requirePermission } from '@/backend/middleware/authMiddleware'
 import { auditAction } from '@/backend/middleware/auditMiddleware'
 import { uploadAttachment } from '@/backend/utils/attachmentUpload'
@@ -59,7 +60,7 @@ router.get('/health', templateHealth)
 router.get(
   '/',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getAllTemplatesHandler,
 )
 
@@ -67,7 +68,7 @@ router.get(
 router.get(
   '/reference-options',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getTemplateReferenceOptionsHandler,
 )
 
@@ -75,13 +76,13 @@ router.get(
 router.get(
   '/note-types',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getNoteTypesHandler,
 )
 router.get(
   '/check-tag',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   checkTemplateEquipmentTagHandler,
 )
 
@@ -93,7 +94,7 @@ router.get(
 router.put(
   '/:id/subsheets/order',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   reorderSubsheetsHandler,
 )
 
@@ -101,19 +102,19 @@ router.put(
 router.post(
   '/:id/subsheets',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   createSubsheetHandler,
 )
 router.patch(
   '/:id/subsheets/:subId',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   updateSubsheetHandler,
 )
 router.delete(
   '/:id/subsheets/:subId',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   deleteSubsheetHandler,
 )
 
@@ -121,25 +122,25 @@ router.delete(
 router.post(
   '/:id/subsheets/:subId/fields',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   createFieldHandler,
 )
 router.put(
   '/:id/subsheets/:subId/fields/order',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   reorderFieldsHandler,
 )
 router.patch(
   '/:id/subsheets/:subId/fields/:fieldId',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   updateFieldHandler,
 )
 router.delete(
   '/:id/subsheets/:subId/fields/:fieldId',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   deleteFieldHandler,
 )
 
@@ -147,7 +148,7 @@ router.delete(
 router.get(
   '/:id',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getTemplateById,
 )
 
@@ -155,7 +156,7 @@ router.get(
 router.get(
   '/:sheetId/structure',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getTemplateStructure,
 )
 
@@ -167,7 +168,7 @@ router.get(
 router.post(
   '/',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   createTemplateHandler,
 )
 
@@ -175,7 +176,7 @@ router.post(
 router.put(
   '/:id',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   auditAction('Update Template', { tableName: 'Sheets', recordIdParam: 'id' }),
   updateTemplateHandler,
 )
@@ -184,7 +185,7 @@ router.put(
 router.post(
   '/:id/clone',
   verifyToken,
-  requirePermission('DATASHEET_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_EDIT),
   auditAction('Clone Template'),
   cloneTemplateHandler,
 )
@@ -196,14 +197,14 @@ router.post(
 router.post(
   '/:id/verify',
   verifyToken,
-  requirePermission('DATASHEET_VERIFY'),
+  requirePermission(PERMISSIONS.DATASHEET_VERIFY),
   verifyTemplateHandler,
 )
 
 router.post(
   '/:id/approve',
   verifyToken,
-  requirePermission('DATASHEET_APPROVE'),
+  requirePermission(PERMISSIONS.DATASHEET_APPROVE),
   approveTemplateHandler,
 )
 
@@ -215,7 +216,7 @@ router.post(
 router.get(
   '/:id/notes',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   listTemplateNotesHandler,
 )
 
@@ -223,7 +224,7 @@ router.get(
 router.post(
   '/:id/notes',
   verifyToken,
-  requirePermission('DATASHEET_NOTE_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_NOTE_EDIT),
   auditAction('Create Template Note'),
   createTemplateNoteHandler,
 )
@@ -232,7 +233,7 @@ router.post(
 router.put(
   '/:id/notes/:noteId',
   verifyToken,
-  requirePermission('DATASHEET_NOTE_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_NOTE_EDIT),
   auditAction('Update Template Note'),
   updateTemplateNoteHandler,
 )
@@ -241,7 +242,7 @@ router.put(
 router.delete(
   '/:id/notes/:noteId',
   verifyToken,
-  requirePermission('DATASHEET_NOTE_EDIT'),
+  requirePermission(PERMISSIONS.DATASHEET_NOTE_EDIT),
   auditAction('Delete Template Note'),
   deleteTemplateNoteHandler,
 )
@@ -254,7 +255,7 @@ router.delete(
 router.get(
   '/:id/attachments',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   listTemplateAttachmentsHandler,
 )
 
@@ -262,7 +263,7 @@ router.get(
 router.post(
   '/:id/attachments',
   verifyToken,
-  requirePermission('DATASHEET_ATTACHMENT_UPLOAD'),
+  requirePermission(PERMISSIONS.DATASHEET_ATTACHMENT_UPLOAD),
   uploadAttachment.single('file'),
   auditAction('Upload Template Attachment'),
   uploadTemplateAttachmentHandler,
@@ -272,7 +273,7 @@ router.post(
 router.delete(
   '/:id/attachments/:attachmentId',
   verifyToken,
-  requirePermission('DATASHEET_ATTACHMENT_UPLOAD'),
+  requirePermission(PERMISSIONS.DATASHEET_ATTACHMENT_UPLOAD),
   auditAction('Delete Template Attachment'),
   deleteTemplateAttachmentHandler,
 )
@@ -285,7 +286,7 @@ router.delete(
 router.get(
   '/export/:id/pdf',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_EXPORT),
   auditAction('Export Template PDF'),
   exportTemplatePDF,
 )
@@ -293,7 +294,7 @@ router.get(
 router.get(
   '/export/:id/excel',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_EXPORT),
   auditAction('Export Template Excel'),
   exportTemplateExcel,
 )

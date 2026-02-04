@@ -26,6 +26,8 @@ function createAuthCookie(permissions: string[]): string {
   return `token=${token}`
 }
 
+const TEST_ACCOUNT_ID = 1
+
 process.env.JWT_SECRET ??= 'secret'
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
@@ -37,9 +39,10 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
     }
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET ?? 'secret') as { userId: number; accountId?: number; permissions?: string[] }
+      const accountId = decoded.accountId !== undefined ? decoded.accountId : TEST_ACCOUNT_ID
       req.user = {
         userId: decoded.userId,
-        accountId: decoded.accountId ?? 1,
+        accountId,
         roleId: 1,
         role: 'Admin',
         permissions: decoded.permissions ?? ['DATASHEET_VIEW'],
@@ -53,10 +56,9 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
   optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
 }))
 
-jest.mock('../../src/backend/services/filledSheetService', () => {
-  const actual = jest.requireActual('../../src/backend/services/filledSheetService')
-  return { ...actual, sheetBelongsToAccount: jest.fn().mockResolvedValue(true) }
-})
+jest.mock('../../src/backend/services/sheetAccessService', () => ({
+  sheetBelongsToAccount: jest.fn().mockResolvedValue(true),
+}))
 
 jest.mock('../../src/backend/services/layoutService', () => ({
   ...jest.requireActual('../../src/backend/services/layoutService'),

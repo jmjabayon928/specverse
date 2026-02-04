@@ -36,6 +36,11 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
   optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
 }))
 
+jest.mock('../../src/backend/services/sheetAccessService', () => ({
+  sheetBelongsToAccount: jest.fn().mockImplementation((sheetId: number, accountId: number) =>
+    Promise.resolve(sheetId === 1 && accountId === 1)
+  ),
+}))
 // Mock filled sheet list, detail, and reference-options so tests pass without DB.
 jest.mock('../../src/backend/services/filledSheetService', () => {
   const actual =
@@ -44,9 +49,6 @@ jest.mock('../../src/backend/services/filledSheetService', () => {
     )
   return {
     ...actual,
-    sheetBelongsToAccount: jest.fn().mockImplementation((sheetId: number, accountId: number) =>
-      Promise.resolve(sheetId === 1 && accountId === 1)
-    ),
     fetchAllFilled: jest.fn().mockResolvedValue([]),
     getFilledSheetDetailsById: jest.fn().mockResolvedValue(null),
     approveFilledSheet: jest.fn().mockResolvedValue(1),

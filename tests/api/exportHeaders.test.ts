@@ -4,6 +4,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import path from 'node:path'
 import type { Request, Response, NextFunction } from 'express'
+import { PERMISSIONS } from '../../src/constants/permissions'
 import { AppError } from '../../src/backend/errors/AppError'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
@@ -34,6 +35,8 @@ function createAuthCookie(permissions: string[]): string {
   return `token=${token}`
 }
 
+const TEST_ACCOUNT_ID = 1
+
 process.env.JWT_SECRET ??= 'secret'
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
@@ -53,10 +56,11 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
         permissions?: string[]
         profilePic?: string | null
       }
+      const accountId = decoded.accountId !== undefined ? decoded.accountId : TEST_ACCOUNT_ID
       req.user = {
         id: decoded.id ?? decoded.userId,
         userId: decoded.userId,
-        accountId: decoded.accountId ?? 1,
+        accountId,
         role: decoded.role ?? 'Engineer',
         roleId: decoded.roleId ?? 1,
         permissions: decoded.permissions ?? [],
@@ -80,10 +84,11 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
           permissions?: string[]
           profilePic?: string | null
         }
+        const accountId = decoded.accountId !== undefined ? decoded.accountId : TEST_ACCOUNT_ID
         req.user = {
           id: decoded.id ?? decoded.userId,
           userId: decoded.userId,
-          accountId: decoded.accountId ?? 1,
+          accountId,
           role: decoded.role ?? 'Engineer',
           roleId: decoded.roleId ?? 1,
           permissions: decoded.permissions ?? [],
@@ -189,7 +194,7 @@ function buildTemplateExportApp() {
 describe('Export headers', () => {
   it('sets Content-Disposition filename for filled sheet Excel export', async () => {
     const app = buildFilledExportApp()
-    const authCookie = createAuthCookie(['DATASHEET_VIEW'])
+    const authCookie = createAuthCookie(['PERMISSIONS.DATASHEET_VIEW', PERMISSIONS.DATASHEET_EXPORT])
 
     const res = await request(app)
       .get('/api/backend/filledsheets/export/123/excel?uom=SI&lang=eng')
@@ -203,7 +208,7 @@ describe('Export headers', () => {
 
   it('sets Content-Disposition filename for template PDF export', async () => {
     const app = buildTemplateExportApp()
-    const authCookie = createAuthCookie(['DATASHEET_VIEW'])
+    const authCookie = createAuthCookie(['PERMISSIONS.DATASHEET_VIEW', PERMISSIONS.DATASHEET_EXPORT])
 
     const res = await request(app)
       .get('/api/backend/templates/export/456/pdf?uom=SI&lang=eng')

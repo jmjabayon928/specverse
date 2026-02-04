@@ -12,6 +12,7 @@ const mockAuthUser = {
   userId: 1,
   roleId: 1,
   role: 'Admin',
+  accountId: 1,
   permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT', 'DATASHEET_VERIFY', 'DATASHEET_APPROVE', 'DATASHEET_ATTACHMENT_UPLOAD', 'DATASHEET_NOTE_EDIT'] as string[],
 }
 
@@ -56,6 +57,7 @@ function createAuthCookie(permissions: string[]): string {
       role: 'Admin',
       profilePic: null,
       permissions,
+      accountId: 1,
     },
     process.env.JWT_SECRET ?? 'secret',
     { expiresIn: '1h' }

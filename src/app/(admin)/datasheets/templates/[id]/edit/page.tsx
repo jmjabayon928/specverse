@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 
 import SecurePage from '@/components/security/SecurePage'
+import { PERMISSIONS } from '@/constants/permissions'
 import TemplateEditorForm from './TemplateEditorForm'
 import { fetchReferenceOptions } from '@/backend/database/ReferenceQueries'
 import { getTemplateDetailsById } from '@/backend/services/templateService'
@@ -62,7 +63,7 @@ const TemplateEditPage = async (props: TemplateEditPageProps) => {
   })
 
   return (
-    <SecurePage requiredPermission='DATASHEET_EDIT'>
+    <SecurePage requiredPermission={PERMISSIONS.DATASHEET_EDIT}>
       <TemplateEditorForm
         defaultValues={defaultValues}
         areas={referenceData.areas.map((area) => ({ label: area.name, value: area.id }))}

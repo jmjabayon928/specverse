@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import SecurePage from '@/components/security/SecurePage'
+import { PERMISSIONS } from '@/constants/permissions'
 import { requireAuth } from '@/utils/sessionUtils.server'
 import DiffPageClient from './DiffPageClient'
 
@@ -32,7 +33,7 @@ export default async function DiffPage({ params, searchParams }: PageProps) {
   const compareToRevisionId = Number.parseInt(compareToParam ?? '', 10)
 
   return (
-    <SecurePage requiredPermission="DATASHEET_VIEW">
+    <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
       {!Number.isFinite(compareToRevisionId) || compareToRevisionId <= 0 ? (
         <div className="container mx-auto p-6 max-w-7xl">
           <div className="flex justify-between items-center mb-6">

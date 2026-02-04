@@ -42,11 +42,13 @@ const mockListValueSets = jest.fn()
 
 // Full mock to avoid loading the real filledSheetService (deterministic, no timeout under parallel run).
 const mockSheetBelongsToAccount = jest.fn().mockResolvedValue(true)
+jest.mock('../../src/backend/services/sheetAccessService', () => ({
+  sheetBelongsToAccount: (...args: unknown[]) => mockSheetBelongsToAccount(...args),
+}))
 jest.mock('../../src/backend/services/filledSheetService', () => ({
   fetchAllFilled: jest.fn(),
   fetchReferenceOptions: jest.fn(),
   getFilledSheetDetailsById: (...args: unknown[]) => mockGetFilledSheetDetailsById(...args),
-  sheetBelongsToAccount: (...args: unknown[]) => mockSheetBelongsToAccount(...args),
   createFilledSheet: jest.fn(),
   updateFilledSheet: (...args: unknown[]) => mockUpdateFilledSheet(...args),
   verifyFilledSheet: jest.fn(),

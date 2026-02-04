@@ -30,7 +30,6 @@ import {
   doesEquipmentTagExist,
   getFilledSheetTemplateId,
   getLatestApprovedTemplateId,
-  sheetBelongsToAccount,
 
   // attachments (canonical + legacy helpers)
   getAttachmentsForSheet,
@@ -48,6 +47,8 @@ import {
   exportPDF,
   exportExcel,
 } from "../services/filledSheetService"
+import { sheetBelongsToAccount } from "../services/sheetAccessService"
+import { mustGetAccountId } from '@/backend/utils/authGuards'
 import { addSheetAttachment } from "../services/templateService"
 
 import { AppError } from "../errors/AppError"
@@ -228,7 +229,8 @@ const checkTagQuerySchema = z.object({
 
 export const getAllFilled: RequestHandler = async (req, res, next) => {
   try {
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const rows = await fetchAllFilled(accountId)
     res.status(200).json(rows)
   } catch (err: unknown) {
@@ -251,7 +253,8 @@ export const getReferenceOptions: RequestHandler = async (_req, res, next) => {
 
 export const getFilledSheetById: RequestHandler = async (req, res, next) => {
   try {
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
 
     const parsedParams = idParamsSchema.parse(req.params)
     const sheetId = parseId(parsedParams.id)
@@ -294,7 +297,8 @@ export const createFilledSheetHandler: RequestHandler = async (req, res, next) =
       isTemplate: false,
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const ctx = { userId: user.userId, route: req.originalUrl, method: req.method }
     const result = (await createFilledSheet(createInput, ctx, accountId)) as CreateFilledSheetResult
 
@@ -323,7 +327,8 @@ export const updateFilledSheetHandler: RequestHandler = async (req, res, next) =
     updateFilledSheetBodySchema.parse(req.body)
     const body = req.body as UpdateFilledSheetBody
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
 
     const current = await getFilledSheetDetailsById(sheetId, "eng", "SI", accountId)
     const existing = current?.datasheet
@@ -363,7 +368,8 @@ export const verifyFilledSheetHandler: RequestHandler = async (req, res, next) =
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))
@@ -396,7 +402,8 @@ export const approveFilledSheetHandler: RequestHandler = async (req, res, next) 
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))
@@ -474,7 +481,8 @@ export const cloneFilledSheetHandler: RequestHandler = async (req, res, next) =>
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const sourceBelongs = await sheetBelongsToAccount(sourceId, accountId)
     if (!sourceBelongs) {
       next(new AppError("Sheet not found", 404))
@@ -526,7 +534,8 @@ export const uploadFilledSheetAttachmentHandler: RequestHandler = async (req, re
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))
@@ -563,7 +572,8 @@ export const listFilledSheetAttachmentsHandler: RequestHandler = async (req, res
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))
@@ -604,7 +614,8 @@ export const deleteFilledSheetAttachmentHandler: RequestHandler = async (req, re
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))
@@ -639,7 +650,8 @@ export const listFilledSheetNotesHandler: RequestHandler = async (req, res, next
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))
@@ -669,7 +681,8 @@ export const createFilledSheetNoteHandler: RequestHandler = async (req, res, nex
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))
@@ -702,7 +715,8 @@ export const updateFilledSheetNoteHandler: RequestHandler = async (req, res, nex
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))
@@ -736,7 +750,8 @@ export const deleteFilledSheetNoteHandler: RequestHandler = async (req, res, nex
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))
@@ -756,7 +771,8 @@ export const deleteFilledSheetNoteHandler: RequestHandler = async (req, res, nex
 
 export const exportFilledSheetPDF: RequestHandler = async (req, res, next) => {
   try {
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
 
     const parsedParams = idParamsSchema.parse(req.params)
     const sheetId = parseId(parsedParams.id)
@@ -780,7 +796,8 @@ export const exportFilledSheetPDF: RequestHandler = async (req, res, next) => {
 
 export const exportFilledSheetExcel: RequestHandler = async (req, res, next) => {
   try {
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
 
     const parsedParams = idParamsSchema.parse(req.params)
     const sheetId = parseId(parsedParams.id)

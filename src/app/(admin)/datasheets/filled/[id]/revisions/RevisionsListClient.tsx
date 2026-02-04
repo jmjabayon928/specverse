@@ -4,6 +4,7 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { PERMISSIONS } from '@/constants/permissions'
 import type { UserSession } from '@/domain/auth/sessionTypes'
 import type { SheetTranslations } from '@/domain/i18n/translationTypes'
 import { diffUnifiedSheets } from '@/domain/datasheets/revisionDiff'
@@ -207,7 +208,7 @@ export default function RevisionsListClient({
     }
   }
 
-  const canEdit = Array.isArray(user.permissions) && user.permissions.includes('DATASHEET_EDIT')
+  const canEdit = Array.isArray(user.permissions) && user.permissions.includes(PERMISSIONS.DATASHEET_EDIT)
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">

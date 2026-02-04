@@ -3,6 +3,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/hooks/useSession';
+import { PERMISSIONS } from '@/constants/permissions';
 import InventoryPageClient from '@/components/inventory/InventoryPageClient';
 import SecurePage from '@/components/security/SecurePage';
 
@@ -16,14 +17,14 @@ export default function InventoryPage() {
 
   if (loading) {
     return (
-      <SecurePage requiredPermission="INVENTORY_VIEW">
+      <SecurePage requiredPermission={PERMISSIONS.INVENTORY_VIEW}>
         <div className="p-6">Loading…</div>
       </SecurePage>
     );
   }
 
   return (
-    <SecurePage requiredPermission="INVENTORY_VIEW">
+    <SecurePage requiredPermission={PERMISSIONS.INVENTORY_VIEW}>
       <InventoryPageClient onSelectItem={handleSelectItem} />
     </SecurePage>
   );

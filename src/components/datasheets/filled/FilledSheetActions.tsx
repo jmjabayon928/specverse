@@ -3,6 +3,7 @@
 
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
+import { PERMISSIONS } from '@/constants/permissions'
 import type { UserSession } from '@/domain/auth/sessionTypes'
 import type { MinimalSheetForActions } from '@/domain/datasheets/sheetTypes'
 import IconTooltip from '@/components/ui/tooltip/IconTooltip'
@@ -61,23 +62,23 @@ export default function FilledSheetActions(props: Readonly<FilledSheetActionsPro
   const canEdit =
     isCreator &&
     editableStatuses.has(status) &&
-    hasPermission(user, 'DATASHEET_EDIT')
+    hasPermission(user, PERMISSIONS.DATASHEET_EDIT)
 
   const canVerify =
     verifiableStatuses.has(status) &&
-    hasPermission(user, 'DATASHEET_VERIFY')
+    hasPermission(user, PERMISSIONS.DATASHEET_VERIFY)
 
   const canApprove =
     status === verifiedStatus && canSeeApproveUI(user)
 
   const canDuplicate =
-    status === approvedStatus && hasPermission(user, 'DATASHEET_CREATE')
+    status === approvedStatus && hasPermission(user, PERMISSIONS.DATASHEET_CREATE)
 
   const canExport =
-    status === approvedStatus && hasPermission(user, 'DATASHEET_EXPORT')
+    status === approvedStatus && hasPermission(user, PERMISSIONS.DATASHEET_EXPORT)
 
-  const canViewRevisions = hasPermission(user, 'DATASHEET_VIEW')
-  const canViewCompare = hasPermission(user, 'DATASHEET_VIEW')
+  const canViewRevisions = hasPermission(user, PERMISSIONS.DATASHEET_VIEW)
+  const canViewCompare = hasPermission(user, PERMISSIONS.DATASHEET_VIEW)
 
   return (
     <div className={`flex flex-wrap items-center ${gapClass}`}>

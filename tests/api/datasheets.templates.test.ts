@@ -15,7 +15,7 @@ const mockAuthUser = {
   accountId: 1,
 }
 
-jest.mock('../../src/backend/services/filledSheetService', () => ({
+jest.mock('../../src/backend/services/sheetAccessService', () => ({
   sheetBelongsToAccount: jest.fn(async () => true),
 }))
 

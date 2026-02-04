@@ -14,7 +14,8 @@ import {
   type VarianceStatus,
   type StatusTransition,
 } from '../services/valueSetService'
-import { sheetBelongsToAccount } from '../services/filledSheetService'
+import { sheetBelongsToAccount } from '../services/sheetAccessService'
+import { mustGetAccountId } from '@/backend/utils/authGuards'
 import { AppError } from '../errors/AppError'
 
 const CONTEXT_CODES: ValueContextCode[] = ['Requirement', 'Offered', 'AsBuilt']
@@ -60,7 +61,8 @@ export const getSheetValueSets: RequestHandler = async (req, res, next) => {
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError('Sheet not found', 404))
@@ -91,7 +93,8 @@ export const postSheetValueSet: RequestHandler = async (req, res, next) => {
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError('Sheet not found', 404))
@@ -137,7 +140,8 @@ export const patchSheetValueSetVariances: RequestHandler = async (req, res, next
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError('Sheet not found', 404))
@@ -180,7 +184,8 @@ export const postSheetValueSetStatus: RequestHandler = async (req, res, next) =>
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError('Sheet not found', 404))
@@ -211,7 +216,8 @@ export const getSheetCompare: RequestHandler = async (req, res, next) => {
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError('Sheet not found', 404))

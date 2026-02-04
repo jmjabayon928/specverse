@@ -1,6 +1,7 @@
 // src/app/(admin)/datasheets/filled/[id]/revisions/page.tsx
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
+import { PERMISSIONS } from '@/constants/permissions'
 import { requireAuth } from '@/utils/sessionUtils.server'
 import SecurePage from '@/components/security/SecurePage'
 import { getFilledSheetDetailsById } from '@/backend/services/filledSheetService'
@@ -48,7 +49,7 @@ export default async function RevisionsPage({ params }: PageProps) {
     result && isSheetTranslations(result.translations) ? result.translations : null
 
   return (
-    <SecurePage requiredPermission="DATASHEET_VIEW">
+    <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
       <RevisionsListClient
         sheetId={sheetId}
         user={session}

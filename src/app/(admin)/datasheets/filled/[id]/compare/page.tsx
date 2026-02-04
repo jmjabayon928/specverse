@@ -1,6 +1,7 @@
 // src/app/(admin)/datasheets/filled/[id]/compare/page.tsx
 import { notFound } from 'next/navigation'
 import SecurePage from '@/components/security/SecurePage'
+import { PERMISSIONS } from '@/constants/permissions'
 import { requireAuth } from '@/utils/sessionUtils.server'
 import { getCompareData, listValueSets } from '@/backend/services/valueSetService'
 import ComparePageClient from './ComparePageClient'
@@ -46,7 +47,7 @@ export default async function FilledComparePage({
   }))
 
   return (
-    <SecurePage requiredPermission="DATASHEET_VIEW">
+    <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
       <ComparePageClient
         sheetId={sheetId}
         compareData={compareData}

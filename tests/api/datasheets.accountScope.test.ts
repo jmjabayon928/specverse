@@ -51,6 +51,9 @@ jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),
 }))
 
+jest.mock('../../src/backend/services/sheetAccessService', () => ({
+  sheetBelongsToAccount: jest.fn().mockResolvedValue(true),
+}))
 jest.mock('../../src/backend/services/filledSheetService', () => {
   const actual =
     jest.requireActual<typeof import('../../src/backend/services/filledSheetService')>(
@@ -61,14 +64,13 @@ jest.mock('../../src/backend/services/filledSheetService', () => {
     ...actual,
     fetchAllFilled: jest.fn().mockResolvedValue([]),
     getFilledSheetDetailsById: jest.fn().mockResolvedValue(null),
-    sheetBelongsToAccount: jest.fn().mockResolvedValue(true),
     getFilledSheetTemplateId: jest.fn().mockResolvedValue({ TemplateID: 1 }),
     getLatestApprovedTemplateId: jest.fn().mockResolvedValue(1),
     doesEquipmentTagExist: jest.fn().mockResolvedValue(false),
     createFilledSheet: jest.fn().mockImplementation(async (data: { templateId?: unknown }, _ctx: unknown, accountId: number) => {
-      const svc = require('../../src/backend/services/filledSheetService')
+      const sheetAccess = require('../../src/backend/services/sheetAccessService')
       const templateIdNum = Number(data.templateId)
-      const belongs = await svc.sheetBelongsToAccount(templateIdNum, accountId)
+      const belongs = await sheetAccess.sheetBelongsToAccount(templateIdNum, accountId)
       if (!belongs) {
         throw new AppErrorClass('Template not found.', 404)
       }
@@ -130,11 +132,14 @@ function makeToken(payload: { userId: number; accountId?: number }) {
   )
 }
 
+const sheetAccessService = () =>
+  require('../../src/backend/services/sheetAccessService') as typeof import('../../src/backend/services/sheetAccessService') & {
+    sheetBelongsToAccount: jest.Mock
+  }
 const filledSheetService = () =>
   require('../../src/backend/services/filledSheetService') as typeof import('../../src/backend/services/filledSheetService') & {
     fetchAllFilled: jest.Mock
     getFilledSheetDetailsById: jest.Mock
-    sheetBelongsToAccount: jest.Mock
     createFilledSheet: jest.Mock
   }
 const templateService = () =>
@@ -185,6 +190,84 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(200)
       expect(templateService().fetchAllTemplates).toHaveBeenCalledWith(20)
+    })
+  })
+
+  describe('list returns only account-scoped rows (no cross-tenant data)', () => {
+    it('GET /api/backend/filledsheets with accountId 1 returns only account 1 sheets', async () => {
+      const account1Rows = [{ sheetId: 101, sheetName: 'Filled-A1' }]
+      filledSheetService().fetchAllFilled.mockResolvedValue(account1Rows)
+
+      const res = await request(app)
+        .get('/api/backend/filledsheets')
+        .set('Cookie', [`token=${makeToken({ userId: 1, accountId: 1 })}`])
+
+      expect(res.status).toBe(200)
+      expect(filledSheetService().fetchAllFilled).toHaveBeenCalledWith(1)
+      expect(res.body).toEqual(account1Rows)
+    })
+
+    it('GET /api/backend/filledsheets with accountId 2 returns only account 2 sheets', async () => {
+      const account2Rows = [{ sheetId: 102, sheetName: 'Filled-A2' }]
+      filledSheetService().fetchAllFilled.mockResolvedValue(account2Rows)
+
+      const res = await request(app)
+        .get('/api/backend/filledsheets')
+        .set('Cookie', [`token=${makeToken({ userId: 1, accountId: 2 })}`])
+
+      expect(res.status).toBe(200)
+      expect(filledSheetService().fetchAllFilled).toHaveBeenCalledWith(2)
+      expect(res.body).toEqual(account2Rows)
+    })
+
+    it('GET /api/backend/templates with accountId 1 returns only account 1 templates', async () => {
+      const account1Rows = [{ sheetId: 201, sheetName: 'Tpl-A1' }]
+      templateService().fetchAllTemplates.mockResolvedValue(account1Rows)
+
+      const res = await request(app)
+        .get('/api/backend/templates')
+        .set('Cookie', [`token=${makeToken({ userId: 1, accountId: 1 })}`])
+
+      expect(res.status).toBe(200)
+      expect(templateService().fetchAllTemplates).toHaveBeenCalledWith(1)
+      expect(res.body).toEqual(account1Rows)
+    })
+
+    it('GET /api/backend/templates with accountId 2 returns only account 2 templates', async () => {
+      const account2Rows = [{ sheetId: 202, sheetName: 'Tpl-A2' }]
+      templateService().fetchAllTemplates.mockResolvedValue(account2Rows)
+
+      const res = await request(app)
+        .get('/api/backend/templates')
+        .set('Cookie', [`token=${makeToken({ userId: 1, accountId: 2 })}`])
+
+      expect(res.status).toBe(200)
+      expect(templateService().fetchAllTemplates).toHaveBeenCalledWith(2)
+      expect(res.body).toEqual(account2Rows)
+    })
+  })
+
+  describe('list returns 401 when accountId is missing (no fallback)', () => {
+    it('GET /api/backend/filledsheets returns 401 when token has no accountId', async () => {
+      filledSheetService().fetchAllFilled.mockClear()
+      const token = makeToken({ userId: 1 })
+      const res = await request(app)
+        .get('/api/backend/filledsheets')
+        .set('Cookie', [`token=${token}`])
+
+      expect(res.status).toBe(401)
+      expect(filledSheetService().fetchAllFilled).not.toHaveBeenCalled()
+    })
+
+    it('GET /api/backend/templates returns 401 when token has no accountId', async () => {
+      templateService().fetchAllTemplates.mockClear()
+      const token = makeToken({ userId: 1 })
+      const res = await request(app)
+        .get('/api/backend/templates')
+        .set('Cookie', [`token=${token}`])
+
+      expect(res.status).toBe(401)
+      expect(templateService().fetchAllTemplates).not.toHaveBeenCalled()
     })
   })
 
@@ -263,7 +346,7 @@ describe('Datasheets account scope (Step 1a)', () => {
 
     it('POST /api/backend/filledsheets returns 404 when template is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .post('/api/backend/filledsheets')
@@ -273,12 +356,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
 
     it('POST /api/backend/filledsheets returns 201 when template is in same account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(true)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(true)
       filledSheetService().createFilledSheet.mockResolvedValue({ sheetId: 201 })
 
       const res = await request(app)
@@ -298,7 +381,7 @@ describe('Datasheets account scope (Step 1a)', () => {
 
     it('POST /api/backend/filledsheets/:id/clone returns 404 when source sheet is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .post('/api/backend/filledsheets/888/clone')
@@ -308,12 +391,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(888, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(888, 1)
     })
 
     it('POST /api/backend/filledsheets/:id/clone returns 201 when source sheet is in same account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(true)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(true)
       filledSheetService().createFilledSheet.mockResolvedValue({ sheetId: 202 })
 
       const res = await request(app)
@@ -406,7 +489,7 @@ describe('Datasheets account scope (Step 1a)', () => {
   describe('Step 1d: attachments and notes sheet-gate', () => {
     it('GET /api/backend/filledsheets/:id/attachments returns 404 when sheet is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .get('/api/backend/filledsheets/999/attachments')
@@ -414,12 +497,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
 
     it('GET /api/backend/filledsheets/:id/notes returns 404 when sheet is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .get('/api/backend/filledsheets/999/notes')
@@ -427,12 +510,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
 
     it('POST /api/backend/filledsheets/:id/notes returns 404 when sheet is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .post('/api/backend/filledsheets/999/notes')
@@ -442,12 +525,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
 
     it('GET /api/backend/templates/:id/attachments returns 404 when template is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .get('/api/backend/templates/999/attachments')
@@ -455,12 +538,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
 
     it('GET /api/backend/templates/:id/notes returns 404 when template is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .get('/api/backend/templates/999/notes')
@@ -468,12 +551,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
 
     it('DELETE /api/backend/templates/:id/notes/:noteId returns 404 when template is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .delete('/api/backend/templates/999/notes/1')
@@ -481,14 +564,14 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
   })
 
   describe('Step 1e: revisions sheet-gate', () => {
     it('GET /api/backend/filledsheets/:id/revisions returns 404 when sheet is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .get('/api/backend/filledsheets/999/revisions')
@@ -496,12 +579,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
 
     it('GET /api/backend/filledsheets/:id/revisions/:revisionId returns 404 when sheet is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .get('/api/backend/filledsheets/999/revisions/1')
@@ -509,12 +592,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
 
     it('POST /api/backend/filledsheets/:id/revisions/:revisionId/restore returns 404 when sheet is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .post('/api/backend/filledsheets/999/revisions/1/restore')
@@ -523,14 +606,14 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
   })
 
   describe('Step 1g: sheet logs sheet-gate', () => {
     it('GET /api/backend/sheets/:sheetId/audit-logs returns 404 when sheet is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .get('/api/backend/sheets/999/audit-logs')
@@ -538,12 +621,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
 
     it('GET /api/backend/sheets/:sheetId/change-logs returns 404 when sheet is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .get('/api/backend/sheets/999/change-logs')
@@ -551,12 +634,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
 
     it('GET /api/backend/sheets/:sheetId/logs returns 404 when sheet is in another account', async () => {
       const token = makeToken({ userId: 1, accountId: 1 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .get('/api/backend/sheets/999/logs')
@@ -564,14 +647,14 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 1)
     })
   })
 
   describe('Step 1i: template structure sheet-gate', () => {
     it('GET /api/backend/templates/999/structure returns 404 when sheetBelongsToAccount false', async () => {
       const token = makeToken({ userId: 1, accountId: 7 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .get('/api/backend/templates/999/structure')
@@ -579,12 +662,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 7)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 7)
     })
 
     it('PUT /api/backend/templates/999/subsheets/order returns 404 when sheetBelongsToAccount false', async () => {
       const token = makeToken({ userId: 1, accountId: 7 })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .put('/api/backend/templates/999/subsheets/order')
@@ -594,7 +677,7 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 7)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, 7)
     })
   })
 
@@ -603,7 +686,7 @@ describe('Datasheets account scope (Step 1a)', () => {
 
     it('POST /api/backend/templates/999/verify returns 404 when sheetBelongsToAccount false', async () => {
       const token = makeToken({ userId: 1, accountId })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .post('/api/backend/templates/999/verify')
@@ -613,12 +696,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, accountId)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, accountId)
     })
 
     it('POST /api/backend/templates/999/approve returns 404 when sheetBelongsToAccount false', async () => {
       const token = makeToken({ userId: 1, accountId })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .post('/api/backend/templates/999/approve')
@@ -628,12 +711,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, accountId)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, accountId)
     })
 
     it('PUT /api/backend/templates/999 returns 404 when sheetBelongsToAccount false', async () => {
       const token = makeToken({ userId: 1, accountId })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .put('/api/backend/templates/999')
@@ -649,12 +732,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, accountId)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, accountId)
     })
 
     it('POST /api/backend/filledsheets/999/verify returns 404 when sheetBelongsToAccount false', async () => {
       const token = makeToken({ userId: 1, accountId })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .post('/api/backend/filledsheets/999/verify')
@@ -664,12 +747,12 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, accountId)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, accountId)
     })
 
     it('POST /api/backend/filledsheets/999/approve returns 404 when sheetBelongsToAccount false', async () => {
       const token = makeToken({ userId: 1, accountId })
-      filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+      sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
       const res = await request(app)
         .post('/api/backend/filledsheets/999/approve')
@@ -679,7 +762,7 @@ describe('Datasheets account scope (Step 1a)', () => {
 
       expect(res.status).toBe(404)
       expect(res.body?.error ?? res.text).toMatch(/not found/i)
-      expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(999, accountId)
+      expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(999, accountId)
     })
   })
 

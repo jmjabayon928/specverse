@@ -1,6 +1,7 @@
 // src/backend/routes/sheetLogsRoutes.ts
 import { Router } from 'express'
 
+import { PERMISSIONS } from '@/constants/permissions'
 import { verifyToken, requirePermission } from '@/backend/middleware/authMiddleware'
 import {
   getSheetAuditLogs,
@@ -13,21 +14,21 @@ const router = Router()
 router.get(
   '/:sheetId/audit-logs',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getSheetAuditLogs,
 )
 
 router.get(
   '/:sheetId/change-logs',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getSheetChangeLogs,
 )
 
 router.get(
   '/:sheetId/logs',
   verifyToken,
-  requirePermission('DATASHEET_VIEW'),
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getSheetLogsMerged,
 )
 

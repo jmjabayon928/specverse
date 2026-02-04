@@ -4,6 +4,7 @@
 import React from "react";
 import dynamic from "next/dynamic";
 import SecurePage from "@/components/security/SecurePage";
+import { PERMISSIONS } from "@/constants/permissions";
 import { Card, CardContent } from "@/components/ui/card";
 
 // Dynamic import of analytic charts
@@ -15,7 +16,7 @@ const FieldCompletionHeatmap = dynamic(() => import("./FieldCompletionHeatmap"),
 
 export default function AnalyticsPage() {
   return (
-    <SecurePage requiredPermission="DASHBOARD_VIEW">
+    <SecurePage requiredPermission={PERMISSIONS.DASHBOARD_VIEW}>
       <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <Card>
           <CardContent>

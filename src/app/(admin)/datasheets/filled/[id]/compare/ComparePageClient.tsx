@@ -3,6 +3,7 @@
 import React, { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { PERMISSIONS } from '@/constants/permissions'
 import { useSession } from '@/hooks/useSession'
 import type {
   CompareResponse,
@@ -44,7 +45,7 @@ export default function ComparePageClient({
   const [error, setError] = useState<string | null>(null)
 
   const hasEdit = Boolean(
-    user && Array.isArray(user.permissions) && user.permissions.includes('DATASHEET_EDIT')
+    user && Array.isArray(user.permissions) && user.permissions.includes(PERMISSIONS.DATASHEET_EDIT)
   )
 
   const applyOfferedFilter = useCallback(() => {

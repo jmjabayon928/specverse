@@ -30,6 +30,7 @@ function createAuthCookie(permissions: string[]): string {
 }
 
 const FILLED_PERMISSIONS = ['DATASHEET_VIEW', 'DATASHEET_EDIT']
+const TEST_ACCOUNT_ID = 1
 
 process.env.JWT_SECRET ??= 'secret'
 
@@ -60,7 +61,7 @@ jest.mock('../../src/backend/database/permissionQueries', () => ({
   getUserPermissions: jest.fn().mockResolvedValue([]),
 }))
 
-jest.mock('../../src/backend/services/filledSheetService', () => ({
+jest.mock('../../src/backend/services/sheetAccessService', () => ({
   sheetBelongsToAccount: jest.fn().mockImplementation((sheetId: number, accountId: number) =>
     Promise.resolve(sheetId === 42 && accountId === 1)
   ),
@@ -81,10 +82,11 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
         roleId?: number
         permissions?: string[]
       }
+      const accountId = decoded.accountId !== undefined ? decoded.accountId : TEST_ACCOUNT_ID
       req.user = {
         id: 1,
         userId: decoded.userId,
-        accountId: decoded.accountId ?? 1,
+        accountId,
         role: decoded.role ?? 'Admin',
         roleId: decoded.roleId ?? 1,
         email: 'test@example.com',
@@ -109,10 +111,11 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
           roleId?: number
           permissions?: string[]
         }
+        const accountId = decoded.accountId !== undefined ? decoded.accountId : TEST_ACCOUNT_ID
         req.user = {
           id: 1,
           userId: decoded.userId,
-          accountId: decoded.accountId ?? 1,
+          accountId,
           role: decoded.role ?? 'Admin',
           roleId: decoded.roleId ?? 1,
           email: 'test@example.com',

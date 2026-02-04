@@ -2,6 +2,7 @@
 
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
+import { PERMISSIONS } from '@/constants/permissions'
 import { getTemplateDetailsById } from '@/backend/services/templateService'
 import { requireAuth } from '@/utils/sessionUtils.server'
 import TemplateViewer from '../TemplateViewer'
@@ -40,7 +41,7 @@ const TemplateVerifyPage = async (props: TemplateVerifyPageProps) => {
   const sessionUser = await requireAuth()
 
   const canVerify = Array.isArray(sessionUser.permissions)
-    && sessionUser.permissions.includes('TEMPLATE_VERIFY')
+    && sessionUser.permissions.includes(PERMISSIONS.DATASHEET_VERIFY)
 
   if (!canVerify) {
     redirect('/unauthorized')

@@ -3,7 +3,9 @@ import type { Request, RequestHandler } from 'express'
 import { z } from 'zod'
 import { AppError } from '../errors/AppError'
 import { listRevisionsPaged, getRevisionById, createRevision, REVISION_SNAPSHOT_INVALID_MESSAGE } from '../database/sheetRevisionQueries'
-import { updateFilledSheet, getFilledSheetDetailsById, sheetBelongsToAccount } from '../services/filledSheetService'
+import { updateFilledSheet, getFilledSheetDetailsById } from '../services/filledSheetService'
+import { sheetBelongsToAccount } from '../services/sheetAccessService'
+import { mustGetAccountId } from '@/backend/utils/authGuards'
 import { poolPromise, sql } from '../config/db'
 import { unifiedSheetSchema } from '@/validation/sheetSchema'
 import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
@@ -62,7 +64,8 @@ export const listRevisionsHandler: RequestHandler = async (req, res, next) => {
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError('Sheet not found', 404))
@@ -115,7 +118,8 @@ export const getRevisionHandler: RequestHandler = async (req, res, next) => {
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError('Sheet not found', 404))
@@ -171,7 +175,8 @@ export const restoreRevisionHandler: RequestHandler = async (req, res, next) => 
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError('Sheet not found', 404))

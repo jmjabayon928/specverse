@@ -30,6 +30,8 @@ function createAuthCookie(role: string, permissions: string[] = []): string {
   return `token=${token}`
 }
 
+const TEST_ACCOUNT_ID = 1
+
 process.env.JWT_SECRET ??= 'secret'
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
@@ -47,9 +49,10 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
         roleId?: number
         permissions?: string[]
       }
+      const accountId = decoded.accountId !== undefined ? decoded.accountId : TEST_ACCOUNT_ID
       req.user = {
         userId: decoded.userId,
-        accountId: decoded.accountId ?? 1,
+        accountId,
         role: decoded.role ?? 'Engineer',
         roleId: decoded.roleId ?? 1,
         email: 'test@example.com',

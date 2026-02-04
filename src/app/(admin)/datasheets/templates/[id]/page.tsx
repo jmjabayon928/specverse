@@ -1,6 +1,7 @@
 // src/app/(admin)/datasheets/templates/[id]/page.tsx
 
 import SecurePage from '@/components/security/SecurePage'
+import { PERMISSIONS } from '@/constants/permissions'
 import { getTemplateDetailsById } from '@/backend/services/templateService'
 import { requireAuth } from '@/utils/sessionUtils.server'
 import TemplatePageClient from './TemplatePageClient'
@@ -90,7 +91,7 @@ const TemplateDetailPage = async (props: TemplateDetailPageProps) => {
     : null
 
   return (
-    <SecurePage requiredPermission='DATASHEET_VIEW'>
+    <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
       <TemplatePageClient
         sheetId={sheetId}
         user={session}

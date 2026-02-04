@@ -1,6 +1,7 @@
 // src/app/(admin)/datasheets/filled/[id]/verify/page.tsx
 
 import { notFound, redirect } from "next/navigation";
+import { PERMISSIONS } from "@/constants/permissions";
 import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import { Metadata } from "next";
@@ -23,7 +24,7 @@ export default async function FilledVerifyPage({ params }: Readonly<PageProps>) 
   // ✅ Always enforce session and permission
   const sessionUser = await requireAuth();
 
-  if (!sessionUser.permissions?.includes("DATASHEET_VERIFY")) {
+  if (!sessionUser.permissions?.includes(PERMISSIONS.DATASHEET_VERIFY)) {
     return redirect("/unauthorized");
   }
   const accountId = sessionUser.accountId;
