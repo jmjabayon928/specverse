@@ -56,7 +56,7 @@ jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),
 }))
 
-jest.mock('../../src/backend/services/filledSheetService', () => ({
+jest.mock('../../src/backend/services/sheetAccessService', () => ({
   sheetBelongsToAccount: (sheetId: number, accountId: number) => mockSheetBelongsToAccount(sheetId, accountId),
 }))
 

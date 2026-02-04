@@ -1,10 +1,11 @@
 // src/utils/approveGating.ts
 // Single source of truth: Supervisor must not see Approve UI (icon/button/page).
-// Backend still uses DATASHEET_APPROVE; this gates UI and page access only.
+// Backend uses PERMISSIONS.DATASHEET_APPROVE; this gates UI and page access only.
 
 import type { UserSession } from '@/domain/auth/sessionTypes'
+import { PERMISSIONS } from '@/constants/permissions'
 
-const APPROVE_PERMISSION = 'DATASHEET_APPROVE'
+const APPROVE_PERMISSION = PERMISSIONS.DATASHEET_APPROVE
 const SUPERVISOR_ROLE = 'Supervisor'
 
 /**

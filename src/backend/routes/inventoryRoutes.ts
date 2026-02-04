@@ -32,6 +32,7 @@ import {
   getInventoryAuditLogs
 } from "../database/inventoryAuditQueries";
 
+import { PERMISSIONS } from "@/constants/permissions";
 import { verifyToken, requirePermission } from "../middleware/authMiddleware";
 import { mustGetAccountId } from "@/backend/utils/authGuards";
 import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
@@ -150,7 +151,7 @@ const inventoryListQuerySchema = z.object({
 LIST ROUTES
 */
 // GET all items (array when no pagination params; envelope when page or pageSize present)
-router.get("/", verifyToken, requirePermission("INVENTORY_VIEW"), async (req, res) => {
+router.get("/", verifyToken, requirePermission(PERMISSIONS.INVENTORY_VIEW), async (req, res) => {
   const hasPagination =
     req.query.page !== undefined || req.query.pageSize !== undefined;
   if (!hasPagination) {
@@ -179,7 +180,7 @@ router.get("/", verifyToken, requirePermission("INVENTORY_VIEW"), async (req, re
 });
 
 // ✅ POST create item
-router.post("/", verifyToken, requirePermission("INVENTORY_CREATE"), async (req, res) => {
+router.post("/", verifyToken, requirePermission(PERMISSIONS.INVENTORY_CREATE), async (req, res) => {
   const newId = await createInventoryItem(req.body);
   res.status(201).json({ inventoryId: newId });
 });
@@ -277,7 +278,7 @@ const transactionsQuerySchema = z.object({
 });
 
 // Get all stock transactions (paginated with filters)
-router.get("/all/transactions", verifyToken, requirePermission("INVENTORY_VIEW"), asyncHandler(async (req, res) => {
+router.get("/all/transactions", verifyToken, requirePermission(PERMISSIONS.INVENTORY_VIEW), asyncHandler(async (req, res) => {
   const parsed = transactionsQuerySchema.safeParse(req.query);
   
   if (!parsed.success) {
@@ -307,7 +308,7 @@ router.get("/all/transactions", verifyToken, requirePermission("INVENTORY_VIEW")
 }));
 
 // Get all stock transactions as CSV
-router.get("/all/transactions.csv", verifyToken, requirePermission("INVENTORY_VIEW"), asyncHandler(async (req, res) => {
+router.get("/all/transactions.csv", verifyToken, requirePermission(PERMISSIONS.INVENTORY_VIEW), asyncHandler(async (req, res) => {
   const parsed = transactionsQuerySchema.omit({ page: true, pageSize: true }).safeParse(req.query);
   
   if (!parsed.success) {
@@ -393,13 +394,13 @@ router.get("/all/transactions.csv", verifyToken, requirePermission("INVENTORY_VI
 }));
 
 // Get all maintenance logs
-router.get("/all/maintenance", verifyToken, requirePermission("INVENTORY_MAINTENANCE_VIEW"), asyncHandler(async (req, res) => {
+router.get("/all/maintenance", verifyToken, requirePermission(PERMISSIONS.INVENTORY_MAINTENANCE_VIEW), asyncHandler(async (req, res) => {
   const data = await getAllInventoryMaintenanceLogs();
   res.json(data);
 }));
 
 // Get all audit logs
-router.get("/all/audit", verifyToken, requirePermission("INVENTORY_VIEW"), asyncHandler(async (req, res) => {
+router.get("/all/audit", verifyToken, requirePermission(PERMISSIONS.INVENTORY_VIEW), asyncHandler(async (req, res) => {
   const data = await getAllInventoryAuditLogs();
   res.json(data);
 }));
@@ -408,7 +409,7 @@ router.get("/all/audit", verifyToken, requirePermission("INVENTORY_VIEW"), async
 SUB-RESOURCE ROUTES
 */
 // ✅ GET stock transactions
-router.get("/:id/transactions", verifyToken, requirePermission("INVENTORY_VIEW"), async (req, res) => {
+router.get("/:id/transactions", verifyToken, requirePermission(PERMISSIONS.INVENTORY_VIEW), async (req, res) => {
   const id = parseIntParam(req.params.id);
   if (id == null) {
     return res.status(400).json({ message: "Invalid inventory ID" });
@@ -418,7 +419,7 @@ router.get("/:id/transactions", verifyToken, requirePermission("INVENTORY_VIEW")
 });
 
 // ✅ POST stock transaction
-router.post("/:id/transactions", verifyToken, requirePermission("INVENTORY_TRANSACTION_CREATE"), async (req, res) => {
+router.post("/:id/transactions", verifyToken, requirePermission(PERMISSIONS.INVENTORY_TRANSACTION_CREATE), async (req, res) => {
   const inventoryId = parseIntParam(req.params.id);
   if (inventoryId == null) {
     return res.status(400).json({ message: "Invalid inventory ID" });
@@ -431,7 +432,7 @@ router.post("/:id/transactions", verifyToken, requirePermission("INVENTORY_TRANS
 });
 
 // ✅ GET maintenance logs
-router.get("/:id/maintenance", verifyToken, requirePermission("INVENTORY_MAINTENANCE_VIEW"), async (req, res) => {
+router.get("/:id/maintenance", verifyToken, requirePermission(PERMISSIONS.INVENTORY_MAINTENANCE_VIEW), async (req, res) => {
   const id = parseIntParam(req.params.id);
   if (id == null) {
     return res.status(400).json({ message: "Invalid inventory ID" });
@@ -441,7 +442,7 @@ router.get("/:id/maintenance", verifyToken, requirePermission("INVENTORY_MAINTEN
 });
 
 // ✅ POST maintenance log
-router.post("/:id/maintenance", verifyToken, requirePermission("INVENTORY_MAINTENANCE_CREATE"), async (req, res) => {
+router.post("/:id/maintenance", verifyToken, requirePermission(PERMISSIONS.INVENTORY_MAINTENANCE_CREATE), async (req, res) => {
   const inventoryId = parseIntParam(req.params.id);
   if (inventoryId == null) {
     return res.status(400).json({ message: "Invalid inventory ID" });
@@ -454,7 +455,7 @@ router.post("/:id/maintenance", verifyToken, requirePermission("INVENTORY_MAINTE
 });
 
 // ✅ GET audit logs
-router.get("/:id/audit", verifyToken, requirePermission("INVENTORY_VIEW"), async (req, res) => {
+router.get("/:id/audit", verifyToken, requirePermission(PERMISSIONS.INVENTORY_VIEW), async (req, res) => {
   const id = parseIntParam(req.params.id);
   if (id == null) {
     return res.status(400).json({ message: "Invalid inventory ID" });
@@ -485,7 +486,7 @@ router.get("/:id/can-delete", asyncHandler(async (req, res) => {
 }));
 
 // ✅ GET single item
-router.get("/:id", verifyToken, requirePermission("INVENTORY_VIEW"), asyncHandler(async (req, res) => {
+router.get("/:id", verifyToken, requirePermission(PERMISSIONS.INVENTORY_VIEW), asyncHandler(async (req, res) => {
     const itemId = parseIntParam(req.params.id);
     if (itemId == null) {
       return res.status(400).json({ message: "Invalid inventory ID" });
@@ -496,7 +497,7 @@ router.get("/:id", verifyToken, requirePermission("INVENTORY_VIEW"), asyncHandle
 }));
 
 // ✅ PUT update item
-router.put("/:id", verifyToken, requirePermission("INVENTORY_EDIT"), asyncHandler(async (req, res) => {
+router.put("/:id", verifyToken, requirePermission(PERMISSIONS.INVENTORY_EDIT), asyncHandler(async (req, res) => {
   const inventoryId = parseIntParam(req.params.id);
   const data = req.body;
 
@@ -509,7 +510,7 @@ router.put("/:id", verifyToken, requirePermission("INVENTORY_EDIT"), asyncHandle
 }));
 
 // ✅ DELETE soft-delete item
-router.delete("/:id", verifyToken, requirePermission("INVENTORY_DELETE"), async (req, res) => {
+router.delete("/:id", verifyToken, requirePermission(PERMISSIONS.INVENTORY_DELETE), async (req, res) => {
   const id = parseIntParam(req.params.id);
   if (id == null) {
     return res.status(400).json({ message: "Invalid inventory ID" });

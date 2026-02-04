@@ -5,7 +5,8 @@ import {
   fetchSheetChangeLogs,
   fetchSheetLogsMerged,
 } from "../services/sheetLogsService"
-import { sheetBelongsToAccount } from "../services/filledSheetService"
+import { sheetBelongsToAccount } from "../services/sheetAccessService"
+import { mustGetAccountId } from '@/backend/utils/authGuards'
 import { AppError } from "../errors/AppError"
 
 function parseSheetId(raw: unknown): number | null {
@@ -30,7 +31,8 @@ export const getSheetAuditLogs: RequestHandler = async (req, res, next) => {
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))
@@ -53,7 +55,8 @@ export const getSheetChangeLogs: RequestHandler = async (req, res, next) => {
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))
@@ -76,7 +79,8 @@ export const getSheetLogsMerged: RequestHandler = async (req, res, next) => {
       return
     }
 
-    const accountId = req.user!.accountId!
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError("Sheet not found", 404))

@@ -51,16 +51,9 @@ jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),
 }))
 
-jest.mock('../../src/backend/services/filledSheetService', () => {
-  const actual =
-    jest.requireActual<typeof import('../../src/backend/services/filledSheetService')>(
-      '../../src/backend/services/filledSheetService'
-    )
-  return {
-    ...actual,
-    sheetBelongsToAccount: jest.fn().mockResolvedValue(true),
-  }
-})
+jest.mock('../../src/backend/services/sheetAccessService', () => ({
+  sheetBelongsToAccount: jest.fn().mockResolvedValue(true),
+}))
 
 jest.mock('../../src/backend/services/layoutService', () => {
   const actual =
@@ -99,15 +92,15 @@ const layoutService = () =>
     getLayoutBundle: jest.Mock
     listLayouts: jest.Mock
   }
-const filledSheetService = () =>
-  require('../../src/backend/services/filledSheetService') as typeof import('../../src/backend/services/filledSheetService') & {
+const sheetAccessService = () =>
+  require('../../src/backend/services/sheetAccessService') as typeof import('../../src/backend/services/sheetAccessService') & {
     sheetBelongsToAccount: jest.Mock
   }
 
 describe('Layouts account scope (Step 1f)', () => {
   beforeEach(() => {
     layoutService().layoutBelongsToAccount.mockResolvedValue(true)
-    filledSheetService().sheetBelongsToAccount.mockResolvedValue(true)
+    sheetAccessService().sheetBelongsToAccount.mockResolvedValue(true)
     layoutService().listLayouts.mockResolvedValue([])
   })
 
@@ -126,7 +119,7 @@ describe('Layouts account scope (Step 1f)', () => {
 
   it('GET /api/backend/layouts/:layoutId/render returns 404 when sheet or layout is in another account', async () => {
     const token = makeToken({ userId: 1, accountId: 1 })
-    filledSheetService().sheetBelongsToAccount.mockResolvedValue(false)
+    sheetAccessService().sheetBelongsToAccount.mockResolvedValue(false)
 
     const res = await request(app)
       .get('/api/backend/layouts/999/render?sheetId=1&uom=SI&lang=eng')
@@ -134,7 +127,7 @@ describe('Layouts account scope (Step 1f)', () => {
 
     expect(res.status).toBe(404)
     expect(res.body?.error ?? res.text).toMatch(/not found/i)
-    expect(filledSheetService().sheetBelongsToAccount).toHaveBeenCalledWith(1, 1)
+    expect(sheetAccessService().sheetBelongsToAccount).toHaveBeenCalledWith(1, 1)
   })
 
   it('listLayouts is called with accountId and returns only account layouts', async () => {

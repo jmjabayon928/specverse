@@ -36,7 +36,7 @@ jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),
 }))
 
-jest.mock('../../src/backend/services/filledSheetService', () => ({
+jest.mock('../../src/backend/services/sheetAccessService', () => ({
   sheetBelongsToAccount: jest.fn().mockImplementation((templateId: number, accountId: number) =>
     Promise.resolve(accountId === 1 && (templateId === 1 || templateId === 999))
   ),

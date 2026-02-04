@@ -2,17 +2,18 @@
 import express from "express";
 import { sql } from "../config/db";
 import { exportSheetPDF, exportSheetExcel } from "../controllers/_datasheetController";
-import { verifyToken } from "../middleware/authMiddleware";
+import { PERMISSIONS } from "@/constants/permissions";
+import { verifyToken, requirePermission } from "@/backend/middleware/authMiddleware";
 
 const router = express.Router();
 
 // Export for filled datasheets
-router.get("/filled/:id/export/pdf", verifyToken, exportSheetPDF);
-router.get("/filled/:id/export/excel", verifyToken, exportSheetExcel);
+router.get("/filled/:id/export/pdf", verifyToken, requirePermission(PERMISSIONS.DATASHEET_EXPORT), exportSheetPDF);
+router.get("/filled/:id/export/excel", verifyToken, requirePermission(PERMISSIONS.DATASHEET_EXPORT), exportSheetExcel);
 
 // Export for template datasheets
-router.get("/templates/:id/export/pdf", verifyToken, exportSheetPDF);
-router.get("/templates/:id/export/excel", verifyToken, exportSheetExcel);
+router.get("/templates/:id/export/pdf", verifyToken, requirePermission(PERMISSIONS.DATASHEET_EXPORT), exportSheetPDF);
+router.get("/templates/:id/export/excel", verifyToken, requirePermission(PERMISSIONS.DATASHEET_EXPORT), exportSheetExcel);
 
 // 🔠 Translations - used by both templates and filled sheets
 

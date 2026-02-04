@@ -37,6 +37,11 @@ const mockGetLatestApprovedTemplateId = jest.fn()
 const mockCreateFilledSheet = jest.fn()
 const mockDoesEquipmentTagExist = jest.fn()
 
+jest.mock('../../src/backend/services/sheetAccessService', () => ({
+  sheetBelongsToAccount: jest.fn().mockImplementation((sheetId: number, accountId: number) =>
+    Promise.resolve(accountId === 1 && (sheetId === 5 || sheetId === 200))
+  ),
+}))
 jest.mock('../../src/backend/services/filledSheetService', () => {
   const actual =
     jest.requireActual<typeof import('../../src/backend/services/filledSheetService')>(
@@ -44,9 +49,6 @@ jest.mock('../../src/backend/services/filledSheetService', () => {
     )
   return {
     ...actual,
-    sheetBelongsToAccount: jest.fn().mockImplementation((sheetId: number, accountId: number) =>
-      Promise.resolve(accountId === 1 && (sheetId === 5 || sheetId === 200))
-    ),
     getFilledSheetTemplateId: (...args: unknown[]) => mockGetFilledSheetTemplateId(...args),
     getLatestApprovedTemplateId: (...args: unknown[]) => mockGetLatestApprovedTemplateId(...args),
     createFilledSheet: (...args: unknown[]) => mockCreateFilledSheet(...args),

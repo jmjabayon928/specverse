@@ -28,6 +28,7 @@ import type {
 import type { AuditContext } from '@/domain/audit/auditTypes'
 import { convertToUSC } from '@/utils/unitConversionTable'
 import { getSheetTranslations } from '@/backend/services/translationService'
+import { sheetBelongsToAccount } from '@/backend/services/sheetAccessService'
 import { applySheetTranslations } from '@/utils/applySheetTranslations'
 import { generateDatasheetPDF } from '@/utils/generateDatasheetPDF'
 import { generateDatasheetExcel } from '@/utils/generateDatasheetExcel'
@@ -94,7 +95,7 @@ export type CreateAttachmentInput = {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Queries for filled sheet listing and template metadata
+   Queries for filled sheet listing (account-scoped: only caller's account)
    ────────────────────────────────────────────────────────────── */
 
 export const fetchAllFilled = async (accountId: number) => {
@@ -128,21 +129,6 @@ export const fetchAllFilled = async (accountId: number) => {
   `)
 
   return result.recordset ?? []
-}
-
-/**
- * Returns true if the sheet exists and belongs to the given account (for value-set / sheet-gate).
- */
-export async function sheetBelongsToAccount(sheetId: number, accountId: number): Promise<boolean> {
-  const pool = await poolPromise
-  const result = await pool
-    .request()
-    .input('SheetID', sql.Int, sheetId)
-    .input('AccountID', sql.Int, accountId)
-    .query<{ Ex: number }>(`
-      SELECT 1 AS Ex FROM dbo.Sheets WHERE SheetID = @SheetID AND AccountID = @AccountID
-    `)
-  return (result.recordset?.length ?? 0) > 0
 }
 
 export async function getRequiredTemplateFields(templateId: number): Promise<RequiredTemplateField[]> {

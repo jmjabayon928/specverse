@@ -1,6 +1,7 @@
 // src/backend/routes/exportJobsRoutes.ts
 import type { Request, Response, NextFunction } from 'express'
 import { Router } from 'express'
+import { PERMISSIONS } from '@/constants/permissions'
 import { verifyToken, optionalVerifyToken, requirePermission } from '../middleware/authMiddleware'
 import { requireAdmin } from '../middleware/requireAdmin'
 import { asyncHandler } from '../utils/asyncHandler'
@@ -26,7 +27,7 @@ const router = Router()
 router.post(
   '/',
   verifyToken,
-  requirePermission('INVENTORY_VIEW'),
+  requirePermission(PERMISSIONS.INVENTORY_VIEW),
   asyncHandler(startExportJobHandler as AsyncRequestHandler)
 )
 

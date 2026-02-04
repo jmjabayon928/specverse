@@ -1,13 +1,14 @@
 // src/app/(admin)/datasheets/revisions/page.tsx
 "use client";
 import { useRouter } from "next/navigation";
+import { PERMISSIONS } from '@/constants/permissions';
 import SecurePage from '@/components/security/SecurePage';
 
 export default function RevisionBrowserPage() {
   const router = useRouter();
 
   return (
-    <SecurePage requiredPermission="DATASHEET_VIEW">
+    <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
       <div className="p-6 max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold mb-4">Datasheet Revisions (Unavailable)</h1>
 

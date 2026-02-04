@@ -10,6 +10,7 @@ import { errorHandler } from "../../src/backend/middleware/errorHandler";
 
 process.env.JWT_SECRET ??= "secret";
 
+const TEST_ACCOUNT_ID = 1;
 const mockGetInventoryMaintenanceLogs = jest.fn();
 
 jest.mock("../../src/backend/middleware/authMiddleware", () => ({
@@ -29,10 +30,11 @@ jest.mock("../../src/backend/middleware/authMiddleware", () => ({
         permissions?: string[];
         profilePic?: string | null;
       };
+      const accountId = decoded.accountId !== undefined ? decoded.accountId : TEST_ACCOUNT_ID;
       req.user = {
         id: decoded.id ?? decoded.userId,
         userId: decoded.userId,
-        accountId: decoded.accountId ?? 1,
+        accountId,
         role: decoded.role ?? "Engineer",
         roleId: decoded.roleId ?? 1,
         permissions: decoded.permissions ?? [],
@@ -56,10 +58,11 @@ jest.mock("../../src/backend/middleware/authMiddleware", () => ({
           permissions?: string[];
           profilePic?: string | null;
         };
+        const accountId = decoded.accountId !== undefined ? decoded.accountId : TEST_ACCOUNT_ID;
         req.user = {
           id: decoded.id ?? decoded.userId,
           userId: decoded.userId,
-          accountId: decoded.accountId ?? 1,
+          accountId,
           role: decoded.role ?? "Engineer",
           roleId: decoded.roleId ?? 1,
           permissions: decoded.permissions ?? [],

@@ -13,10 +13,11 @@ import WorkflowSankeyChartTemplates from "./WorkflowSankeyChartTemplates";
 import WorkflowSankeyChartFilledSheets from "./WorkflowSankeyChartFilledSheets";
 import SupplierComparisonChart from "./SupplierComparisonChart";
 import SecurePage from '@/components/security/SecurePage';
+import { PERMISSIONS } from '@/constants/permissions';
 
 export default function ReportsPage() {
   return (
-    <SecurePage requiredPermission="DASHBOARD_VIEW">
+    <SecurePage requiredPermission={PERMISSIONS.DASHBOARD_VIEW}>
       <div className="p-6 space-y-10">
         <h1 className="text-2xl font-bold">📑 Reports Dashboard</h1>
 

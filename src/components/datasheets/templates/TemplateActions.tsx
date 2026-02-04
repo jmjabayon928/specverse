@@ -4,6 +4,7 @@
 import React from 'react'
 import Image from 'next/image'
 import { useRouter, usePathname } from 'next/navigation'
+import { PERMISSIONS } from '@/constants/permissions'
 import type { UserSession } from '@/domain/auth/sessionTypes'
 import type { MinimalSheetForActions } from '@/domain/datasheets/sheetTypes'
 import IconTooltip from '@/components/ui/tooltip/IconTooltip'
@@ -48,7 +49,7 @@ const canEditTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
     return false
   }
 
-  return isEditableStatus && userHasPermission(user, 'DATASHEET_EDIT')
+  return isEditableStatus && userHasPermission(user, PERMISSIONS.DATASHEET_EDIT)
 }
 
 const canVerifyTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
@@ -60,7 +61,7 @@ const canVerifyTemplate = (user: UserSession, sheet: MinimalSheetForActions) => 
     return false
   }
 
-  return userHasPermission(user, 'DATASHEET_VERIFY')
+  return userHasPermission(user, PERMISSIONS.DATASHEET_VERIFY)
 }
 
 const canApproveTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
@@ -78,7 +79,7 @@ const canCloneTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
     return false
   }
 
-  return userHasPermission(user, 'DATASHEET_CREATE')
+  return userHasPermission(user, PERMISSIONS.DATASHEET_CREATE)
 }
 
 const canExportTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
@@ -86,8 +87,7 @@ const canExportTemplate = (user: UserSession, sheet: MinimalSheetForActions) => 
   if (!isApproved) {
     return false
   }
-
-  return userHasPermission(user, 'DATASHEET_EXPORT')
+  return userHasPermission(user, PERMISSIONS.DATASHEET_EXPORT)
 }
 
 const canCreateFilledFromTemplate = (user: UserSession, sheet: MinimalSheetForActions) => {
@@ -95,16 +95,7 @@ const canCreateFilledFromTemplate = (user: UserSession, sheet: MinimalSheetForAc
   if (!isApproved) {
     return false
   }
-
-  const allowedPermissions = ['FILLED_CREATE', 'DATASHEET_CREATE', 'SHEET_CREATE']
-
-  for (const permission of allowedPermissions) {
-    if (userHasPermission(user, permission)) {
-      return true
-    }
-  }
-
-  return false
+  return userHasPermission(user, PERMISSIONS.DATASHEET_CREATE)
 }
 
 const TemplateActions = (props: Readonly<TemplateActionsProps>) => {

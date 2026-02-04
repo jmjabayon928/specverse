@@ -1,5 +1,6 @@
 // src/app/(admin)/datasheets/filled/[id]/page.tsx
 import { notFound } from "next/navigation";
+import { PERMISSIONS } from "@/constants/permissions";
 import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
 import FilledSheetPageClient from "./FilledSheetPageClient";
 import { requireAuth } from "@/utils/sessionUtils.server";
@@ -63,7 +64,7 @@ export default async function FilledSheetDetailPage({
     : null;
 
   return (
-    <SecurePage requiredPermission="DATASHEET_VIEW">
+    <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
       <FilledSheetPageClient
         sheetId={sheetId}
         user={session}

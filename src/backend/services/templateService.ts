@@ -410,6 +410,10 @@ async function insertSubsheetTree(
 // full replace flag retained for now; still off
 const SYNC_SUBSHEETS_ON_UPDATE = false
 
+/**
+ * Syncs subsheet tree for a template. Must only be called from code paths that have already
+ * verified sheet ownership (sheetBelongsToAccount(sheetId, accountId)) in the route handler.
+ */
 async function syncSubsheetTree(
   tx: sql.Transaction,
   sheetId: number,
@@ -1026,7 +1030,7 @@ export const fetchTemplateReferenceOptions = async () => {
 }
 
 // ───────────────────────────────────────────
-// Template list
+// Template list (account-scoped: only caller's account)
 // ───────────────────────────────────────────
 
 export const fetchAllTemplates = async (accountId: number) => {
@@ -1635,6 +1639,7 @@ export async function updateTemplate(
       WHERE SheetID = @SheetID AND IsTemplate = 1
     `)
 
+    // syncSubsheetTree must only be reachable after ownership gate (sheetBelongsToAccount) in the route handler.
     await syncSubsheetTree(tx, sheetId, data)
     await bumpRejectedToModifiedDraft(tx.request(), sheetId, userId)
 

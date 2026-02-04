@@ -27,6 +27,8 @@ function createAuthCookie(permissions: string[]): string {
   return `token=${token}`
 }
 
+const TEST_ACCOUNT_ID = 1
+
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
   verifyToken: (req: Request, _res: Response, next: NextFunction) => {
     const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
@@ -42,10 +44,11 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
         roleId?: number
         permissions?: string[]
       }
+      const accountId = decoded.accountId !== undefined ? decoded.accountId : TEST_ACCOUNT_ID
       req.user = {
         id: 1,
         userId: decoded.userId,
-        accountId: decoded.accountId ?? 1,
+        accountId,
         role: decoded.role ?? 'Admin',
         roleId: decoded.roleId ?? 1,
         email: 'test@example.com',
@@ -70,10 +73,11 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
           roleId?: number
           permissions?: string[]
         }
+        const accountId = decoded.accountId !== undefined ? decoded.accountId : TEST_ACCOUNT_ID
         req.user = {
           id: 1,
           userId: decoded.userId,
-          accountId: decoded.accountId ?? 1,
+          accountId,
           role: decoded.role ?? 'Admin',
           roleId: decoded.roleId ?? 1,
           email: 'test@example.com',
@@ -176,6 +180,8 @@ jest.mock('../../src/backend/database/sheetRevisionQueries', () => ({
 jest.mock('../../src/backend/services/filledSheetService', () => ({
   updateFilledSheet: (...args: unknown[]) => mockUpdateFilledSheet(...args),
   getFilledSheetDetailsById: (...args: unknown[]) => mockGetFilledSheetDetailsById(...args),
+}))
+jest.mock('../../src/backend/services/sheetAccessService', () => ({
   sheetBelongsToAccount: jest.fn().mockImplementation((sheetId: number, accountId: number) =>
     Promise.resolve(sheetId === 999 && accountId === 1)
   ),

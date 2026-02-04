@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 
 import SecurePage from "@/components/security/SecurePage";
+import { PERMISSIONS } from "@/constants/permissions";
 import FilledSheetClonerForm from "./FilledSheetClonerForm";
 import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
 import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
@@ -42,7 +43,7 @@ export default async function FilledClonePage(
   });
 
   return (
-    <SecurePage requiredPermission="DATASHEET_EDIT">
+    <SecurePage requiredPermission={PERMISSIONS.DATASHEET_EDIT}>
       <FilledSheetClonerForm
         sourceSheetId={sheetId}
         defaultValues={defaultValues}
