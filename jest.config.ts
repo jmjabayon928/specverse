@@ -37,6 +37,7 @@ const config: Config = {
         '<rootDir>/tests/services/**/*.test.ts',
         '<rootDir>/tests/utils/**/*.test.ts',
         '<rootDir>/tests/backend/**/*.test.ts',
+        '<rootDir>/src/types/__tests__/**/*.test.ts',
       ],
       ...commonConfig,
       setupFiles: ['<rootDir>/tests/setup-env.ts'],
