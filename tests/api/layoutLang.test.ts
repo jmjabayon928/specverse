@@ -6,11 +6,14 @@ import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import express from 'express'
 import cookieParser from 'cookie-parser'
+import type { Request, Response, NextFunction } from 'express'
+import { AppError } from '../../src/backend/errors/AppError'
 
 function createAuthCookie(permissions: string[]): string {
   const token = jwt.sign(
     {
       userId: 1,
+      accountId: 1,
       email: 'test@example.com',
       fullName: 'Test User',
       role: 'Admin',
@@ -25,7 +28,39 @@ function createAuthCookie(permissions: string[]): string {
 
 process.env.JWT_SECRET ??= 'secret'
 
+jest.mock('../../src/backend/middleware/authMiddleware', () => ({
+  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+    if (!token) {
+      next(new AppError('Unauthorized - No token', 401))
+      return
+    }
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET ?? 'secret') as { userId: number; accountId?: number; permissions?: string[] }
+      req.user = {
+        userId: decoded.userId,
+        accountId: decoded.accountId ?? 1,
+        roleId: 1,
+        role: 'Admin',
+        permissions: decoded.permissions ?? ['DATASHEET_VIEW'],
+      }
+      next()
+    } catch {
+      next(new AppError('Invalid token', 403))
+    }
+  },
+  requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+  optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
+}))
+
+jest.mock('../../src/backend/services/filledSheetService', () => {
+  const actual = jest.requireActual('../../src/backend/services/filledSheetService')
+  return { ...actual, sheetBelongsToAccount: jest.fn().mockResolvedValue(true) }
+})
+
 jest.mock('../../src/backend/services/layoutService', () => ({
+  ...jest.requireActual('../../src/backend/services/layoutService'),
+  layoutBelongsToAccount: jest.fn().mockResolvedValue(true),
   renderLayout: jest.fn().mockResolvedValue({
     layoutId: 1,
     sheetId: 1,

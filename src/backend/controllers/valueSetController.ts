@@ -14,6 +14,7 @@ import {
   type VarianceStatus,
   type StatusTransition,
 } from '../services/valueSetService'
+import { sheetBelongsToAccount } from '../services/filledSheetService'
 import { AppError } from '../errors/AppError'
 
 const CONTEXT_CODES: ValueContextCode[] = ['Requirement', 'Offered', 'AsBuilt']
@@ -59,6 +60,13 @@ export const getSheetValueSets: RequestHandler = async (req, res, next) => {
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+
     const context = parseContext(req.query.context)
     const partyId = parsePartyId(req.query.partyId)
 
@@ -80,6 +88,13 @@ export const postSheetValueSet: RequestHandler = async (req, res, next) => {
     const sheetId = parseSheetId(req.params.sheetId)
     if (sheetId == null) {
       next(new AppError('Invalid sheetId', 400))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
       return
     }
 
@@ -122,6 +137,13 @@ export const patchSheetValueSetVariances: RequestHandler = async (req, res, next
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+
     const body = req.body as { infoTemplateId?: unknown; status?: unknown }
     const infoTemplateId = parseInfoTemplateId(body?.infoTemplateId)
     if (infoTemplateId == null) {
@@ -158,6 +180,13 @@ export const postSheetValueSetStatus: RequestHandler = async (req, res, next) =>
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+
     const body = req.body as { status?: unknown }
     const status = typeof body?.status === 'string' && STATUS_TRANSITIONS.includes(body.status as StatusTransition)
       ? (body.status as StatusTransition)
@@ -179,6 +208,13 @@ export const getSheetCompare: RequestHandler = async (req, res, next) => {
     const sheetId = parseSheetId(req.params.sheetId)
     if (sheetId == null) {
       next(new AppError('Invalid sheetId', 400))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
       return
     }
 

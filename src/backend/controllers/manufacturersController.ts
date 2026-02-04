@@ -117,11 +117,17 @@ const firstIssueMessage = (result: z.SafeParseError<unknown>): string => {
 /** GET /api/backend/settings/manufacturers */
 export const listManufacturers: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const page = Math.max(qint(req.query.page, 1), 1)
     const pageSize = Math.min(Math.max(qint(req.query.pageSize, 20), 1), 100)
     const search = qstr(req.query.search, '').trim()
 
     const params: ListManufacturersParams = {
+      accountId,
       page,
       pageSize,
       search,
@@ -142,13 +148,18 @@ export const listManufacturers: RequestHandler = async (req, res, next) => {
 /** GET /api/backend/settings/manufacturers/:id */
 export const getManufacturer: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     if (!Number.isFinite(id) || id <= 0) {
       throw new AppError('Invalid id', 400)
     }
 
-    const row = await getManufacturerByIdService(id)
+    const row = await getManufacturerByIdService(accountId, id)
 
     if (!row) {
       throw new AppError('Not found', 404)
@@ -170,6 +181,11 @@ export const getManufacturer: RequestHandler = async (req, res, next) => {
 /** POST /api/backend/settings/manufacturers */
 export const createManufacturer: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const parsed = manufacturerCreateSchema.safeParse(req.body ?? {})
 
     if (!parsed.success) {
@@ -184,7 +200,7 @@ export const createManufacturer: RequestHandler = async (req, res, next) => {
       ManuAddress: body.ManuAddress.trim(),
     }
 
-    const newId = await createManufacturerService(input)
+    const newId = await createManufacturerService(accountId, input)
 
     res.status(201).json({ ManuID: newId })
   } catch (error) {
@@ -201,6 +217,11 @@ export const createManufacturer: RequestHandler = async (req, res, next) => {
 /** PATCH /api/backend/settings/manufacturers/:id */
 export const updateManufacturer: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     if (!Number.isFinite(id) || id <= 0) {
@@ -217,7 +238,7 @@ export const updateManufacturer: RequestHandler = async (req, res, next) => {
     const payload = buildUpdatePayload(parsed.data)
     ensureHasUpdatableFields(payload)
 
-    const updated = await updateManufacturerService(id, payload)
+    const updated = await updateManufacturerService(accountId, id, payload)
 
     if (!updated) {
       throw new AppError('Not found', 404)
@@ -238,13 +259,18 @@ export const updateManufacturer: RequestHandler = async (req, res, next) => {
 /** DELETE /api/backend/settings/manufacturers/:id */
 export const deleteManufacturer: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     if (!Number.isFinite(id) || id <= 0) {
       throw new AppError('Invalid id', 400)
     }
 
-    const ok = await deleteManufacturerService(id)
+    const ok = await deleteManufacturerService(accountId, id)
 
     if (!ok) {
       throw new AppError('Not found', 404)

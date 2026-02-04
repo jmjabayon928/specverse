@@ -17,9 +17,10 @@ interface DatasheetPDFExport {
 export async function generateDatasheetPDF(
   sheetId: number,
   uom: "SI" | "USC",
-  lang: string = "eng"
+  lang: string = "eng",
+  accountId: number
 ): Promise<DatasheetPDFExport> {
-  const result = await getFilledSheetDetailsById(sheetId, lang, uom);
+  const result = await getFilledSheetDetailsById(sheetId, lang, uom, accountId);
   if (!result) throw new Error(`Sheet with ID ${sheetId} not found.`);
   const sheet: UnifiedSheet = result.datasheet;
 
@@ -139,9 +140,10 @@ export async function generateDatasheetPDF(
 export async function generateDatasheetExcel(
   sheetId: number,
   uom: "SI" | "USC",
-  lang: string = "eng"
+  lang: string = "eng",
+  accountId: number
 ): Promise<Buffer> {
-  const result = await getFilledSheetDetailsById(sheetId, lang, uom);
+  const result = await getFilledSheetDetailsById(sheetId, lang, uom, accountId);
   if (!result) throw new Error(`Sheet with ID ${sheetId} not found.`);
   const sheet = result.datasheet;
 

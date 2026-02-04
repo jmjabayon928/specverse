@@ -4,11 +4,81 @@ import request from "supertest";
 import jwt from "jsonwebtoken";
 import express from "express";
 import cookieParser from "cookie-parser";
+import type { Request, Response, NextFunction } from "express";
+import { AppError } from "../../src/backend/errors/AppError";
 import { errorHandler } from "../../src/backend/middleware/errorHandler";
 
 process.env.JWT_SECRET ??= "secret";
 
 const mockGetInventoryMaintenanceLogs = jest.fn();
+
+jest.mock("../../src/backend/middleware/authMiddleware", () => ({
+  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      next(new AppError("Unauthorized - No token", 401));
+      return;
+    }
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET ?? "secret") as {
+        id?: number;
+        userId: number;
+        accountId?: number;
+        role?: string;
+        roleId?: number;
+        permissions?: string[];
+        profilePic?: string | null;
+      };
+      req.user = {
+        id: decoded.id ?? decoded.userId,
+        userId: decoded.userId,
+        accountId: decoded.accountId ?? 1,
+        role: decoded.role ?? "Engineer",
+        roleId: decoded.roleId ?? 1,
+        permissions: decoded.permissions ?? [],
+        profilePic: decoded.profilePic ?? undefined,
+      };
+      next();
+    } catch {
+      next(new AppError("Invalid or expired session", 403));
+    }
+  },
+  optionalVerifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(" ")[1];
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET ?? "secret") as {
+          id?: number;
+          userId: number;
+          accountId?: number;
+          role?: string;
+          roleId?: number;
+          permissions?: string[];
+          profilePic?: string | null;
+        };
+        req.user = {
+          id: decoded.id ?? decoded.userId,
+          userId: decoded.userId,
+          accountId: decoded.accountId ?? 1,
+          role: decoded.role ?? "Engineer",
+          roleId: decoded.roleId ?? 1,
+          permissions: decoded.permissions ?? [],
+          profilePic: decoded.profilePic ?? undefined,
+        };
+      } catch {
+        // leave req.user unset
+      }
+    }
+    next();
+  },
+  requirePermission: (permissionKey: string) => (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user?.permissions?.includes(permissionKey)) {
+      next(new AppError("Permission denied", 403));
+      return;
+    }
+    next();
+  },
+}));
 
 jest.mock("../../src/backend/database/inventoryMaintenanceQueries", () => ({
   getInventoryMaintenanceLogs: (...args: unknown[]) =>
@@ -22,10 +92,13 @@ jest.mock("../../src/backend/database/permissionQueries", () => ({
 function createAuthCookie(): string {
   const token = jwt.sign(
     {
+      id: 1,
       userId: 1,
+      accountId: 1,
       email: "test@example.com",
       fullName: "Test User",
       role: "Admin",
+      roleId: 1,
       profilePic: null,
       permissions: ["INVENTORY_MAINTENANCE_VIEW"],
     },

@@ -62,6 +62,8 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
     email: user.email ?? '',
     profilePic: user.profilePic ?? '',
     permissions: user.permissions ?? [],
+    accountId: user.accountId ?? null,
+    isSuperadmin: user.isSuperadmin ?? false,
   })
 }
 

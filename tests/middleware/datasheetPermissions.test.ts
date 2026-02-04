@@ -41,6 +41,7 @@ describe('requirePermission middleware', () => {
     const req = {
       user: {
         userId: 1,
+        accountId: 1,
         permissions: [permissionKey],
       },
       cookies: {},
@@ -53,7 +54,7 @@ describe('requirePermission middleware', () => {
 
     await middleware(req, res, next)
 
-    expect(mockedCheckUserPermission).toHaveBeenCalledWith(1, permissionKey)
+    expect(mockedCheckUserPermission).toHaveBeenCalledWith(1, 1, permissionKey)
     expect(next).toHaveBeenCalledTimes(1)
   })
 
@@ -63,6 +64,7 @@ describe('requirePermission middleware', () => {
     const req = {
       user: {
         userId: 2,
+        accountId: 1,
         permissions: ['DATASHEET_VIEW'],
       },
       cookies: {},
@@ -75,7 +77,7 @@ describe('requirePermission middleware', () => {
 
     await middleware(req, res, next)
 
-    expect(mockedCheckUserPermission).toHaveBeenCalledWith(2, permissionKey)
+    expect(mockedCheckUserPermission).toHaveBeenCalledWith(2, 1, permissionKey)
     expect(next).toHaveBeenCalledTimes(1)
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'Permission denied', statusCode: 403 }))
   })
@@ -103,6 +105,7 @@ describe('requirePermission middleware', () => {
     const req = {
       user: {
         userId: 3,
+        accountId: 1,
         permissions: [],
       },
       cookies: {},
@@ -117,7 +120,7 @@ describe('requirePermission middleware', () => {
 
     await middleware(req, res, next)
 
-    expect(mockedCheckUserPermission).toHaveBeenCalledWith(3, permissionKey)
+    expect(mockedCheckUserPermission).toHaveBeenCalledWith(3, 1, permissionKey)
     expect(next).toHaveBeenCalledTimes(1)
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'Server error', statusCode: 500 }))
   })

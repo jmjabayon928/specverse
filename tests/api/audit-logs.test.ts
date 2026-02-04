@@ -3,6 +3,8 @@ import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import express from 'express'
 import cookieParser from 'cookie-parser'
+import type { Request, Response, NextFunction } from 'express'
+import { AppError } from '../../src/backend/errors/AppError'
 import { errorHandler } from '../../src/backend/middleware/errorHandler'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
@@ -13,6 +15,7 @@ function createAuthCookie(role: string, permissions: string[] = []): string {
   const token = jwt.sign(
     {
       userId: 1,
+      accountId: 1,
       email: 'test@example.com',
       fullName: 'Test User',
       role,
@@ -28,6 +31,50 @@ function createAuthCookie(role: string, permissions: string[] = []): string {
 }
 
 process.env.JWT_SECRET ??= 'secret'
+
+jest.mock('../../src/backend/middleware/authMiddleware', () => ({
+  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+    if (!token) {
+      next(new AppError('Unauthorized - No token', 401))
+      return
+    }
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET ?? 'secret') as {
+        userId: number
+        accountId?: number
+        role?: string
+        roleId?: number
+        permissions?: string[]
+      }
+      req.user = {
+        userId: decoded.userId,
+        accountId: decoded.accountId ?? 1,
+        role: decoded.role ?? 'Engineer',
+        roleId: decoded.roleId ?? 1,
+        email: 'test@example.com',
+        name: 'Test User',
+        profilePic: undefined,
+        permissions: decoded.permissions ?? [],
+      }
+      next()
+    } catch {
+      next(new AppError('Invalid or expired session', 403))
+    }
+  },
+  requireAdmin: (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user) {
+      next(new AppError('Missing user in request', 403))
+      return
+    }
+    const role = req.user.role?.toLowerCase()
+    if (role !== 'admin') {
+      next(new AppError('Admin access required', 403))
+      return
+    }
+    next()
+  },
+}))
 
 // Mock the database queries
 const mockGetAllAuditLogs = jest.fn()
@@ -60,6 +107,7 @@ describe('Audit Logs API', () => {
     mockGetAllAuditLogs.mockResolvedValue([
       {
         AuditLogID: 1,
+        AccountID: 1,
         TableName: 'Sheets',
         RecordID: 123,
         Action: 'Update Filled Sheet',
@@ -75,6 +123,7 @@ describe('Audit Logs API', () => {
       },
       {
         AuditLogID: 2,
+        AccountID: 1,
         TableName: 'Sheets',
         RecordID: 124,
         Action: 'Create Template',

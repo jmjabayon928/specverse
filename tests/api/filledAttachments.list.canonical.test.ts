@@ -2,6 +2,8 @@ import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import express from 'express'
 import cookieParser from 'cookie-parser'
+import type { Request, Response, NextFunction } from 'express'
+import { AppError } from '../../src/backend/errors/AppError'
 import type { SheetAttachmentDTO } from '@/domain/datasheets/sheetTypes'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
@@ -11,10 +13,13 @@ globalThis.setImmediate ??= ((fn: (...args: any[]) => void, ...args: any[]) =>
 function createAuthCookie(permissions: string[]): string {
   const token = jwt.sign(
     {
+      id: 1,
       userId: 1,
+      accountId: 1,
       email: 'test@example.com',
       fullName: 'Test User',
       role: 'Admin',
+      roleId: 1,
       profilePic: null,
       permissions,
     },
@@ -26,6 +31,68 @@ function createAuthCookie(permissions: string[]): string {
 }
 
 process.env.JWT_SECRET ??= 'secret'
+
+jest.mock('../../src/backend/middleware/authMiddleware', () => ({
+  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+    if (!token) {
+      next(new AppError('Unauthorized - No token', 401))
+      return
+    }
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET ?? 'secret') as {
+        id?: number
+        userId: number
+        accountId?: number
+        role?: string
+        roleId?: number
+        permissions?: string[]
+        profilePic?: string | null
+      }
+      req.user = {
+        id: decoded.id ?? decoded.userId,
+        userId: decoded.userId,
+        accountId: decoded.accountId ?? 1,
+        role: decoded.role ?? 'Engineer',
+        roleId: decoded.roleId ?? 1,
+        permissions: decoded.permissions ?? [],
+        profilePic: decoded.profilePic ?? undefined,
+      }
+      next()
+    } catch {
+      next(new AppError('Invalid or expired session', 403))
+    }
+  },
+  optionalVerifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET ?? 'secret') as {
+          id?: number
+          userId: number
+          accountId?: number
+          role?: string
+          roleId?: number
+          permissions?: string[]
+          profilePic?: string | null
+        }
+        req.user = {
+          id: decoded.id ?? decoded.userId,
+          userId: decoded.userId,
+          accountId: decoded.accountId ?? 1,
+          role: decoded.role ?? 'Engineer',
+          roleId: decoded.roleId ?? 1,
+          permissions: decoded.permissions ?? [],
+          profilePic: decoded.profilePic ?? undefined,
+        }
+      } catch {
+        // leave req.user unset
+      }
+    }
+    next()
+  },
+  requirePermission: (_permissionKey: string) => (_req: Request, _res: Response, next: NextFunction) => next(),
+}))
 
 jest.mock('../../src/backend/config/db', () => {
   const MockTransaction = class {
@@ -105,6 +172,8 @@ jest.mock('../../src/backend/services/filledSheetService', () => {
     exportExcel: jest.fn(),
     listSheetAttachments,
     deleteSheetAttachmentLink: jest.fn(),
+    sheetBelongsToAccount: (sheetId: number, accountId: number) =>
+      Promise.resolve(sheetId === 123 && accountId === 1),
   }
 })
 

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { getInventoryItemById } from '@/backend/database/inventoryQueries';
 import { fetchReferenceOptions } from '@/backend/database/ReferenceQueries';
 import InventoryFormClient from '@/components/inventory/InventoryFormClient';
+import { requireAuth } from '@/utils/sessionUtils.server';
 
 interface InventoryEditPageProps {
   params: Promise<{ id: string }>;
@@ -12,10 +13,14 @@ export default async function InventoryEditPage({ params }: Readonly<InventoryEd
   const itemId = parseInt(id);
   if (isNaN(itemId)) return notFound();
 
+  const session = await requireAuth();
+  const accountId = session.accountId;
+  if (accountId == null) return notFound();
+
   const item = await getInventoryItemById(itemId);
   if (!item) return notFound();
 
-  const { categories, suppliers, manufacturers } = await fetchReferenceOptions();
+  const { categories, suppliers, manufacturers } = await fetchReferenceOptions(accountId);
 
   const initialValues = {
     itemCode: item.itemCode,

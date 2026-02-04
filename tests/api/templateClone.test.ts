@@ -8,10 +8,13 @@ import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
 
 const mockAuthUser = {
+  id: 1,
   userId: 1,
+  accountId: 1,
   roleId: 1,
   role: 'Admin',
   permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT', 'DATASHEET_VERIFY', 'DATASHEET_APPROVE'] as string[],
+  profilePic: undefined as string | undefined,
 }
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
@@ -55,10 +58,13 @@ process.env.JWT_SECRET ??= 'secret'
 function createAuthCookie(): string {
   const token = jwt.sign(
     {
+      id: 1,
       userId: 1,
+      accountId: 1,
       email: 'test@example.com',
       fullName: 'Test User',
       role: 'Admin',
+      roleId: 1,
       profilePic: null,
       permissions: mockAuthUser.permissions,
     },
@@ -92,6 +98,7 @@ describe('Template clone (Phase 3)', () => {
     expect(mockCloneTemplateFrom).toHaveBeenCalledWith(
       sourceTemplateId,
       expect.any(Object),
+      1,
       1
     )
   })

@@ -110,11 +110,17 @@ const ensureHasUpdatableFields = (payload: UpdateClientInput): void => {
 
 export const getClients: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const page = Math.max(qint(req.query.page, 1), 1)
     const pageSize = Math.min(Math.max(qint(req.query.pageSize, 20), 1), 100)
     const search = qstr(req.query.search, '').trim()
 
     const params: ListClientsParams = {
+      accountId,
       page,
       pageSize,
       search,
@@ -137,13 +143,18 @@ export const getClients: RequestHandler = async (req, res, next) => {
 
 export const getClientById: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     if (!Number.isFinite(id) || id <= 0) {
       throw new AppError('Invalid client id', 400);
     }
 
-    const client = await getClientByIdService(id)
+    const client = await getClientByIdService(accountId, id)
 
     if (!client) {
       throw new AppError('Client not found', 404)
@@ -159,6 +170,11 @@ export const getClientById: RequestHandler = async (req, res, next) => {
 
 export const createClient: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const parsed = clientCreateSchema.safeParse(req.body ?? {})
 
     if (!parsed.success) {
@@ -177,8 +193,8 @@ export const createClient: RequestHandler = async (req, res, next) => {
       ClientLogo: body.ClientLogo.trim(),
     }
 
-    const id = await createClientService(input)
-    const created = await getClientByIdService(id)
+    const id = await createClientService(accountId, input)
+    const created = await getClientByIdService(accountId, id)
 
     if (!created) {
       throw new AppError('Client was created but could not be loaded', 500)
@@ -199,6 +215,11 @@ export const createClient: RequestHandler = async (req, res, next) => {
 
 export const updateClient: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     if (!Number.isFinite(id) || id <= 0) {
@@ -214,13 +235,13 @@ export const updateClient: RequestHandler = async (req, res, next) => {
     const payload = buildUpdatePayload(parsed.data)
     ensureHasUpdatableFields(payload)
 
-    const updated = await updateClientService(id, payload)
+    const updated = await updateClientService(accountId, id, payload)
 
     if (!updated) {
       throw new AppError('Client not found', 404)
     }
 
-    const row = await getClientByIdService(id)
+    const row = await getClientByIdService(accountId, id)
 
     if (!row) {
       throw new AppError('Client not found', 404)
@@ -241,13 +262,18 @@ export const updateClient: RequestHandler = async (req, res, next) => {
 
 export const deleteClient: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user?.accountId
+    if (!accountId) {
+      throw new AppError('Missing account context', 403)
+    }
+
     const id = Number(req.params.id)
 
     if (!Number.isFinite(id) || id <= 0) {
       throw new AppError('Invalid client id', 400)
     }
 
-    const deleted = await deleteClientService(id)
+    const deleted = await deleteClientService(accountId, id)
 
     if (!deleted) {
       throw new AppError('Client not found', 404)

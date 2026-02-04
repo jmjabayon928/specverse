@@ -334,27 +334,89 @@ export async function listInfoTemplatesBySubId(
   }))
 }
 
-export async function listLayouts(filter: {
-  templateId: number | null
-  clientId: number | null
-}) {
+/** Layout belongs to account via DatasheetLayouts.TemplateID -> Sheets.AccountID. */
+export async function layoutBelongsToAccount(
+  layoutId: number,
+  accountId: number,
+): Promise<boolean> {
   const pool = await poolPromise
-  const request = pool.request()
+  const result = await pool
+    .request()
+    .input('LayoutID', sql.Int, layoutId)
+    .input('AccountID', sql.Int, accountId)
+    .query<{ Ex: number }>(`
+      SELECT 1 AS Ex
+      FROM dbo.DatasheetLayouts dl
+      INNER JOIN dbo.Sheets s ON s.SheetID = dl.TemplateID AND s.AccountID = @AccountID
+      WHERE dl.LayoutID = @LayoutID
+    `)
+  return (result.recordset?.length ?? 0) > 0
+}
+
+/** Resolve region to layout for account gate. */
+export async function getLayoutIdByRegionId(regionId: number): Promise<number | null> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('RegionID', sql.Int, regionId)
+    .query<{ LayoutID: number }>(`
+      SELECT LayoutID FROM dbo.LayoutRegions WHERE RegionID = @RegionID
+    `)
+  const row = result.recordset?.[0]
+  return row?.LayoutID != null && Number.isFinite(row.LayoutID) ? row.LayoutID : null
+}
+
+/** Resolve block to layout for account gate. */
+export async function getLayoutIdByBlockId(blockId: number): Promise<number | null> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('BlockID', sql.Int, blockId)
+    .query<{ LayoutID: number }>(`
+      SELECT r.LayoutID
+      FROM dbo.LayoutBlocks b
+      INNER JOIN dbo.LayoutRegions r ON r.RegionID = b.RegionID
+      WHERE b.BlockID = @BlockID
+    `)
+  const row = result.recordset?.[0]
+  return row?.LayoutID != null && Number.isFinite(row.LayoutID) ? row.LayoutID : null
+}
+
+/** Resolve subsheet to sheet for account gate. */
+export async function getSheetIdBySubId(subId: number): Promise<number | null> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('SubID', sql.Int, subId)
+    .query<{ SheetID: number }>(`
+      SELECT SheetID FROM dbo.SubSheets WHERE SubID = @SubID
+    `)
+  const row = result.recordset?.[0]
+  return row?.SheetID != null && Number.isFinite(row.SheetID) ? row.SheetID : null
+}
+
+export async function listLayouts(
+  accountId: number,
+  filter: {
+    templateId: number | null
+    clientId: number | null
+  },
+) {
+  const pool = await poolPromise
+  const request = pool.request().input('AccountID', sql.Int, accountId)
+
+  const where: string[] = [
+    's.AccountID = @AccountID',
+    'dl.TemplateID IS NOT NULL',
+  ]
 
   if (filter.templateId !== null) {
     request.input('TemplateID', sql.Int, filter.templateId)
+    where.push('dl.TemplateID = @TemplateID')
   }
   if (filter.clientId !== null) {
     request.input('ClientID', sql.Int, filter.clientId)
-  }
-
-  const where: string[] = []
-
-  if (filter.templateId !== null) {
-    where.push('TemplateID = @TemplateID')
-  }
-  if (filter.clientId !== null) {
-    where.push('ClientID = @ClientID')
+    where.push('dl.ClientID = @ClientID')
   }
 
   const result = await request.query<{
@@ -372,11 +434,13 @@ export async function listLayouts(filter: {
     Version: number
     IsDefault: boolean
   }>(`
-    SELECT LayoutID, TemplateID, ClientID, PaperSize, Orientation, GridCols, GridGapMm,
-           MarginTopMm, MarginRightMm, MarginBottomMm, MarginLeftMm, Version, IsDefault
-    FROM dbo.DatasheetLayouts
-    ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-    ORDER BY LayoutID DESC
+    SELECT dl.LayoutID, dl.TemplateID, dl.ClientID, dl.PaperSize, dl.Orientation,
+           dl.GridCols, dl.GridGapMm, dl.MarginTopMm, dl.MarginRightMm, dl.MarginBottomMm, dl.MarginLeftMm,
+           dl.Version, dl.IsDefault
+    FROM dbo.DatasheetLayouts dl
+    INNER JOIN dbo.Sheets s ON s.SheetID = dl.TemplateID
+    WHERE ${where.join(' AND ')}
+    ORDER BY dl.LayoutID DESC
   `)
 
   return result.recordset

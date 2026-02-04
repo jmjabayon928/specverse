@@ -34,6 +34,7 @@ export interface SupplierDTO {
 }
 
 export interface ListSuppliersParams {
+  accountId: number
   page: number
   pageSize: number
   search?: string
@@ -107,18 +108,23 @@ const isUniqueViolation = (error: unknown): boolean => {
   return false
 }
 
-const bindSearch = (request: sql.Request, search: string): { where: string } => {
+const bindSearch = (
+  request: sql.Request,
+  accountId: number,
+  search: string,
+): { where: string } => {
+  request.input('AccountID', sql.Int, accountId)
   const query = search.trim()
 
   if (query.length === 0) {
-    return { where: '' }
+    return { where: 'WHERE s.AccountID = @AccountID' }
   }
 
   request.input('q', sql.NVarChar(255), `%${query}%`)
 
   return {
     where:
-      'WHERE (s.SuppName LIKE @q OR s.SuppCode LIKE @q OR s.SuppAddress LIKE @q OR s.SuppContact LIKE @q OR s.SuppEmail LIKE @q OR s.SuppPhone LIKE @q)',
+      'WHERE s.AccountID = @AccountID AND (s.SuppName LIKE @q OR s.SuppCode LIKE @q OR s.SuppAddress LIKE @q OR s.SuppContact LIKE @q OR s.SuppEmail LIKE @q OR s.SuppPhone LIKE @q)',
   }
 }
 
@@ -137,7 +143,7 @@ export const listSuppliers = async (
   const dataRequest = pool.request()
   dataRequest.input('Offset', sql.Int, offset)
   dataRequest.input('PageSize', sql.Int, pageSize)
-  const { where } = bindSearch(dataRequest, search)
+  const { where } = bindSearch(dataRequest, params.accountId, search)
 
   const data = await dataRequest.query<SupplierRowSQL>(`
     SELECT
@@ -161,7 +167,7 @@ export const listSuppliers = async (
 
   // Count
   const countRequest = pool.request()
-  bindSearch(countRequest, search)
+  bindSearch(countRequest, params.accountId, search)
 
   const count = await countRequest.query<CountRow>(`
     SELECT COUNT(1) AS Total
@@ -180,11 +186,15 @@ export const listSuppliers = async (
 }
 
 /** Get by id */
-export const getSupplierById = async (id: number): Promise<SupplierDTO | null> => {
+export const getSupplierById = async (
+  accountId: number,
+  id: number,
+): Promise<SupplierDTO | null> => {
   const pool = await poolPromise
 
   const result = await pool
     .request()
+    .input('AccountID', sql.Int, accountId)
     .input('id', sql.Int, id)
     .query<SupplierRowSQL>(`
       SELECT
@@ -199,7 +209,7 @@ export const getSupplierById = async (id: number): Promise<SupplierDTO | null> =
         s.CreatedAt,
         s.UpdatedAt
       FROM dbo.Suppliers s
-      WHERE s.SuppID = @id;
+      WHERE s.AccountID = @AccountID AND s.SuppID = @id;
     `)
 
   const row = result.recordset[0]
@@ -213,6 +223,7 @@ export const getSupplierById = async (id: number): Promise<SupplierDTO | null> =
 
 /** Create — returns new SuppID */
 export const createSupplier = async (
+  accountId: number,
   input: CreateSupplierInput,
 ): Promise<number> => {
   try {
@@ -220,6 +231,7 @@ export const createSupplier = async (
 
     const result = await pool
       .request()
+      .input('AccountID', sql.Int, accountId)
       .input('SuppName', sql.NVarChar(255), input.SuppName)
       .input('SuppAddress', sql.NVarChar(sql.MAX), input.SuppAddress)
       .input('SuppCode', sql.NVarChar(50), input.SuppCode)
@@ -229,23 +241,29 @@ export const createSupplier = async (
       .input('Notes', sql.NVarChar(sql.MAX), input.Notes)
       .query<{ SuppID: number }>(`
         INSERT INTO dbo.Suppliers (
+          AccountID,
           SuppName,
           SuppAddress,
           SuppCode,
           SuppContact,
           SuppEmail,
           SuppPhone,
-          Notes
+          Notes,
+          CreatedAt,
+          UpdatedAt
         )
         OUTPUT inserted.SuppID
         VALUES (
+          @AccountID,
           @SuppName,
           @SuppAddress,
           @SuppCode,
           @SuppContact,
           @SuppEmail,
           @SuppPhone,
-          @Notes
+          @Notes,
+          SYSUTCDATETIME(),
+          SYSUTCDATETIME()
         );
       `)
 
@@ -263,6 +281,7 @@ export const createSupplier = async (
 
 /** Update — returns true if updated */
 export const updateSupplier = async (
+  accountId: number,
   id: number,
   input: UpdateSupplierInput,
 ): Promise<boolean> => {
@@ -270,7 +289,7 @@ export const updateSupplier = async (
     const pool = await poolPromise
 
     const sets: string[] = []
-    const request = pool.request().input('id', sql.Int, id)
+    const request = pool.request().input('AccountID', sql.Int, accountId).input('id', sql.Int, id)
 
     if (Object.hasOwn(input, 'SuppName')) {
       sets.push('SuppName = @SuppName')
@@ -316,7 +335,7 @@ export const updateSupplier = async (
     const result = await request.query<{ Affected: number }>(`
       UPDATE dbo.Suppliers
       SET ${sets.join(', ')}
-      WHERE SuppID = @id;
+      WHERE AccountID = @AccountID AND SuppID = @id;
       SELECT @@ROWCOUNT AS Affected;
     `)
 
@@ -335,15 +354,16 @@ export const updateSupplier = async (
 }
 
 /** Delete — returns true if a row was deleted */
-export const deleteSupplier = async (id: number): Promise<boolean> => {
+export const deleteSupplier = async (accountId: number, id: number): Promise<boolean> => {
   const pool = await poolPromise
 
   const result = await pool
     .request()
+    .input('AccountID', sql.Int, accountId)
     .input('id', sql.Int, id)
     .query<{ Affected: number }>(`
       DELETE FROM dbo.Suppliers
-      WHERE SuppID = @id;
+      WHERE AccountID = @AccountID AND SuppID = @id;
       SELECT @@ROWCOUNT AS Affected;
     `)
 

@@ -6,6 +6,7 @@ import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
 import InventoryDetails from "@/components/inventory/InventoryDetails";
 import InventoryTabLink from "@/components/inventory/InventoryTabLink";
 import InventoryTabContent from "@/components/inventory/InventoryTabContent";
+import { requireAuth } from "@/utils/sessionUtils.server";
 
 interface InventoryPageProps {
   params: Promise<{ id?: string }>;
@@ -19,10 +20,14 @@ export default async function InventoryDetailPage(
   const itemId = Number(id ?? "0");
   if (Number.isNaN(itemId)) return notFound();
 
+  const session = await requireAuth();
+  const accountId = session.accountId;
+  if (accountId == null) return notFound();
+
   const item = await getInventoryItemById(itemId);
   if (!item) return notFound();
 
-  const { categories, suppliers, manufacturers } = await fetchReferenceOptions();
+  const { categories, suppliers, manufacturers } = await fetchReferenceOptions(accountId);
   const resolvedSearchParams = await searchParams;
   const activeTab = resolvedSearchParams.tab ?? "overview";
 

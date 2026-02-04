@@ -9,6 +9,7 @@ import type {
   NoteUpdatePayload,
 } from '@/domain/datasheets/sheetTypes'
 
+import { sheetBelongsToAccount } from '@/backend/services/filledSheetService'
 import {
   // lists & references
   fetchAllTemplates,
@@ -292,6 +293,13 @@ export const getTemplateStructure: RequestHandler = async (req, res, next) => {
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(templateId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
+      return
+    }
+
     const structure = await fetchTemplateStructure(templateId)
     res.status(200).json(structure)
   } catch (err: unknown) {
@@ -303,9 +311,10 @@ export const getTemplateStructure: RequestHandler = async (req, res, next) => {
    Lists + reference
    ─────────────────────────────────────────── */
 
-export const getAllTemplatesHandler: RequestHandler = async (_req, res, next) => {
+export const getAllTemplatesHandler: RequestHandler = async (req, res, next) => {
   try {
-    const rows = await fetchAllTemplates()
+    const accountId = req.user!.accountId!
+    const rows = await fetchAllTemplates(accountId)
     res.status(200).json(rows)
   } catch (err: unknown) {
     handleError(next, err, 'Failed to fetch templates')
@@ -327,6 +336,8 @@ export const getTemplateReferenceOptionsHandler: RequestHandler = async (_req, r
 
 export const getTemplateById: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user!.accountId!
+
     const parsedParams = idParamsSchema.parse(req.params)
     const templateId = parseId(parsedParams.id)
 
@@ -340,7 +351,11 @@ export const getTemplateById: RequestHandler = async (req, res, next) => {
     res.set('Cache-Control', 'private, no-store')
     res.set('Vary', 'Accept-Language, Cookie')
 
-    const data = await getTemplateDetailsById(templateId, lang)
+    const data = await getTemplateDetailsById(templateId, lang, 'SI', accountId)
+    if (data == null) {
+      next(new AppError('Template not found', 404))
+      return
+    }
     res.status(200).json(data)
   } catch (err: unknown) {
     handleError(next, err, 'Failed to get template')
@@ -367,7 +382,8 @@ export const createTemplateHandler: RequestHandler = async (req, res, next) => {
       isTemplate: true,
     }
 
-    const newId = await createTemplate(payload, user.userId)
+    const accountId = req.user!.accountId!
+    const newId = await createTemplate(payload, user.userId, accountId)
     res.status(201).json({ sheetId: newId })
   } catch (err: unknown) {
     handleError(next, err, 'Failed to create template')
@@ -391,6 +407,13 @@ export const updateTemplateHandler: RequestHandler = async (req, res, next) => {
 
     if (sheetId == null) {
       next(new AppError('Invalid template ID', 400))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
       return
     }
 
@@ -421,13 +444,19 @@ export const createSubsheetHandler: RequestHandler = async (req, res, next) => {
       return
     }
     const parsedParams = idParamsSchema.parse(req.params)
-    const sheetId = parseId(parsedParams.id)
-    if (sheetId == null) {
+    const templateId = parseId(parsedParams.id)
+    if (templateId == null) {
       next(new AppError('Invalid template ID', 400))
       return
     }
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(templateId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
+      return
+    }
     const body = createSubsheetBodySchema.parse(req.body ?? {})
-    const result = await createSubsheet(sheetId, body.subName, user.userId)
+    const result = await createSubsheet(templateId, body.subName, user.userId)
     res.status(201).json(result)
     return
   } catch (err: unknown) {
@@ -443,14 +472,20 @@ export const updateSubsheetHandler: RequestHandler = async (req, res, next) => {
       return
     }
     const parsedParams = structureSubIdParamsSchema.parse(req.params)
-    const sheetId = parseId(parsedParams.id)
+    const templateId = parseId(parsedParams.id)
     const subId = parseId(parsedParams.subId)
-    if (sheetId == null || subId == null) {
+    if (templateId == null || subId == null) {
       next(new AppError('Invalid template or subsheet ID', 400))
       return
     }
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(templateId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
+      return
+    }
     const body = updateSubsheetBodySchema.parse(req.body ?? {})
-    const result = await updateSubsheet(sheetId, subId, body, user.userId)
+    const result = await updateSubsheet(templateId, subId, body, user.userId)
     res.status(200).json(result)
     return
   } catch (err: unknown) {
@@ -466,13 +501,19 @@ export const deleteSubsheetHandler: RequestHandler = async (req, res, next) => {
       return
     }
     const parsedParams = structureSubIdParamsSchema.parse(req.params)
-    const sheetId = parseId(parsedParams.id)
+    const templateId = parseId(parsedParams.id)
     const subId = parseId(parsedParams.subId)
-    if (sheetId == null || subId == null) {
+    if (templateId == null || subId == null) {
       next(new AppError('Invalid template or subsheet ID', 400))
       return
     }
-    const result = await deleteSubsheet(sheetId, subId, user.userId)
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(templateId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
+      return
+    }
+    const result = await deleteSubsheet(templateId, subId, user.userId)
     res.status(200).json(result)
     return
   } catch (err: unknown) {
@@ -488,13 +529,19 @@ export const reorderSubsheetsHandler: RequestHandler = async (req, res, next) =>
       return
     }
     const parsedParams = idParamsSchema.parse(req.params)
-    const sheetId = parseId(parsedParams.id)
-    if (sheetId == null) {
+    const templateId = parseId(parsedParams.id)
+    if (templateId == null) {
       next(new AppError('Invalid template ID', 400))
       return
     }
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(templateId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
+      return
+    }
     const body = reorderSubsheetsBodySchema.parse(req.body ?? {})
-    const result = await reorderSubsheets(sheetId, body.order, user.userId)
+    const result = await reorderSubsheets(templateId, body.order, user.userId)
     res.status(200).json(result)
     return
   } catch (err: unknown) {
@@ -510,15 +557,21 @@ export const createFieldHandler: RequestHandler = async (req, res, next) => {
       return
     }
     const parsedParams = structureSubIdParamsSchema.parse(req.params)
-    const sheetId = parseId(parsedParams.id)
+    const templateId = parseId(parsedParams.id)
     const subId = parseId(parsedParams.subId)
-    if (sheetId == null || subId == null) {
+    if (templateId == null || subId == null) {
       next(new AppError('Invalid template or subsheet ID', 400))
+      return
+    }
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(templateId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
       return
     }
     const body = createFieldBodySchema.parse(req.body ?? {})
     const result = await createField(
-      sheetId,
+      templateId,
       subId,
       {
         label: body.label,
@@ -544,16 +597,22 @@ export const updateFieldHandler: RequestHandler = async (req, res, next) => {
       return
     }
     const parsedParams = structureFieldIdParamsSchema.parse(req.params)
-    const sheetId = parseId(parsedParams.id)
+    const templateId = parseId(parsedParams.id)
     const subId = parseId(parsedParams.subId)
     const fieldId = parseId(parsedParams.fieldId)
-    if (sheetId == null || subId == null || fieldId == null) {
+    if (templateId == null || subId == null || fieldId == null) {
       next(new AppError('Invalid template, subsheet, or field ID', 400))
+      return
+    }
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(templateId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
       return
     }
     const body = updateFieldBodySchema.parse(req.body ?? {})
     const result = await updateField(
-      sheetId,
+      templateId,
       subId,
       fieldId,
       {
@@ -581,14 +640,20 @@ export const deleteFieldHandler: RequestHandler = async (req, res, next) => {
       return
     }
     const parsedParams = structureFieldIdParamsSchema.parse(req.params)
-    const sheetId = parseId(parsedParams.id)
+    const templateId = parseId(parsedParams.id)
     const subId = parseId(parsedParams.subId)
     const fieldId = parseId(parsedParams.fieldId)
-    if (sheetId == null || subId == null || fieldId == null) {
+    if (templateId == null || subId == null || fieldId == null) {
       next(new AppError('Invalid template, subsheet, or field ID', 400))
       return
     }
-    const result = await deleteField(sheetId, subId, fieldId, user.userId)
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(templateId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
+      return
+    }
+    const result = await deleteField(templateId, subId, fieldId, user.userId)
     res.status(200).json(result)
     return
   } catch (err: unknown) {
@@ -604,14 +669,20 @@ export const reorderFieldsHandler: RequestHandler = async (req, res, next) => {
       return
     }
     const parsedParams = structureSubIdParamsSchema.parse(req.params)
-    const sheetId = parseId(parsedParams.id)
+    const templateId = parseId(parsedParams.id)
     const subId = parseId(parsedParams.subId)
-    if (sheetId == null || subId == null) {
+    if (templateId == null || subId == null) {
       next(new AppError('Invalid template or subsheet ID', 400))
       return
     }
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(templateId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
+      return
+    }
     const body = reorderFieldsBodySchema.parse(req.body ?? {})
-    const result = await reorderFields(sheetId, subId, body.order, user.userId)
+    const result = await reorderFields(templateId, subId, body.order, user.userId)
     res.status(200).json(result)
     return
   } catch (err: unknown) {
@@ -637,6 +708,13 @@ export const verifyTemplateHandler: RequestHandler = async (req, res, next) => {
     const userId = user?.userId
     if (userId == null) {
       next(new AppError('Unauthorized', 401))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
       return
     }
 
@@ -667,6 +745,13 @@ export const approveTemplateHandler: RequestHandler = async (req, res, next) => 
     const userId = user?.userId
     if (userId == null) {
       next(new AppError('Unauthorized', 401))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Template not found', 404))
       return
     }
 
@@ -711,9 +796,11 @@ export const cloneTemplateHandler: RequestHandler = async (req, res, next) => {
       return
     }
 
+    const accountId = req.user!.accountId!
+
     const overrides = req.body as Partial<UnifiedSheet>
 
-    const result = await cloneTemplateFrom(sourceId, overrides, user.userId)
+    const result = await cloneTemplateFrom(sourceId, overrides, user.userId, accountId)
     res.status(201).json(result)
   } catch (err: unknown) {
     handleError(next, err, 'Failed to clone template')
@@ -731,6 +818,13 @@ export const listTemplateNotesHandler: RequestHandler = async (req, res, next) =
 
     if (sheetId == null) {
       next(new AppError('Invalid template ID', 400))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
       return
     }
 
@@ -754,6 +848,13 @@ export const createTemplateNoteHandler: RequestHandler = async (req, res, next) 
 
     if (sheetId == null) {
       next(new AppError('Invalid template ID', 400))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
       return
     }
 
@@ -804,18 +905,25 @@ export const updateTemplateNoteHandler: RequestHandler = async (req, res, next) 
       return
     }
 
+    const user = asUser(req)
+    const userId = user?.userId
+    if (userId == null) {
+      next(new AppError('Unauthorized', 401))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+
     const payloadParsed = noteUpdateSchema.parse(req.body)
     const text = payloadParsed.text?.trim() ?? ''
 
     if (text.length === 0) {
       next(new AppError('Note text is required', 400))
-      return
-    }
-
-    const user = asUser(req)
-    const userId = user?.userId
-    if (userId == null) {
-      next(new AppError('Unauthorized', 401))
       return
     }
 
@@ -836,6 +944,13 @@ export const deleteTemplateNoteHandler: RequestHandler = async (req, res, next) 
 
     if (sheetId == null || noteId == null) {
       next(new AppError('Invalid parameters', 400))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
       return
     }
 
@@ -870,6 +985,13 @@ export const listTemplateAttachmentsHandler: RequestHandler = async (req, res, n
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+
     const items = await listTemplateAttachments(sheetId)
     res.status(200).json(items)
   } catch (err: unknown) {
@@ -890,6 +1012,13 @@ export const uploadTemplateAttachmentHandler: RequestHandler = async (req, res, 
 
     if (sheetId == null) {
       next(new AppError('Invalid template ID', 400))
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
       return
     }
 
@@ -923,6 +1052,13 @@ export const deleteTemplateAttachmentHandler: RequestHandler = async (req, res, 
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+
     await deleteTemplateAttachment(sheetId, attachmentId)
     // keep legacy behavior: 200 with a body
     res.status(200).json({ ok: true })
@@ -937,6 +1073,8 @@ export const deleteTemplateAttachmentHandler: RequestHandler = async (req, res, 
 
 export const exportTemplatePDF: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user!.accountId!
+
     const parsedParams = idParamsSchema.parse(req.params)
     const templateId = parseId(parsedParams.id)
 
@@ -951,7 +1089,7 @@ export const exportTemplatePDF: RequestHandler = async (req, res, next) => {
     res.set('Cache-Control', 'private, no-store')
     res.set('Vary', 'Accept-Language, Cookie')
 
-    const { filePath, fileName } = await exportTemplatePDFService(templateId, lang, uom)
+    const { filePath, fileName } = await exportTemplatePDFService(templateId, lang, uom, accountId)
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
     res.status(200).sendFile(filePath)
@@ -962,6 +1100,8 @@ export const exportTemplatePDF: RequestHandler = async (req, res, next) => {
 
 export const exportTemplateExcel: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = req.user!.accountId!
+
     const parsedParams = idParamsSchema.parse(req.params)
     const templateId = parseId(parsedParams.id)
 
@@ -976,7 +1116,7 @@ export const exportTemplateExcel: RequestHandler = async (req, res, next) => {
     res.set('Cache-Control', 'private, no-store')
     res.set('Vary', 'Accept-Language, Cookie')
 
-    const { filePath, fileName } = await exportTemplateExcelService(templateId, lang, uom)
+    const { filePath, fileName } = await exportTemplateExcelService(templateId, lang, uom, accountId)
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
     res.status(200).sendFile(filePath)

@@ -10,6 +10,7 @@ import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService
 import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
 import { mapToUnifiedSheet } from "@/utils/templateViewMapper";
 import { normalizeUom } from "@/utils/normalizeUom";
+import { requireAuth } from "@/utils/sessionUtils.server";
 
 interface PageProps {
   readonly params: Promise<Readonly<{ id: string }>>;
@@ -22,10 +23,14 @@ export default async function FilledEditPage(props: Readonly<PageProps>) {
 
   if (!sheetId || isNaN(sheetId)) return notFound();
 
+  const session = await requireAuth();
+  const accountId = session.accountId;
+  if (accountId == null) return notFound();
+
   const [sessionCookie, referenceData, filledData] = await Promise.all([
     cookies(),
-    fetchReferenceOptions(),
-    getFilledSheetDetailsById(sheetId),
+    fetchReferenceOptions(accountId),
+    getFilledSheetDetailsById(sheetId, "eng", "SI", accountId),
   ]);
 
   const token = sessionCookie.get("token")?.value;

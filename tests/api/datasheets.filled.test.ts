@@ -5,8 +5,9 @@ import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
 
-// Mock auth so no real DB (permissionQueries) runs.
+// Mock auth so no real DB (permissionQueries) runs. accountId required for list/get-details.
 const mockAuthUser = {
+  id: 1,
   userId: 1,
   roleId: 1,
   role: 'Admin',
@@ -18,6 +19,7 @@ const mockAuthUser = {
     'DATASHEET_ATTACHMENT_UPLOAD',
     'DATASHEET_NOTE_EDIT',
   ] as string[],
+  accountId: 1,
 }
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
@@ -42,6 +44,9 @@ jest.mock('../../src/backend/services/filledSheetService', () => {
     )
   return {
     ...actual,
+    sheetBelongsToAccount: jest.fn().mockImplementation((sheetId: number, accountId: number) =>
+      Promise.resolve(sheetId === 1 && accountId === 1)
+    ),
     fetchAllFilled: jest.fn().mockResolvedValue([]),
     getFilledSheetDetailsById: jest.fn().mockResolvedValue(null),
     approveFilledSheet: jest.fn().mockResolvedValue(1),
@@ -58,7 +63,9 @@ jest.mock('../../src/backend/services/filledSheetService', () => {
 function createAuthCookie(permissions: string[]): string {
   const token = jwt.sign(
     {
+      id: 1,
       userId: 1,
+      accountId: 1,
       email: 'test@example.com',
       fullName: 'Test User',
       role: 'Admin',

@@ -5,6 +5,8 @@ import {
   fetchSheetChangeLogs,
   fetchSheetLogsMerged,
 } from "../services/sheetLogsService"
+import { sheetBelongsToAccount } from "../services/filledSheetService"
+import { AppError } from "../errors/AppError"
 
 function parseSheetId(raw: unknown): number | null {
   if (typeof raw !== "string") return null
@@ -28,6 +30,13 @@ export const getSheetAuditLogs: RequestHandler = async (req, res, next) => {
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
+      return
+    }
+
     const limit = parseLimit(req.query.limit)
     const items = await fetchSheetAuditLogs(sheetId, limit)
     res.json({ limit, items })
@@ -44,6 +53,13 @@ export const getSheetChangeLogs: RequestHandler = async (req, res, next) => {
       return
     }
 
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
+      return
+    }
+
     const limit = parseLimit(req.query.limit)
     const items = await fetchSheetChangeLogs(sheetId, limit)
     res.json({ limit, items })
@@ -57,6 +73,13 @@ export const getSheetLogsMerged: RequestHandler = async (req, res, next) => {
     const sheetId = parseSheetId(req.params.sheetId)
     if (sheetId == null) {
       res.status(400).json({ error: "Invalid sheetId" })
+      return
+    }
+
+    const accountId = req.user!.accountId!
+    const belongs = await sheetBelongsToAccount(sheetId, accountId)
+    if (!belongs) {
+      next(new AppError("Sheet not found", 404))
       return
     }
 

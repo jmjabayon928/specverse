@@ -8,6 +8,7 @@ import TemplateClonerForm from './TemplateClonerForm'
 import { fetchReferenceOptions } from '@/backend/database/ReferenceQueries'
 import { getTemplateDetailsById } from '@/backend/services/templateService'
 import { mapToUnifiedSheet } from '@/utils/templateViewMapper'
+import { requireAuth } from '@/utils/sessionUtils.server'
 
 type TemplateClonePageParams = Readonly<{
   id: string
@@ -35,10 +36,14 @@ const TemplateClonePage = async (props: TemplateClonePageProps) => {
     notFound()
   }
 
+  const session = await requireAuth()
+  const accountId = session.accountId
+  if (accountId == null) notFound()
+
   const [sessionCookies, referenceData, templateData] = await Promise.all([
     cookies(),
-    fetchReferenceOptions(),
-    getTemplateDetailsById(templateId),
+    fetchReferenceOptions(accountId),
+    getTemplateDetailsById(templateId, 'eng', 'SI', accountId),
   ])
 
   if (templateData == null) {

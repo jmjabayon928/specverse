@@ -24,8 +24,10 @@ export default async function FilledApprovePage({ params }: Readonly<PageProps>)
   if (!canSeeApproveUI(sessionUser)) {
     return redirect("/unauthorized");
   }
+  const accountId = sessionUser.accountId;
+  if (accountId == null) return notFound();
 
-  const rawData = await getFilledSheetDetailsById(sheetId);
+  const rawData = await getFilledSheetDetailsById(sheetId, "eng", "SI", accountId);
   if (!rawData?.datasheet) return notFound();
 
   return (

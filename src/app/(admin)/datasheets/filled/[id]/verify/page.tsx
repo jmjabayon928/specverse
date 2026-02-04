@@ -26,8 +26,10 @@ export default async function FilledVerifyPage({ params }: Readonly<PageProps>) 
   if (!sessionUser.permissions?.includes("DATASHEET_VERIFY")) {
     return redirect("/unauthorized");
   }
+  const accountId = sessionUser.accountId;
+  if (accountId == null) return notFound();
 
-  const rawData = await getFilledSheetDetailsById(sheetId);
+  const rawData = await getFilledSheetDetailsById(sheetId, "eng", "SI", accountId);
   if (!rawData?.datasheet) return notFound();
 
   return (

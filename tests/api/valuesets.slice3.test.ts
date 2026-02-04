@@ -5,6 +5,7 @@ import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import express from 'express'
 import cookieParser from 'cookie-parser'
+import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 
 globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
@@ -13,7 +14,9 @@ globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown
 function createAuthCookie(permissions: string[]): string {
   const token = jwt.sign(
     {
+      id: 1,
       userId: 1,
+      accountId: 1,
       email: 'test@example.com',
       fullName: 'Test User',
       role: 'Admin',
@@ -57,12 +60,72 @@ jest.mock('../../src/backend/database/permissionQueries', () => ({
   getUserPermissions: jest.fn().mockResolvedValue([]),
 }))
 
+jest.mock('../../src/backend/services/filledSheetService', () => ({
+  sheetBelongsToAccount: jest.fn().mockImplementation((sheetId: number, accountId: number) =>
+    Promise.resolve(sheetId === 42 && accountId === 1)
+  ),
+}))
+
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
-  verifyToken: (req: unknown, _res: unknown, next: () => void) => {
-    ;(req as { user?: { userId: number } }).user = { userId: 1 }
+  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+    if (!token) {
+      next(new AppError('Unauthorized - No token', 401))
+      return
+    }
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET ?? 'secret') as {
+        userId: number
+        accountId?: number
+        role?: string
+        roleId?: number
+        permissions?: string[]
+      }
+      req.user = {
+        id: 1,
+        userId: decoded.userId,
+        accountId: decoded.accountId ?? 1,
+        role: decoded.role ?? 'Admin',
+        roleId: decoded.roleId ?? 1,
+        email: 'test@example.com',
+        name: 'Test User',
+        profilePic: undefined,
+        permissions: decoded.permissions ?? [],
+      }
+      next()
+    } catch {
+      next(new AppError('Invalid or expired session', 403))
+    }
+  },
+  requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+  optionalVerifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET ?? 'secret') as {
+          userId: number
+          accountId?: number
+          role?: string
+          roleId?: number
+          permissions?: string[]
+        }
+        req.user = {
+          id: 1,
+          userId: decoded.userId,
+          accountId: decoded.accountId ?? 1,
+          role: decoded.role ?? 'Admin',
+          roleId: decoded.roleId ?? 1,
+          email: 'test@example.com',
+          name: 'Test User',
+          profilePic: undefined,
+          permissions: decoded.permissions ?? [],
+        }
+      } catch {
+        // leave req.user unset
+      }
+    }
     next()
   },
-  requirePermission: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }))
 
 function toHttpError(err: unknown): { statusCode: number; message: string } {

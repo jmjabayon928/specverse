@@ -18,4 +18,7 @@ export interface UserSession {
   lastLoginAt?: string    // ISO timestamp of last login
   isFirstLogin?: boolean  // For onboarding flows
   locale?: string         // e.g. 'en-CA', 'fr-CA'
+
+  // Phase 2.5: active account for tenant-scoped data
+  accountId?: number
 }

@@ -78,7 +78,7 @@ describe('generateDatasheetExcel header localization', () => {
   })
 
   it('uses localized headers for lang=fr when constants provide them', async () => {
-    const buffer = await generateDatasheetExcel(1, 'SI', 'fr')
+    const buffer = await generateDatasheetExcel(1, 'SI', 'fr', 1)
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(buffer)
     const worksheet = workbook.getWorksheet('Datasheet')
@@ -97,7 +97,7 @@ describe('generateDatasheetExcel header localization', () => {
   })
 
   it('uses English headers for lang=eng', async () => {
-    const buffer = await generateDatasheetExcel(1, 'SI', 'eng')
+    const buffer = await generateDatasheetExcel(1, 'SI', 'eng', 1)
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(buffer)
     const worksheet = workbook.getWorksheet('Datasheet')
@@ -109,7 +109,7 @@ describe('generateDatasheetExcel header localization', () => {
   })
 
   it('falls back safely for missing key (unsupported lang)', async () => {
-    const buffer = await generateDatasheetExcel(1, 'SI', 'xx')
+    const buffer = await generateDatasheetExcel(1, 'SI', 'xx', 1)
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(buffer)
     const worksheet = workbook.getWorksheet('Datasheet')

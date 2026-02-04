@@ -33,6 +33,7 @@ import {
 } from "../database/inventoryAuditQueries";
 
 import { verifyToken, requirePermission } from "../middleware/authMiddleware";
+import { mustGetAccountId } from "@/backend/utils/authGuards";
 import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
 import { asyncHandler } from "@/backend/utils/asyncHandler";
 import { getInventoryItemOptions } from '../database/ReferenceQueries';
@@ -46,9 +47,11 @@ const router = express.Router();
 FIXED ROUTES
 */
 // This endpoint is used to fetch reference data for dropdowns and other UI elements
-router.get("/reference-options", async (req, res) => {
+router.get("/reference-options", verifyToken, async (req, res, next) => {
+  const accountId = mustGetAccountId(req, next);
+  if (accountId == null) return;
   try {
-    const data = await fetchReferenceOptions();
+    const data = await fetchReferenceOptions(accountId);
     res.json({
       categories: data.categories.map((c: { id: number; name: string }) => ({
         categoryId: c.id,
@@ -181,9 +184,11 @@ router.post("/", verifyToken, requirePermission("INVENTORY_CREATE"), async (req,
   res.status(201).json({ inventoryId: newId });
 });
 
-router.get('/item-options', async (req, res) => {
+router.get('/item-options', verifyToken, async (req, res, next) => {
+  const accountId = mustGetAccountId(req, next);
+  if (accountId == null) return;
   try {
-    const data = await getInventoryItemOptions();
+    const data = await getInventoryItemOptions(accountId);
     res.json(data);
   } catch (err) {
     console.error('Failed to fetch inventory items:', err);

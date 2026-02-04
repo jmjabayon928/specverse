@@ -115,13 +115,17 @@ describe('createFilledSheet lifecycle guards', () => {
   })
 
   it('rejects with 409 when template status is not Approved', async () => {
-    queryResponses.push({
-      recordset: [{ Status: 'Draft', IsLatest: 1, IsTemplate: 1 }],
-    })
+    queryResponses.push(
+      { recordset: [{ Ex: 1 }] },
+      {
+        recordset: [{ Status: 'Draft', IsLatest: 1, IsTemplate: 1 }],
+      }
+    )
 
     const p = createFilledSheet(
       minimalCreateInput as Parameters<typeof createFilledSheet>[0],
-      { userId: 1, route: '/test', method: 'POST' }
+      { userId: 1, route: '/test', method: 'POST' },
+      1
     )
     await expect(p).rejects.toThrow(AppError)
     await expect(p).rejects.toMatchObject({
@@ -131,13 +135,17 @@ describe('createFilledSheet lifecycle guards', () => {
   })
 
   it('rejects with 409 when template IsLatest is not 1', async () => {
-    queryResponses.push({
-      recordset: [{ Status: 'Approved', IsLatest: 0, IsTemplate: 1 }],
-    })
+    queryResponses.push(
+      { recordset: [{ Ex: 1 }] },
+      {
+        recordset: [{ Status: 'Approved', IsLatest: 0, IsTemplate: 1 }],
+      }
+    )
 
     const p = createFilledSheet(
       minimalCreateInput as Parameters<typeof createFilledSheet>[0],
-      { userId: 1, route: '/test', method: 'POST' }
+      { userId: 1, route: '/test', method: 'POST' },
+      1
     )
     await expect(p).rejects.toThrow(AppError)
     await expect(p).rejects.toMatchObject({
