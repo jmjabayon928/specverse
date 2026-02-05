@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 process.env.JWT_SECRET ??= 'secret'
 
@@ -15,7 +16,7 @@ const mockAuthUser = {
   accountId: 1,
   roleId: 1,
   role: 'Admin',
-  permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT'] as string[],
+  permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT],
 }
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
@@ -120,7 +121,7 @@ function createAuthCookie(permissions: string[]): string {
   return `token=${token}`
 }
 
-const authCookie = createAuthCookie(['DATASHEET_VIEW', 'DATASHEET_EDIT'])
+const authCookie = createAuthCookie([PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT])
 
 describe('Template structure API', () => {
   beforeEach(() => {

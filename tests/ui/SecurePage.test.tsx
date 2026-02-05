@@ -3,6 +3,7 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import SecurePage from '../../src/components/security/SecurePage'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 const mockPush = jest.fn()
 jest.mock('next/navigation', () => ({
@@ -21,7 +22,7 @@ describe('SecurePage gating', () => {
     useSessionMock.mockReturnValue({
       user: {
         role: 'Engineer',
-        permissions: ['DATASHEET_VIEW'],
+        permissions: [PERMISSIONS.DATASHEET_VIEW],
         userId: 1,
         roleId: 1,
       },
@@ -31,7 +32,7 @@ describe('SecurePage gating', () => {
 
   it('redirects to /unauthorized when user lacks required permission', () => {
     render(
-      <SecurePage requiredPermission="DATASHEET_APPROVE">
+      <SecurePage requiredPermission={PERMISSIONS.DATASHEET_APPROVE}>
         <span>Protected content</span>
       </SecurePage>
     )
@@ -42,7 +43,7 @@ describe('SecurePage gating', () => {
 
   it('does not redirect when user has required permission', () => {
     render(
-      <SecurePage requiredPermission="DATASHEET_VIEW">
+      <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
         <span>Protected content</span>
       </SecurePage>
     )

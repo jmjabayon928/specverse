@@ -2,6 +2,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { requirePermission } from '../../src/backend/middleware/authMiddleware'
 import { checkUserPermission } from '../../src/backend/database/permissionQueries'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn(),
@@ -29,7 +30,7 @@ function createNextMock() {
 }
 
 describe('requirePermission middleware', () => {
-  const permissionKey = 'DATASHEET_EDIT'
+  const permissionKey = PERMISSIONS.DATASHEET_EDIT
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -65,7 +66,7 @@ describe('requirePermission middleware', () => {
       user: {
         userId: 2,
         accountId: 1,
-        permissions: ['DATASHEET_VIEW'],
+        permissions: [PERMISSIONS.DATASHEET_VIEW],
       },
       cookies: {},
     } as unknown as Request

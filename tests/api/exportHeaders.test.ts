@@ -194,7 +194,7 @@ function buildTemplateExportApp() {
 describe('Export headers', () => {
   it('sets Content-Disposition filename for filled sheet Excel export', async () => {
     const app = buildFilledExportApp()
-    const authCookie = createAuthCookie(['PERMISSIONS.DATASHEET_VIEW', PERMISSIONS.DATASHEET_EXPORT])
+    const authCookie = createAuthCookie([PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EXPORT])
 
     const res = await request(app)
       .get('/api/backend/filledsheets/export/123/excel?uom=SI&lang=eng')
@@ -208,7 +208,7 @@ describe('Export headers', () => {
 
   it('sets Content-Disposition filename for template PDF export', async () => {
     const app = buildTemplateExportApp()
-    const authCookie = createAuthCookie(['PERMISSIONS.DATASHEET_VIEW', PERMISSIONS.DATASHEET_EXPORT])
+    const authCookie = createAuthCookie([PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EXPORT])
 
     const res = await request(app)
       .get('/api/backend/templates/export/456/pdf?uom=SI&lang=eng')

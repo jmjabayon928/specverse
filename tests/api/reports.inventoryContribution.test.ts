@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import { errorHandler } from '../../src/backend/middleware/errorHandler'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
   setTimeout(fn, 0, ...args)) as unknown as typeof setImmediate
@@ -142,7 +143,7 @@ describe('GET /api/backend/reports/inventory-contribution', () => {
 
   it('returns 200 and array with categoryName and items for each element', async () => {
     const app = buildTestApp()
-    const authCookie = createAuthCookie(['DASHBOARD_VIEW'])
+    const authCookie = createAuthCookie([PERMISSIONS.DASHBOARD_VIEW])
 
     const res = await request(app)
       .get('/api/backend/reports/inventory-contribution')
@@ -161,7 +162,7 @@ describe('GET /api/backend/reports/inventory-contribution', () => {
       { categoryName: 'Empty', items: [] },
     ])
     const app = buildTestApp()
-    const authCookie = createAuthCookie(['DASHBOARD_VIEW'])
+    const authCookie = createAuthCookie([PERMISSIONS.DASHBOARD_VIEW])
 
     const res = await request(app)
       .get('/api/backend/reports/inventory-contribution')

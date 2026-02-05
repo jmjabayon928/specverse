@@ -6,6 +6,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import RevisionsListClient from '../../../src/app/(admin)/datasheets/filled/[id]/revisions/RevisionsListClient'
 import type { UnifiedSheet } from '../../../src/domain/datasheets/sheetTypes'
+import { PERMISSIONS } from '../../../src/constants/permissions'
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -88,7 +89,7 @@ describe('RevisionsListClient', () => {
       userId: 1,
       roleId: 1,
       role: 'Admin',
-      permissions: ['DATASHEET_VIEW'],
+      permissions: [PERMISSIONS.DATASHEET_VIEW],
     },
     defaultLanguage: 'eng',
     defaultUnitSystem: 'SI' as const,

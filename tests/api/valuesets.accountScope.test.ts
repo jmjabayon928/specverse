@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 process.env.JWT_SECRET ??= 'secret'
 
@@ -40,7 +41,7 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
         userId: decoded.userId,
         roleId: 1,
         role: 'Admin',
-        permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT'],
+        permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT],
         accountId: decoded.accountId,
       }
       next()
@@ -73,7 +74,7 @@ jest.mock('../../src/backend/services/valueSetService', () => ({
 
 function makeToken(userId: number, accountId: number): string {
   return jwt.sign(
-    { userId, accountId, email: 'u@test.com', role: 'Admin', permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT'] },
+    { userId, accountId, email: 'u@test.com', role: 'Admin', permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT] },
     process.env.JWT_SECRET ?? 'secret',
     { expiresIn: '1h' }
   )

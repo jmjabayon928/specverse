@@ -31,6 +31,7 @@ const config: Config = {
       },
       testMatch: [
         '<rootDir>/tests/api/**/*.test.ts',
+        '<rootDir>/tests/constants/**/*.test.ts',
         '<rootDir>/tests/domain/**/*.test.ts',
         '<rootDir>/tests/middleware/**/*.test.ts',
         '<rootDir>/tests/repositories/**/*.test.ts',

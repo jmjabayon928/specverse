@@ -5,6 +5,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
 import { poolPromise, sql } from '../../src/backend/config/db'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 process.env.JWT_SECRET ??= 'secret'
 
@@ -13,7 +14,7 @@ const mockAuthUser = {
   roleId: 1,
   role: 'Admin',
   accountId: 1,
-  permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT', 'DATASHEET_VERIFY', 'DATASHEET_APPROVE', 'DATASHEET_ATTACHMENT_UPLOAD', 'DATASHEET_NOTE_EDIT'] as string[],
+  permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT, PERMISSIONS.DATASHEET_VERIFY, PERMISSIONS.DATASHEET_APPROVE, PERMISSIONS.DATASHEET_ATTACHMENT_UPLOAD, PERMISSIONS.DATASHEET_NOTE_EDIT],
 }
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
@@ -67,12 +68,12 @@ function createAuthCookie(permissions: string[]): string {
 }
 
 const FILLED_PERMISSIONS: string[] = [
-  'DATASHEET_VIEW',
-  'DATASHEET_EDIT',
-  'DATASHEET_VERIFY',
-  'DATASHEET_APPROVE',
-  'DATASHEET_ATTACHMENT_UPLOAD',
-  'DATASHEET_NOTE_EDIT',
+  PERMISSIONS.DATASHEET_VIEW,
+  PERMISSIONS.DATASHEET_EDIT,
+  PERMISSIONS.DATASHEET_VERIFY,
+  PERMISSIONS.DATASHEET_APPROVE,
+  PERMISSIONS.DATASHEET_ATTACHMENT_UPLOAD,
+  PERMISSIONS.DATASHEET_NOTE_EDIT,
 ]
 
 interface ReferenceOptionsResponse {

@@ -4,6 +4,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
 globalThis.setImmediate ??= ((fn: (...args: any[]) => void, ...args: any[]) =>
@@ -185,7 +186,7 @@ describe('Filled sheet attachments delete - canonical first with legacy fallback
     deleteAttachmentByIdMock.mockResolvedValueOnce(Promise.resolve())
 
     const app = buildTestApp()
-    const authCookie = createAuthCookie(['DATASHEET_ATTACHMENT_UPLOAD'])
+    const authCookie = createAuthCookie([PERMISSIONS.DATASHEET_ATTACHMENT_UPLOAD])
 
     const res = await request(app)
       .delete('/api/backend/filledsheets/123/attachments/999')
@@ -201,7 +202,7 @@ describe('Filled sheet attachments delete - canonical first with legacy fallback
     deleteAttachmentByIdMock.mockResolvedValueOnce()
 
     const app = buildTestApp()
-    const authCookie = createAuthCookie(['DATASHEET_ATTACHMENT_UPLOAD'])
+    const authCookie = createAuthCookie([PERMISSIONS.DATASHEET_ATTACHMENT_UPLOAD])
 
     const res = await request(app)
       .delete('/api/backend/filledsheets/123/attachments/555')

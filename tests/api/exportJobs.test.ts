@@ -9,6 +9,7 @@ import os from 'os'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import { errorHandler } from '../../src/backend/middleware/errorHandler'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'secret'
 
@@ -229,7 +230,7 @@ describe('Export Jobs API', () => {
 
     it('creates job and returns 201 with jobId when pre-check passes', async () => {
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .post('/api/backend/exports/jobs')
         .set('Cookie', [cookie])
@@ -250,7 +251,7 @@ describe('Export Jobs API', () => {
         rows: [],
       })
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .post('/api/backend/exports/jobs')
         .set('Cookie', [cookie])
@@ -270,7 +271,7 @@ describe('Export Jobs API', () => {
 
     it('returns 200 with status for owner', async () => {
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .get('/api/backend/exports/jobs/123')
         .set('Cookie', [cookie])
@@ -308,7 +309,7 @@ describe('Export Jobs API', () => {
     it('returns 404 when job does not exist', async () => {
       mockGetExportJobById.mockResolvedValueOnce(null)
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .get('/api/backend/exports/jobs/999')
         .set('Cookie', [cookie])
@@ -356,7 +357,7 @@ describe('Export Jobs API', () => {
     it('returns 410 when export expired or file missing', async () => {
       mockResolveExportFilePath.mockResolvedValueOnce(null)
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .get('/api/backend/exports/jobs/123/download')
         .set('Cookie', [cookie])
@@ -374,7 +375,7 @@ describe('Export Jobs API', () => {
         fileName: 'inventory-transactions-123.csv',
       })
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .get('/api/backend/exports/jobs/123/download')
         .set('Cookie', [cookie])
@@ -393,7 +394,7 @@ describe('Export Jobs API', () => {
         fileName: 'inventory-transactions-123.csv',
       })
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .get('/api/backend/exports/jobs/123/download-url')
         .set('Cookie', [cookie])
@@ -413,7 +414,7 @@ describe('Export Jobs API', () => {
       )
       mockCancelExportJob.mockResolvedValueOnce(true)
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .post('/api/backend/exports/jobs/123/cancel')
         .set('Cookie', [cookie])
@@ -437,7 +438,7 @@ describe('Export Jobs API', () => {
     it('returns 404 when job does not exist', async () => {
       mockGetExportJobById.mockResolvedValueOnce(null)
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .post('/api/backend/exports/jobs/999/retry')
         .set('Cookie', [cookie])
@@ -467,7 +468,7 @@ describe('Export Jobs API', () => {
           defaultJobRow({ Status: 'completed', CreatedBy: 1 })
         )
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .post('/api/backend/exports/jobs/123/retry')
         .set('Cookie', [cookie])
@@ -481,7 +482,7 @@ describe('Export Jobs API', () => {
         defaultJobRow({ Status: 'running', CreatedBy: 1 })
       )
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .post('/api/backend/exports/jobs/123/retry')
         .set('Cookie', [cookie])
@@ -511,7 +512,7 @@ describe('Export Jobs API', () => {
         .mockResolvedValueOnce(rowAfterReset)
       mockUpdateExportJobResetForRetry.mockResolvedValueOnce(undefined)
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .post('/api/backend/exports/jobs/123/retry')
         .set('Cookie', [cookie])
@@ -535,7 +536,7 @@ describe('Export Jobs API', () => {
 
     it('returns 403 when not admin', async () => {
       const app = buildTestApp()
-      const cookie = createAuthCookie(1, 'Engineer', ['INVENTORY_VIEW'])
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
       const res = await request(app)
         .post('/api/backend/exports/jobs/cleanup')
         .set('Cookie', [cookie])

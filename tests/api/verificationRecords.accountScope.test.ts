@@ -3,6 +3,7 @@ import request from 'supertest'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 let currentTestAccountId = 1
 
@@ -13,7 +14,7 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
       accountId: currentTestAccountId,
       role: 'Admin',
       roleId: 1,
-      permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT'],
+      permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT],
     }
     next()
   },

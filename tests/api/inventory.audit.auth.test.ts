@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import type { Request, Response, NextFunction } from "express";
 import { AppError } from "../../src/backend/errors/AppError";
 import { errorHandler } from "../../src/backend/middleware/errorHandler";
+import { PERMISSIONS } from "../../src/constants/permissions";
 
 process.env.JWT_SECRET ??= "secret";
 
@@ -102,7 +103,7 @@ function createAuthCookie(): string {
       role: "Admin",
       roleId: 1,
       profilePic: null,
-      permissions: ["INVENTORY_VIEW"],
+      permissions: [PERMISSIONS.INVENTORY_VIEW],
     },
     process.env.JWT_SECRET ?? "secret",
     { expiresIn: "1h" }

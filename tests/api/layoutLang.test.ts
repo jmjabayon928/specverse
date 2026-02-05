@@ -8,6 +8,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 function createAuthCookie(permissions: string[]): string {
   const token = jwt.sign(
@@ -45,7 +46,7 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
         accountId,
         roleId: 1,
         role: 'Admin',
-        permissions: decoded.permissions ?? ['DATASHEET_VIEW'],
+        permissions: decoded.permissions ?? [PERMISSIONS.DATASHEET_VIEW],
       }
       next()
     } catch {
@@ -99,7 +100,7 @@ describe('Layout render lang', () => {
     const app = buildLayoutApp()
     const res = await request(app)
       .get('/api/backend/layouts/1/render?sheetId=1&uom=SI&lang=en')
-      .set('Cookie', [createAuthCookie(['DATASHEET_VIEW'])])
+      .set('Cookie', [createAuthCookie([PERMISSIONS.DATASHEET_VIEW])])
 
     expect(res.status).toBe(200)
     expect(layoutService.renderLayout).toHaveBeenCalledWith(
@@ -111,7 +112,7 @@ describe('Layout render lang', () => {
     const app = buildLayoutApp()
     const res = await request(app)
       .get('/api/backend/layouts/1/render?sheetId=1&uom=SI&lang=eng')
-      .set('Cookie', [createAuthCookie(['DATASHEET_VIEW'])])
+      .set('Cookie', [createAuthCookie([PERMISSIONS.DATASHEET_VIEW])])
 
     expect(res.status).toBe(200)
     expect(layoutService.renderLayout).toHaveBeenCalledWith(

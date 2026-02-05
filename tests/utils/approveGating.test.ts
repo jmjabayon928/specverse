@@ -3,6 +3,7 @@
 
 import { canSeeApproveUI } from '../../src/utils/approveGating'
 import type { UserSession } from '../../src/domain/auth/sessionTypes'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 describe('canSeeApproveUI', () => {
   it('returns false for Supervisor even with DATASHEET_APPROVE', () => {
@@ -10,7 +11,7 @@ describe('canSeeApproveUI', () => {
       userId: 1,
       roleId: 2,
       role: 'Supervisor',
-      permissions: ['DATASHEET_APPROVE', 'DATASHEET_VERIFY'],
+      permissions: [PERMISSIONS.DATASHEET_APPROVE, PERMISSIONS.DATASHEET_VERIFY],
     }
     expect(canSeeApproveUI(user)).toBe(false)
   })
@@ -30,7 +31,7 @@ describe('canSeeApproveUI', () => {
       userId: 1,
       roleId: 2,
       role: 'Engineer',
-      permissions: ['DATASHEET_APPROVE', 'DATASHEET_EDIT'],
+      permissions: [PERMISSIONS.DATASHEET_APPROVE, PERMISSIONS.DATASHEET_EDIT],
     }
     expect(canSeeApproveUI(user)).toBe(true)
   })
@@ -40,7 +41,7 @@ describe('canSeeApproveUI', () => {
       userId: 1,
       roleId: 1,
       role: 'Admin',
-      permissions: ['DATASHEET_VERIFY'],
+      permissions: [PERMISSIONS.DATASHEET_VERIFY],
     }
     expect(canSeeApproveUI(user)).toBe(false)
   })
