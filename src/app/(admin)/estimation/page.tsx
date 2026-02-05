@@ -30,11 +30,25 @@ export default function EstimationDashboardPage() {
   useEffect(() => {
     async function loadOptions() {
       const [clientsRes, projectsRes] = await Promise.all([
-        fetch("/api/backend/clients").then(res => res.json()),
-        fetch("/api/backend/projects").then(res => res.json()),
+        fetch("/api/backend/settings/clients", { credentials: "include" }),
+        fetch("/api/backend/projects", { credentials: "include" }),
       ]);
-      setClientOptions(Array.isArray(clientsRes) ? clientsRes.map(c => ({ value: c.ClientID, label: c.ClientName })) : []);
-      setProjectOptions(Array.isArray(projectsRes) ? projectsRes.map(p => ({ value: p.ProjectID, label: p.ProjName })) : []);
+      const clientsData = clientsRes.ok ? await clientsRes.json() : null;
+      const projectsData = projectsRes.ok ? await projectsRes.json() : null;
+      const clientRows = Array.isArray(clientsData?.rows) ? clientsData.rows : (Array.isArray(clientsData) ? clientsData : []);
+      const projectRows = Array.isArray(projectsData?.rows) ? projectsData.rows : (Array.isArray(projectsData) ? projectsData : []);
+      setClientOptions(
+        clientRows.map((c: { ClientID?: number; ClientName?: string; id?: number; name?: string }) => ({
+          value: c.ClientID ?? c.id ?? 0,
+          label: c.ClientName ?? c.name ?? String(c.ClientID ?? c.id ?? ""),
+        }))
+      );
+      setProjectOptions(
+        projectRows.map((p: { ProjectID?: number; ProjName?: string; id?: number; name?: string }) => ({
+          value: p.ProjectID ?? p.id ?? 0,
+          label: p.ProjName ?? p.name ?? String(p.ProjectID ?? p.id ?? ""),
+        }))
+      );
     }
     loadOptions();
   }, []);

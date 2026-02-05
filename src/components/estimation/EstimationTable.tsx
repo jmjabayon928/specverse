@@ -71,6 +71,8 @@ const EstimationTable = (props: Readonly<EstimationTableProps>) => {
         <thead className='bg-gray-100 text-left'>
           <tr>
             <th className='px-4 py-2'>ID</th>
+            <th className='px-4 py-2'>Client</th>
+            <th className='px-4 py-2'>Project</th>
             <th className='px-4 py-2'>Title</th>
             <th className='px-4 py-2'>Status</th>
             <th className='px-4 py-2'>Created</th>
@@ -82,20 +84,28 @@ const EstimationTable = (props: Readonly<EstimationTableProps>) => {
           {hasRows === false ? (
             <tr>
               <td
-                colSpan={6}
+                colSpan={8}
                 className='px-4 py-4 text-center text-gray-500'
               >
                 No estimations found.
               </td>
             </tr>
           ) : (
-            estimations.map((estimation) => (
+            estimations.map((estimation) => {
+              const projectName = estimation.ProjectName ?? (estimation as Estimation & { ProjName?: string }).ProjName
+              return (
               <tr
                 key={estimation.EstimationID}
                 className='border-t'
               >
                 <td className='px-4 py-2'>
                   {estimation.EstimationID}
+                </td>
+                <td className='px-4 py-2'>
+                  {estimation.ClientName ?? '-'}
+                </td>
+                <td className='px-4 py-2'>
+                  {projectName ?? '-'}
                 </td>
                 <td className='px-4 py-2'>
                   {estimation.Title}
@@ -137,7 +147,8 @@ const EstimationTable = (props: Readonly<EstimationTableProps>) => {
                   </div>
                 </td>
               </tr>
-            ))
+              )
+            })
           )}
         </tbody>
       </table>

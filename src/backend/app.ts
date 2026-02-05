@@ -14,7 +14,6 @@ import clientsRoutes from './routes/clientsRoutes'
 import manufacturersRoutes from './routes/manufacturersRoutes'
 import suppliersRoutes from './routes/suppliersRoutes'
 import categoriesRoutes from './routes/categoriesRoutes'
-//import datasheetsRoutes from './routes/_datasheetRoutes'
 import layoutRoutes from './routes/layoutRoutes'
 import mirrorRoutes from './routes/mirrorRoutes'
 import languageRoutes from './routes/languageRoutes'
@@ -34,6 +33,8 @@ import adminRoutes from './routes/adminRoutes'
 import devRoutes from './routes/devRoutes'
 import auditLogsRoutes from './routes/auditLogsRoutes'
 import exportJobsRoutes from './routes/exportJobsRoutes'
+import verificationRecordsRoutes from './routes/verificationRecordsRoutes'
+import datasheetVerificationRecordsRoutes from './routes/datasheetVerificationRecordsRoutes'
 import { errorHandler } from './middleware/errorHandler'
 
 const app: Application = express()
@@ -63,7 +64,7 @@ app.use('/api/backend/settings/clients', clientsRoutes)
 app.use('/api/backend/settings/manufacturers', manufacturersRoutes)
 app.use('/api/backend/settings/suppliers', suppliersRoutes)
 app.use('/api/categories', categoriesRoutes)
-//app.use('/api/backend/datasheets', datasheetsRoutes)
+app.use('/api/backend/datasheets', datasheetVerificationRecordsRoutes)
 app.use('/api/backend/layouts', layoutRoutes)
 app.use('/api/backend/inventory', inventoryRoutes)
 app.use('/api/backend/estimation', estimationRoutes)
@@ -83,6 +84,7 @@ app.use('/api/backend/admin', adminRoutes)
 app.use('/api/backend/dev', devRoutes)
 app.use('/api/backend/audit-logs', auditLogsRoutes)
 app.use('/api/backend/exports/jobs', exportJobsRoutes)
+app.use('/api/backend/verification-records', verificationRecordsRoutes)
 
 // ─────────────────────────────────────────────
 // Dev-only routes inspector
