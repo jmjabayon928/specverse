@@ -435,9 +435,9 @@ describe('Templates API', () => {
     expect(Array.isArray(res.body)).toBe(true)
   })
 
-  it('GET /api/backend/templates/check-tag should return exists=false for fake tag', async () => {
+  it('GET /api/backend/templates/equipment-tag/check should return exists=false for fake tag', async () => {
     const res = await request(app)
-      .get('/api/backend/templates/check-tag')
+      .get('/api/backend/templates/equipment-tag/check')
       .query({
         tag: '@@@_nonexistent_template_tag_@@@',
         projectId: 999_999,

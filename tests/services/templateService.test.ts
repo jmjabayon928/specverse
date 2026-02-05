@@ -78,8 +78,9 @@ describe('templateService.doesTemplateEquipmentTagExist', () => {
 
     const fakeTag = '@@@__nonexistent_tag__@@@'
     const fakeProjectId = 999_999
+    const accountId = 1
 
-    const exists = await doesTemplateEquipmentTagExist(fakeTag, fakeProjectId)
+    const exists = await doesTemplateEquipmentTagExist(fakeTag, fakeProjectId, accountId)
 
     expect(exists).toBe(false)
   })
@@ -91,8 +92,9 @@ describe('templateService.doesTemplateEquipmentTagExist – true case', () => {
 
     const projectId = 98765
     const testTag = 'TEST-TAG-XYZ'
+    const accountId = 1
 
-    const exists = await doesTemplateEquipmentTagExist(testTag, projectId)
+    const exists = await doesTemplateEquipmentTagExist(testTag, projectId, accountId)
 
     expect(exists).toBe(true)
   })

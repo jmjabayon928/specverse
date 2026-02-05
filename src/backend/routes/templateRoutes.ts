@@ -80,7 +80,7 @@ router.get(
   getNoteTypesHandler,
 )
 router.get(
-  '/check-tag',
+  '/equipment-tag/check',
   verifyToken,
   requirePermission(PERMISSIONS.DATASHEET_VIEW),
   checkTemplateEquipmentTagHandler,

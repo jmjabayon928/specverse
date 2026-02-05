@@ -2286,13 +2286,15 @@ export async function exportTemplateExcel(
 
 export async function doesTemplateEquipmentTagExist(
   tag: string,
-  projectId: number
+  projectId: number,
+  accountId: number
 ): Promise<boolean> {
   const pool = await poolPromise
   const req = pool.request()
 
   req.input('ProjectID', sql.Int, projectId)
   req.input('Tag', sql.NVarChar, tag)
+  req.input('AccountID', sql.Int, accountId)
 
   const rs = await req.query<{ Exists: number }>(`
     SELECT TOP 1 1 AS [Exists]
@@ -2300,6 +2302,7 @@ export async function doesTemplateEquipmentTagExist(
     WHERE IsTemplate = 1
       AND ProjectID = @ProjectID
       AND EquipmentTagNum = @Tag
+      AND AccountID = @AccountID
   `)
 
   const recordCount = rs.recordset?.length ?? 0

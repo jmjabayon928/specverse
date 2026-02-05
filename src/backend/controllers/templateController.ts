@@ -1157,6 +1157,9 @@ export const exportTemplateExcel: RequestHandler = async (req, res, next) => {
 
 export const checkTemplateEquipmentTagHandler: RequestHandler = async (req, res, next) => {
   try {
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
+
     const parsed = checkTagQuerySchema.parse(req.query)
     const tag = normalizeQueryStringParam(parsed.tag)
     const projectId = normalizeQueryNumberParam(parsed.projectId)
@@ -1167,7 +1170,7 @@ export const checkTemplateEquipmentTagHandler: RequestHandler = async (req, res,
       return
     }
 
-    const exists = await doesTemplateEquipmentTagExist(tag, projectId)
+    const exists = await doesTemplateEquipmentTagExist(tag, projectId, accountId)
     res.status(200).json({ exists })
   } catch (err: unknown) {
     handleError(next, err, 'Failed to check template equipment tag')

@@ -15,7 +15,7 @@ export default function CreateEstimationPage() {
   const [projectId, setProjectId] = useState("");
 
   useEffect(() => {
-    fetch("/api/backend/datasheets/templates/reference-options")
+    fetch("/api/backend/templates/reference-options", { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
         setProjects(data.projects || []);
