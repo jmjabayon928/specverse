@@ -26,6 +26,54 @@ SpecVerse now supports multiple engineering disciplines end-to-end using the sam
 
 Phase 1 introduces seeded disciplines (Piping and Instrumentation) and a Pressure Transmitter subtype, with an optional seed script that creates a realistic Instrumentation datasheet template for demonstration. This phase intentionally avoids schema redesign or engine changes, proving that the existing universal datasheet model supports cross-discipline use without specialization.
 
+> **Status:** Implemented and in active use.  
+> This phase validates that SpecVerse’s universal datasheet engine supports cross-discipline expansion without schema redesign.
+
+
+---
+
+## ✅ Implemented Platform Phases
+
+SpecVerse has already implemented the following roadmap phases in production-ready form:
+
+### Phase 0 — Core Datasheet Platform (Complete)
+- Template-based datasheets with subsheets and typed fields
+- Filled vs template datasheets
+- Unit validation and multilingual support
+- Approval workflows
+- Attachments, notes, and exports
+- Estimation and inventory linkage
+
+### Phase 1 — Multi-Discipline Datasheets (Complete)
+- Discipline-agnostic datasheet engine
+- Discipline and subtype stored on templates and filled sheets
+- Cross-discipline support without schema specialization
+- Seeded examples for Piping and Instrumentation
+
+### Phase 2 — Requirement vs Offered vs As-Built Modeling (Complete)
+- Datasheet fields support multiple value sources
+- Clear separation of purchaser requirements, vendor-offered values, and verified/as-built values
+- Variance awareness for compliance and procurement workflows
+
+### Phase 2.5 — Multi-Account / Multi-Tenant Architecture (Complete)
+- Account-scoped data model across all core entities
+- Account-aware authorization and query enforcement
+- Safe isolation of datasheets, estimations, inventory, and verification records
+
+### Phase 3 — Verification & Inspection Records (Complete)
+- First-class Verification Records (QA/QC objects)
+- Standard-aware certification and inspection tracking
+- Attachments linked to assets and datasheets
+- Full auditability and traceability
+
+By completing Phases 0–3, SpecVerse already operates as:
+- A structured system of record for engineering data
+- A procurement-aware datasheet platform
+- A QA/QC and verification traceability system
+- A multi-tenant, production-grade SaaS architecture
+
+Later phases extend these foundations rather than replacing them.
+
 ---
 
 ## 🧩 Core Modules
@@ -172,6 +220,79 @@ This section outlines **long-term platform directions** under consideration for 
 The capabilities described here are **not yet implemented** and are presented to illustrate the architectural direction and future potential of the platform.
 These initiatives are intended to complement—not replace—human engineering judgment and approval workflows.
 
+The phases below describe planned and conceptual capabilities.
+Phases beyond Phase 3 are **not yet implemented** and are included to illustrate the platform’s architectural direction.
+
+## Phase 4 – Ratings & Nameplate Modeling
+
+### Motivation
+Ratings are safety-critical and operational truth.
+
+### Implementation
+- Structured ratings blocks (locked after approval)
+- Nameplate data capture
+- Installation and protection references
+
+### Standards Alignment
+- NEMA MG 1
+- IEC motor standards
+- Pressure vessel nameplate practices
+
+### Outcome
+SpecVerse supports **installation, commissioning, and O&M accuracy**.
+
+---
+
+## Phase 5 – Instrumentation & Loop Awareness (Lightweight)
+
+### Scope (Intentionally Limited)
+- Instrument index
+- Loop IDs
+- Tag formatting rules (ISA-5.1 inspired)
+- Cross-links between instruments, loops, and datasheets
+
+### What is Explicitly Out of Scope
+- Drawing editors
+- Full P&ID systems
+
+### Outcome
+SpecVerse integrates into I&C workflows **without exploding scope**.
+
+---
+
+## Phase 6 – Equipment Schedules & Facilities Engineering
+
+### Motivation
+Buildings and facilities rely on **schedules and systems manuals**, not one-off datasheets.
+
+### Features
+- Schedule views (many similar assets)
+- Bulk editing
+- Location / space / system metadata
+- Links to detailed datasheets
+
+### Standards Alignment
+- ASHRAE Guideline 1.4
+- HVAC documentation practices
+
+### Outcome
+SpecVerse supports **facility-scale documentation and commissioning**.
+
+---
+
+## Phase 7 – AI-Assisted Intelligence (Optional / Incremental)
+
+### User-Visible Capabilities
+- Datasheet completeness scoring and quality indicators
+- Detection of anomalies and inconsistencies
+- Suggested values based on historical and peer data
+- Natural-language queries (e.g., “show pumps >120 °C”)
+- Risk flags and attention markers for QA and managers
+
+### Positioning
+AI augments **engineering judgment** — it does not replace it.
+All suggestions are reviewable, auditable, and require human approval.
+
 ---
 
 ### 🏭 SpecVerse PlantSync — EPC CAD Integration *(Vision)*
@@ -193,27 +314,21 @@ This direction positions SpecVerse as a **system-of-record layer between design 
 
 ---
 
-### 🧠 AI Foundation & Continuous Intelligence *(Vision)*
+### 🧠 AI Foundation & Continuous Intelligence *(Architecture Vision)*
 
-SpecVerse is designed to evolve into a **telemetry-driven, self-learning engineering platform** that continuously monitors data quality, predicts needs, and surfaces actionable insights.
+SpecVerse is designed to evolve into a **telemetry-driven, self-learning engineering platform** that continuously monitors data quality and operational signals.
 
 **Foundation concepts:**
-- Key system events (e.g., datasheet lifecycle changes, inventory transactions, estimation updates) emitted into structured AI telemetry stores
-- Background services continuously analyzing data for anomalies, trends, and forecast signals
-- AI findings persisted alongside audit logs for traceability and review
+- Key system events (datasheet lifecycle, inventory movements, estimation changes) emitted into structured telemetry stores
+- Background analysis services producing findings and forecasts
+- AI outputs persisted alongside audit logs for traceability and review
 
-**Intelligence layers under consideration:**
-- Semantic search and embeddings for cross-sheet and cross-project analysis
-- Switchable LLM gateway for development vs. production deployments
-- Scalable ML pipeline evolving from lightweight services to managed forecasting and ML platforms
+**Architectural considerations:**
+- Semantic indexing and embeddings for cross-project intelligence
+- Switchable LLM gateways for development vs. production
+- Progressive evolution from lightweight analysis to managed ML services
 
-**AI feature blueprints:**
-- Datasheet quality audits with auto-suggested corrections
-- Inventory forecasting and proactive restock alerts
-- Estimation variance analysis with cost-driver explanations
-- An AI assistant for natural-language queries and role-aware dashboards
-
-This roadmap transforms SpecVerse from a transactional system into a **continuous intelligence platform** — one that learns from operational data and actively supports engineering and management decisions.
+This foundation enables AI features to be introduced **incrementally, safely, and auditably**, without compromising engineering accountability.
 
 ---
 
@@ -251,8 +366,11 @@ Includes:
 * ✅ `UserLogs` table for all major actions (VIEW, CREATE, UPDATE, EXPORT, DELETE)
 * ✅ `InformationChangeLogs` for field-level updates
 * ✅ Approval and verification history per sheet and estimation
+* ✅ Verification records with linked evidence attachments
 * Planned: AI-generated findings and recommendations recorded alongside
   human actions for traceability and review
+
+These verification and audit capabilities correspond to **Phase 3 of the SpecVerse roadmap**, establishing SpecVerse as a QA/QC and compliance backbone rather than a passive document repository.
 
 ---
 
