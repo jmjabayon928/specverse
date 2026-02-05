@@ -9,6 +9,7 @@ import { translations as labelTranslations } from "@/constants/translations";
 import { convertToUSC } from "@/utils/unitConversionTable";
 import OtherConversionsCell from "@/utils/OtherConversionsCell";
 import ChangeLogTable from "@/components/datasheets/ChangeLogTable";
+import VerificationRecordsList from "@/components/datasheets/VerificationRecordsList";
 import { computeCompleteness, getSubsheetKey } from "@/utils/datasheetCompleteness";
 import type { SubsheetCompleteness } from "@/utils/datasheetCompleteness";
 import SectionCompletenessSummary from "@/components/datasheets/SectionCompletenessSummary";
@@ -550,6 +551,23 @@ const FilledSheetViewer: React.FC<Props> = ({
           </div>
         )}
       </fieldset>
+
+      {/* Verification Records */}
+      {sheetId != null && (
+        <fieldset className="border rounded p-4">
+          <div className="text-xl font-semibold mb-2">Verification Records</div>
+          <div className="text-sm text-gray-600 mb-4">
+            Verification records linked to this datasheet.
+          </div>
+          <VerificationRecordsList
+            sheetId={sheetId}
+            sheetAttachments={attachments.map((a) => ({
+              attachmentId: a.id,
+              originalName: a.originalName,
+            }))}
+          />
+        </fieldset>
+      )}
 
       {!isRevision && sheetId != null && (
         <fieldset className="border rounded p-4">

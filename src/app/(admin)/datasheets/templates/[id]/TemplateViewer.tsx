@@ -6,6 +6,7 @@ import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
 import { translations as labelTranslations } from '@/constants/translations'
 import { convertToUSC } from '@/utils/unitConversionTable'
 import ChangeLogTable from '@/components/datasheets/ChangeLogTable'
+import VerificationRecordsList from '@/components/datasheets/VerificationRecordsList'
 
 function safeFormatDate(input: string | Date | null | undefined): string {
   if (!input) return '-'
@@ -587,6 +588,23 @@ export default function TemplateViewer(props: Readonly<Props>) {
           </div>
         )}
       </fieldset>
+
+      {/* Verification Records */}
+      {sheetId != null && (
+        <fieldset className='border rounded p-4'>
+          <div className='text-xl font-semibold mb-2'>Verification Records</div>
+          <div className='text-sm text-gray-600 mb-4'>
+            Verification records linked to this datasheet.
+          </div>
+          <VerificationRecordsList
+            sheetId={sheetId}
+            sheetAttachments={safeAttachments.map((a) => ({
+              attachmentId: a.attachmentId,
+              originalName: a.name ?? `Attachment ${a.attachmentId}`,
+            }))}
+          />
+        </fieldset>
+      )}
 
       {sheetId != null && (
         <fieldset className='border rounded p-4'>

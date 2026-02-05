@@ -33,6 +33,7 @@ const config: Config = {
         '<rootDir>/tests/api/**/*.test.ts',
         '<rootDir>/tests/domain/**/*.test.ts',
         '<rootDir>/tests/middleware/**/*.test.ts',
+        '<rootDir>/tests/repositories/**/*.test.ts',
         '<rootDir>/tests/schemas/**/*.test.ts',
         '<rootDir>/tests/services/**/*.test.ts',
         '<rootDir>/tests/utils/**/*.test.ts',

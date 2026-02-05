@@ -36,6 +36,8 @@ export interface VerificationRecordListItemDto {
 // Payload for creating a new verification record
 export interface CreateVerificationRecordDto {
   accountId: number              // Required
+  verificationTypeId: number     // Required: FK to VerificationRecordTypes
+  result: string                  // Required: verification result (e.g., 'Pending', 'Pass', 'Fail')
   issuerPartyId?: number         // Optional
 }
 

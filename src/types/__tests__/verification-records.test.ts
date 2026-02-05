@@ -61,6 +61,8 @@ describe('VerificationRecords types', () => {
 
     const createDto: CreateVerificationRecordDto = {
       accountId: 1,
+      verificationTypeId: 1,
+      result: 'Pending',
     }
 
     const linkDto: LinkVerificationRecordToSheetDto = {
