@@ -1,6 +1,21 @@
 // src/backend/repositories/accountsRepository.ts
 import { poolPromise, sql } from '../config/db'
 
+/**
+ * Returns the account name for the given account ID, or null if not found.
+ */
+export async function getAccountNameById(accountId: number): Promise<string | null> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .query<{ AccountName: string }>(`
+      SELECT AccountName FROM dbo.Accounts WHERE AccountID = @AccountID
+    `)
+  const row = result.recordset[0]
+  return row?.AccountName ?? null
+}
+
 export type AccountWithRole = {
   accountId: number
   accountName: string

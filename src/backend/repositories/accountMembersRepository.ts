@@ -66,6 +66,62 @@ export async function listMembers(accountId: number): Promise<AccountMemberRow[]
 }
 
 /**
+ * Returns the member row for the given account and user, or null if not found.
+ */
+export async function getMemberByAccountAndUser(
+  accountId: number,
+  userId: number,
+): Promise<AccountMemberRow | null> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('UserID', sql.Int, userId)
+    .query<{
+      AccountMemberID: number
+      UserID: number
+      Email: string | null
+      FirstName: string | null
+      LastName: string | null
+      RoleID: number
+      RoleName: string
+      IsActive: boolean
+      CreatedAt: Date
+      UpdatedAt: Date
+    }>(`
+      SELECT
+        am.AccountMemberID,
+        am.UserID,
+        u.Email,
+        u.FirstName,
+        u.LastName,
+        am.RoleID,
+        r.RoleName,
+        CAST(am.IsActive AS TINYINT) AS IsActive,
+        am.CreatedAt,
+        am.UpdatedAt
+      FROM dbo.AccountMembers am
+      INNER JOIN dbo.Users u ON u.UserID = am.UserID
+      INNER JOIN dbo.Roles r ON r.RoleID = am.RoleID
+      WHERE am.AccountID = @AccountID AND am.UserID = @UserID
+    `)
+  const row = result.recordset[0]
+  if (!row) return null
+  return {
+    accountMemberId: row.AccountMemberID,
+    userId: row.UserID,
+    email: row.Email,
+    firstName: row.FirstName,
+    lastName: row.LastName,
+    roleId: row.RoleID,
+    roleName: row.RoleName,
+    isActive: Boolean(row.IsActive),
+    createdAt: row.CreatedAt,
+    updatedAt: row.UpdatedAt,
+  }
+}
+
+/**
  * Returns the member row if found in the given account, otherwise null.
  */
 export async function getMemberInAccount(
@@ -180,5 +236,25 @@ export async function updateMemberStatus(
       UPDATE dbo.AccountMembers
       SET IsActive = @IsActive, UpdatedAt = GETDATE()
       WHERE AccountID = @AccountID AND AccountMemberID = @AccountMemberID
+    `)
+}
+
+/**
+ * Inserts a new account member. Caller must ensure (accountId, userId) is not already present.
+ */
+export async function insertAccountMember(
+  accountId: number,
+  userId: number,
+  roleId: number,
+): Promise<void> {
+  const pool = await poolPromise
+  await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('UserID', sql.Int, userId)
+    .input('RoleID', sql.Int, roleId)
+    .query(`
+      INSERT INTO dbo.AccountMembers (AccountID, UserID, RoleID, IsActive, CreatedAt, UpdatedAt)
+      VALUES (@AccountID, @UserID, @RoleID, 1, GETDATE(), GETDATE())
     `)
 }
