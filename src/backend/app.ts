@@ -25,6 +25,10 @@ import filledSheetRoutes from './routes/filledSheetRoutes'
 import sheetRoutes from './routes/sheetRoutes'
 import projectsRoutes from './routes/projectsRoutes'
 import authRoutes from './routes/authRoutes'
+import sessionsRoutes from './routes/sessionsRoutes'
+import accountsRoutes from './routes/accountsRoutes'
+import accountMembersRoutes from './routes/accountMembersRoutes'
+import rolesListRoutes from './routes/rolesListRoutes'
 import notificationRoutes from './routes/notificationRoutes'
 import referenceRoutes from '@/backend/routes/referenceRoutes'
 import statsRoutes from './routes/statsRoutes'
@@ -74,6 +78,10 @@ app.use('/api/backend/sheets', sheetRoutes)
 app.use('/api/backend/projects', projectsRoutes)
 app.use('/api/languages', languageRoutes)
 app.use('/api/backend/auth', authRoutes)
+app.use('/api/backend/sessions', sessionsRoutes)
+app.use('/api/backend/accounts', accountsRoutes)
+app.use('/api/backend/account-members', accountMembersRoutes)
+app.use('/api/backend/roles', rolesListRoutes)
 app.use('/api', labelRoutes)
 app.use('/api/mirror', mirrorRoutes)
 app.use('/api/backend/notifications', notificationRoutes)

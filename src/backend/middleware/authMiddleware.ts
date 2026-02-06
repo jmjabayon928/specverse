@@ -4,7 +4,16 @@ import jwt from 'jsonwebtoken'
 import { AppError } from '../errors/AppError'
 import type { JwtPayload as CustomJwtPayload } from '../../domain/auth/JwtTypes'
 import { checkUserPermission } from '../database/permissionQueries'
-import { getAccountContextForUser, getDefaultAccountId, getActiveAccountId } from '../database/accountContextQueries'
+import {
+  getAccountContextForUser,
+  getAccountContextForUserAndAccount,
+  getDefaultAccountId,
+  getActiveAccountId,
+} from '../database/accountContextQueries'
+import {
+  getActiveAccountId as getStoredActiveAccountId,
+  clearActiveAccount,
+} from '../repositories/userActiveAccountRepository'
 
 const JWT_SECRET = process.env.JWT_SECRET
 
@@ -138,6 +147,19 @@ async function attachAccountContext(req: Request): Promise<void> {
     req.user.accountId = activeId
     req.user.isSuperadmin = true
     return
+  }
+
+  const storedAccountId = await getStoredActiveAccountId(req.user.userId)
+  if (storedAccountId !== null) {
+    const storedCtx = await getAccountContextForUserAndAccount(req.user.userId, storedAccountId)
+    if (storedCtx) {
+      req.user.accountId = storedCtx.accountId
+      req.user.roleId = storedCtx.roleId
+      req.user.role = storedCtx.roleName
+      req.user.permissions = storedCtx.permissions
+      return
+    }
+    await clearActiveAccount(req.user.userId)
   }
 
   const ctx = await getAccountContextForUser(req.user.userId)
