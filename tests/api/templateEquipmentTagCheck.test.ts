@@ -30,6 +30,7 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
   },
   requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
   optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
+  verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
 }))
 
 const mockDoesTemplateEquipmentTagExist = jest.fn()
