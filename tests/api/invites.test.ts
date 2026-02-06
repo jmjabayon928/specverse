@@ -202,6 +202,12 @@ describe('POST /api/backend/invites', () => {
   })
 
   it('returns 403 when user lacks ACCOUNT_USER_MANAGE', async () => {
+    getAccountContextForUser.mockResolvedValueOnce({
+      accountId: 1,
+      roleId: 2,
+      roleName: 'Viewer',
+      permissions: [],
+    })
     checkUserPermission.mockResolvedValue(false)
     const token = makeToken({
       userId: 1,
@@ -210,7 +216,7 @@ describe('POST /api/backend/invites', () => {
       email: 'v@example.com',
       name: 'Viewer',
       profilePic: null,
-      permissions: ['ACCOUNT_VIEW'],
+      permissions: [],
     })
 
     const res = await request(app)
@@ -302,6 +308,12 @@ describe('GET /api/backend/invites', () => {
   })
 
   it('returns 403 when user lacks permission', async () => {
+    getAccountContextForUser.mockResolvedValueOnce({
+      accountId: 1,
+      roleId: 2,
+      roleName: 'Viewer',
+      permissions: [],
+    })
     checkUserPermission.mockResolvedValue(false)
     const token = makeToken({
       userId: 1,
