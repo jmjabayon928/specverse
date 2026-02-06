@@ -11,8 +11,22 @@ import {
   listAvailablePermissionsForRole as svcListAvail,
   addPermissionToRole as svcAddPerm,
   removePermissionFromRole as svcRemovePerm,
+  getRolesForDropdown as svcGetRolesForDropdown,
   type ListRolesResult,
 } from '../services/rolesService'
+
+/**
+ * GET /api/backend/roles
+ * Minimal list for UI dropdown (account member management). verifyToken + ACCOUNT_VIEW.
+ */
+export const listRolesForDropdown: RequestHandler = async (req, res, next) => {
+  try {
+    const out = await svcGetRolesForDropdown()
+    res.json(out)
+  } catch (err) {
+    next(err)
+  }
+}
 
 /**
  * GET /api/backend/settings/roles

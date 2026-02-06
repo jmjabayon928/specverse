@@ -4,6 +4,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
 globalThis.setImmediate ??= ((fn: (...args: any[]) => void, ...args: any[]) =>
@@ -137,14 +138,21 @@ describe('Stats auth', () => {
     expect(res.statusCode).toBe(401)
   })
 
-  it('returns 200 when authenticated', async () => {
+  it('returns 403 when authenticated but lacks required permission', async () => {
     const app = buildTestApp()
-
-    const authCookie = createAuthCookie(['DASHBOARD_VIEW'])
+    const authCookie = createAuthCookie([])
     const res = await request(app)
       .get('/api/backend/stats/datasheets-by-status')
       .set('Cookie', [authCookie])
+    expect(res.statusCode).toBe(403)
+  })
 
+  it('returns 200 when authenticated with required permission', async () => {
+    const app = buildTestApp()
+    const authCookie = createAuthCookie([PERMISSIONS.DASHBOARD_VIEW])
+    const res = await request(app)
+      .get('/api/backend/stats/datasheets-by-status')
+      .set('Cookie', [authCookie])
     expect(res.statusCode).toBe(200)
   })
 })

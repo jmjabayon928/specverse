@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import ComparePageClient from '../../../src/app/(admin)/datasheets/filled/[id]/compare/ComparePageClient'
 import type { CompareResponse, ValueSetListItem } from '../../../src/domain/datasheets/compareTypes'
+import { PERMISSIONS } from '../../../src/constants/permissions'
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -71,7 +72,7 @@ describe('ComparePageClient', () => {
 
   beforeEach(() => {
     useSessionMock.mockReturnValue({
-      user: { userId: 1, roleId: 1, permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT'] },
+      user: { userId: 1, roleId: 1, permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT] },
       loading: false,
     })
   })

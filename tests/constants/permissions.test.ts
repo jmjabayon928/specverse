@@ -3,6 +3,8 @@
 
 import { PERMISSIONS } from '../../src/constants/permissions'
 
+const KEY_PATTERN = /^[A-Z0-9_]+$/
+
 const ROUTE_AND_UI_KEYS = [
   'DATASHEET_VIEW',
   'DATASHEET_EDIT',
@@ -13,7 +15,12 @@ const ROUTE_AND_UI_KEYS = [
   'DATASHEET_ATTACHMENT_UPLOAD',
   'DATASHEET_ATTACHMENT_DELETE',
   'DATASHEET_EXPORT',
+  'REVISIONS_VIEW',
   'DASHBOARD_VIEW',
+  'ESTIMATION_VIEW',
+  'ESTIMATION_CREATE',
+  'ESTIMATION_EDIT',
+  'ESTIMATION_EXPORT',
   'INVENTORY_VIEW',
   'INVENTORY_CREATE',
   'INVENTORY_EDIT',
@@ -36,6 +43,17 @@ describe('PERMISSIONS (canonical keys)', () => {
     const perm = PERMISSIONS as Record<string, string>
     for (const [k, v] of Object.entries(perm)) {
       expect(v).toBe(k)
+    }
+  })
+
+  it('every PERMISSIONS value is unique and matches /^[A-Z0-9_]+$/', () => {
+    const perm = PERMISSIONS as Record<string, string>
+    const values = Object.values(perm)
+    const seen = new Set<string>()
+    for (const v of values) {
+      expect(KEY_PATTERN.test(v)).toBe(true)
+      expect(seen.has(v)).toBe(false)
+      seen.add(v)
     }
   })
 })

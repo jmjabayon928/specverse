@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 // Mock auth so no real DB (permissionQueries) runs. accountId required for list/get-details.
 const mockAuthUser = {
@@ -12,13 +13,13 @@ const mockAuthUser = {
   roleId: 1,
   role: 'Admin',
   permissions: [
-    'DATASHEET_VIEW',
-    'DATASHEET_EDIT',
-    'DATASHEET_VERIFY',
-    'DATASHEET_APPROVE',
-    'DATASHEET_ATTACHMENT_UPLOAD',
-    'DATASHEET_NOTE_EDIT',
-  ] as string[],
+    PERMISSIONS.DATASHEET_VIEW,
+    PERMISSIONS.DATASHEET_EDIT,
+    PERMISSIONS.DATASHEET_VERIFY,
+    PERMISSIONS.DATASHEET_APPROVE,
+    PERMISSIONS.DATASHEET_ATTACHMENT_UPLOAD,
+    PERMISSIONS.DATASHEET_NOTE_EDIT,
+  ],
   accountId: 1,
 }
 
@@ -82,12 +83,12 @@ function createAuthCookie(permissions: string[]): string {
 }
 
 const FILLED_PERMISSIONS: string[] = [
-  'DATASHEET_VIEW',
-  'DATASHEET_EDIT',
-  'DATASHEET_VERIFY',
-  'DATASHEET_APPROVE',
-  'DATASHEET_ATTACHMENT_UPLOAD',
-  'DATASHEET_NOTE_EDIT',
+  PERMISSIONS.DATASHEET_VIEW,
+  PERMISSIONS.DATASHEET_EDIT,
+  PERMISSIONS.DATASHEET_VERIFY,
+  PERMISSIONS.DATASHEET_APPROVE,
+  PERMISSIONS.DATASHEET_ATTACHMENT_UPLOAD,
+  PERMISSIONS.DATASHEET_NOTE_EDIT,
 ]
 
 describe('Filled Sheets API', () => {

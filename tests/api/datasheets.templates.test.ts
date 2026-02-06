@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 process.env.JWT_SECRET ??= 'secret'
 
@@ -11,7 +12,7 @@ const mockAuthUser = {
   userId: 1,
   roleId: 1,
   role: 'Admin',
-  permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT', 'DATASHEET_VERIFY', 'DATASHEET_APPROVE', 'DATASHEET_ATTACHMENT_UPLOAD', 'DATASHEET_NOTE_EDIT'] as string[],
+  permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT, PERMISSIONS.DATASHEET_VERIFY, PERMISSIONS.DATASHEET_APPROVE, PERMISSIONS.DATASHEET_ATTACHMENT_UPLOAD, PERMISSIONS.DATASHEET_NOTE_EDIT],
   accountId: 1,
 }
 
@@ -115,12 +116,12 @@ function createAuthCookie(permissions: string[]): string {
 }
 
 const TEMPLATE_PERMISSIONS: string[] = [
-  'DATASHEET_VIEW',
-  'DATASHEET_EDIT',
-  'DATASHEET_VERIFY',
-  'DATASHEET_APPROVE',
-  'DATASHEET_ATTACHMENT_UPLOAD',
-  'DATASHEET_NOTE_EDIT',
+  PERMISSIONS.DATASHEET_VIEW,
+  PERMISSIONS.DATASHEET_EDIT,
+  PERMISSIONS.DATASHEET_VERIFY,
+  PERMISSIONS.DATASHEET_APPROVE,
+  PERMISSIONS.DATASHEET_ATTACHMENT_UPLOAD,
+  PERMISSIONS.DATASHEET_NOTE_EDIT,
 ]
 
 interface DisciplineOption {

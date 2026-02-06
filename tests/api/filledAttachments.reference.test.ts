@@ -4,6 +4,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
 globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
@@ -32,7 +33,7 @@ const mockAuthUser = {
   userId: 1,
   roleId: 1,
   role: 'Admin',
-  permissions: ['DATASHEET_VIEW'] as string[],
+  permissions: [PERMISSIONS.DATASHEET_VIEW],
 }
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
@@ -129,7 +130,7 @@ function buildTestApp() {
 describe('Filled sheet attachments reference template attachments', () => {
   it('GET /api/backend/filledsheets/:id returns attachments including referenced template attachment', async () => {
     const app = buildTestApp()
-    const authCookie = createAuthCookie(['DATASHEET_VIEW'])
+    const authCookie = createAuthCookie([PERMISSIONS.DATASHEET_VIEW])
 
     const res = await request(app)
       .get('/api/backend/filledsheets/123?lang=eng')

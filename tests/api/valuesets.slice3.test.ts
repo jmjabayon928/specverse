@@ -7,6 +7,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
   setTimeout(fn, 0, ...args)) as unknown as typeof setImmediate
@@ -29,7 +30,7 @@ function createAuthCookie(permissions: string[]): string {
   return `token=${token}`
 }
 
-const FILLED_PERMISSIONS = ['DATASHEET_VIEW', 'DATASHEET_EDIT']
+const FILLED_PERMISSIONS = [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT]
 const TEST_ACCOUNT_ID = 1
 
 process.env.JWT_SECRET ??= 'secret'

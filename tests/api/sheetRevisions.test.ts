@@ -5,6 +5,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
   setTimeout(fn, 0, ...args)) as unknown as typeof setImmediate
@@ -94,10 +95,10 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
 }))
 
 const FILLED_PERMISSIONS: string[] = [
-  'DATASHEET_VIEW',
-  'DATASHEET_EDIT',
-  'DATASHEET_VERIFY',
-  'DATASHEET_APPROVE',
+  PERMISSIONS.DATASHEET_VIEW,
+  PERMISSIONS.DATASHEET_EDIT,
+  PERMISSIONS.DATASHEET_VERIFY,
+  PERMISSIONS.DATASHEET_APPROVE,
 ]
 
 process.env.JWT_SECRET ??= 'secret'

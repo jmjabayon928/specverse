@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import { errorHandler } from '../../src/backend/middleware/errorHandler'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
 globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
@@ -15,7 +16,7 @@ const mockAuthUser = {
   userId: 1,
   roleId: 1,
   role: 'Admin',
-  permissions: ['INVENTORY_VIEW', 'INVENTORY_EDIT'] as string[],
+  permissions: [PERMISSIONS.INVENTORY_VIEW, PERMISSIONS.INVENTORY_EDIT],
 }
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
@@ -139,7 +140,7 @@ describe('Inventory Transactions API', () => {
 
     it('returns 200 when authenticated with INVENTORY_VIEW permission', async () => {
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions')
@@ -156,7 +157,7 @@ describe('Inventory Transactions API', () => {
   describe('List Endpoint Response Shape', () => {
     it('returns { page, pageSize, total, rows } with defaults', async () => {
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions')
@@ -203,7 +204,7 @@ describe('Inventory Transactions API', () => {
       })
 
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions?warehouseId=1')
@@ -238,7 +239,7 @@ describe('Inventory Transactions API', () => {
       })
 
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions?transactionType=Receive')
@@ -273,7 +274,7 @@ describe('Inventory Transactions API', () => {
       })
 
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions?dateFrom=2026-01-28T00:00:00.000Z&dateTo=2026-01-28T23:59:59.999Z')
@@ -310,7 +311,7 @@ describe('Inventory Transactions API', () => {
       })
 
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions?itemId=42')
@@ -330,7 +331,7 @@ describe('Inventory Transactions API', () => {
   describe('CSV Export', () => {
     it('returns text/csv content type', async () => {
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions.csv')
@@ -342,7 +343,7 @@ describe('Inventory Transactions API', () => {
 
     it('includes header row in CSV', async () => {
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions.csv')
@@ -363,7 +364,7 @@ describe('Inventory Transactions API', () => {
 
     it('includes data rows in CSV', async () => {
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions.csv')
@@ -379,7 +380,7 @@ describe('Inventory Transactions API', () => {
 
     it('applies filters to CSV export', async () => {
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions.csv?warehouseId=1')
@@ -412,7 +413,7 @@ describe('Inventory Transactions API', () => {
       })
 
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions.csv')
@@ -444,7 +445,7 @@ describe('Inventory Transactions API', () => {
       })
 
       const app = buildTestApp()
-      const authCookie = createAuthCookie('Admin', ['INVENTORY_VIEW'])
+      const authCookie = createAuthCookie('Admin', [PERMISSIONS.INVENTORY_VIEW])
 
       const res = await request(app)
         .get('/api/backend/inventory/all/transactions?pageSize=1')

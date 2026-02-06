@@ -2,8 +2,9 @@
 import request from "supertest";
 import express from "express";
 import jwt from "jsonwebtoken";
-import { verifyToken } from "../../src/backend/middleware/authMiddleware";
 import cookieParser from "cookie-parser";
+import { verifyToken } from "../../src/backend/middleware/authMiddleware";
+import authRoutes from "../../src/backend/routes/authRoutes";
 
 jest.mock("../../src/backend/database/accountContextQueries", () => {
   return {
@@ -13,14 +14,29 @@ jest.mock("../../src/backend/database/accountContextQueries", () => {
       roleName: "Admin",
       permissions: [],
     }),
+    getAccountContextForUserAndAccount: jest.fn().mockResolvedValue(null),
     getDefaultAccountId: jest.fn().mockResolvedValue(1),
     getActiveAccountId: jest.fn().mockResolvedValue(5),
   };
 });
 
-const { getAccountContextForUser, getActiveAccountId } = jest.requireMock<
-  typeof import("../../src/backend/database/accountContextQueries")
->("../../src/backend/database/accountContextQueries");
+jest.mock("../../src/backend/repositories/userActiveAccountRepository", () => ({
+  getActiveAccountId: jest.fn().mockResolvedValue(null),
+  setActiveAccount: jest.fn().mockResolvedValue(undefined),
+  clearActiveAccount: jest.fn().mockResolvedValue(undefined),
+}));
+
+const { getAccountContextForUser, getAccountContextForUserAndAccount, getActiveAccountId } =
+  jest.requireMock<typeof import("../../src/backend/database/accountContextQueries")>(
+    "../../src/backend/database/accountContextQueries"
+  );
+
+const {
+  getActiveAccountId: getStoredActiveAccountId,
+  clearActiveAccount,
+} = jest.requireMock<typeof import("../../src/backend/repositories/userActiveAccountRepository")>(
+  "../../src/backend/repositories/userActiveAccountRepository"
+);
 
 describe("verifyToken middleware", () => {
   beforeEach(() => {
@@ -253,5 +269,112 @@ describe("verifyToken middleware", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.accountId).toBe(5);
+  });
+
+  describe("attachAccountContext with stored active account", () => {
+    it("uses stored account when valid membership", async () => {
+      const app = express();
+      app.use(express.json());
+      app.use(cookieParser());
+      app.get("/protected", verifyToken, (req, res) => {
+        res.json({ accountId: req.user?.accountId ?? null, role: req.user?.role ?? null });
+      });
+
+      (getStoredActiveAccountId as jest.Mock).mockResolvedValueOnce(2);
+      (getAccountContextForUserAndAccount as jest.Mock).mockResolvedValueOnce({
+        accountId: 2,
+        roleId: 2,
+        roleName: "Engineer",
+        permissions: ["DATASHEET_VIEW"],
+      });
+
+      const token = makeToken({
+        userId: 1,
+        roleId: 1,
+        role: "Admin",
+        email: "u@example.com",
+        name: "User",
+        profilePic: null,
+        permissions: [],
+      });
+
+      const res = await request(app).get("/protected").set("Cookie", [`token=${token}`]);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.accountId).toBe(2);
+      expect(res.body.role).toBe("Engineer");
+      expect(clearActiveAccount).not.toHaveBeenCalled();
+    });
+
+    it("clears stored account and uses fallback when stored account invalid", async () => {
+      const app = express();
+      app.use(express.json());
+      app.use(cookieParser());
+      app.get("/protected", verifyToken, (req, res) => {
+        res.json({ accountId: req.user?.accountId ?? null });
+      });
+
+      (getStoredActiveAccountId as jest.Mock).mockResolvedValueOnce(99);
+      (getAccountContextForUserAndAccount as jest.Mock).mockResolvedValueOnce(null);
+      (getAccountContextForUser as jest.Mock).mockResolvedValueOnce({
+        accountId: 1,
+        roleId: 1,
+        roleName: "Admin",
+        permissions: [],
+      });
+
+      const token = makeToken({
+        userId: 1,
+        roleId: 1,
+        role: "Admin",
+        email: "u@example.com",
+        name: "User",
+        profilePic: null,
+        permissions: [],
+      });
+
+      const res = await request(app).get("/protected").set("Cookie", [`token=${token}`]);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.accountId).toBe(1);
+      expect(clearActiveAccount).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe("GET /api/backend/auth/session returns hydrated account context", () => {
+    it("session response includes accountId, role, permissions from attachAccountContext", async () => {
+      const app = express();
+      app.use(express.json());
+      app.use(cookieParser());
+      app.use("/api/backend/auth", authRoutes);
+
+      (getStoredActiveAccountId as jest.Mock).mockResolvedValueOnce(2);
+      (getAccountContextForUserAndAccount as jest.Mock).mockResolvedValueOnce({
+        accountId: 2,
+        roleId: 2,
+        roleName: "Engineer",
+        permissions: ["DATASHEET_VIEW", "ACCOUNT_VIEW"],
+      });
+
+      const token = makeToken({
+        userId: 1,
+        roleId: 1,
+        role: "Admin",
+        email: "u@example.com",
+        name: "User",
+        profilePic: null,
+        permissions: [],
+      });
+
+      const res = await request(app)
+        .get("/api/backend/auth/session")
+        .set("Cookie", [`token=${token}`]);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.accountId).toBe(2);
+      expect(res.body.roleId).toBe(2);
+      expect(res.body.role).toBe("Engineer");
+      expect(res.body.permissions).toEqual(["DATASHEET_VIEW", "ACCOUNT_VIEW"]);
+    });
   });
 });

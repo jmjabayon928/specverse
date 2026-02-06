@@ -93,6 +93,7 @@ const navItems: NavItem[] = [
     roles: ['admin'],
     subItems: [
       { name: 'Users', path: '/settings/users', pro: false },
+      { name: 'Members', path: '/settings/members', pro: false },
       { name: 'Roles', path: '/settings/roles', pro: false },
       { name: 'Permissions', path: '/settings/permissions', pro: false },
       { name: 'Projects', path: '/settings/projects', pro: false },

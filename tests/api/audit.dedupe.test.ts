@@ -4,6 +4,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
 globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
@@ -113,7 +114,7 @@ describe('Audit dedupe', () => {
     insertAuditLogMock.mockClear()
 
     const app = buildTestApp()
-    const authCookie = createAuthCookie(['DATASHEET_EDIT'])
+    const authCookie = createAuthCookie([PERMISSIONS.DATASHEET_EDIT])
 
     const res = await request(app)
       .put('/api/backend/filledsheets/123')

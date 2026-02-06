@@ -4,6 +4,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
 globalThis.setImmediate ??= ((fn: (...args: unknown[]) => void, ...args: unknown[]) =>
@@ -177,7 +178,7 @@ describe('Sheet logs endpoints', () => {
 
   it('GET /api/backend/sheets/:sheetId/audit-logs returns 200 and shape when authenticated', async () => {
     const app = buildTestApp()
-    const authCookie = createAuthCookie(['DATASHEET_VIEW'])
+    const authCookie = createAuthCookie([PERMISSIONS.DATASHEET_VIEW])
     const res = await request(app)
       .get('/api/backend/sheets/123/audit-logs?limit=50')
       .set('Cookie', [authCookie])
@@ -196,7 +197,7 @@ describe('Sheet logs endpoints', () => {
 
   it('GET /api/backend/sheets/:sheetId/change-logs returns 200 and shape when authenticated', async () => {
     const app = buildTestApp()
-    const authCookie = createAuthCookie(['DATASHEET_VIEW'])
+    const authCookie = createAuthCookie([PERMISSIONS.DATASHEET_VIEW])
     const res = await request(app)
       .get('/api/backend/sheets/123/change-logs?limit=50')
       .set('Cookie', [authCookie])
@@ -215,7 +216,7 @@ describe('Sheet logs endpoints', () => {
 
   it('GET /api/backend/sheets/:sheetId/logs returns 200 and shape when authenticated', async () => {
     const app = buildTestApp()
-    const authCookie = createAuthCookie(['DATASHEET_VIEW'])
+    const authCookie = createAuthCookie([PERMISSIONS.DATASHEET_VIEW])
     const res = await request(app)
       .get('/api/backend/sheets/123/logs?limit=50')
       .set('Cookie', [authCookie])

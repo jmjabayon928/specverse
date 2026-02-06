@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 const mockAuthUser = {
   id: 1,
@@ -15,7 +16,7 @@ const mockAuthUser = {
   accountId: 1,
   roleId: 1,
   role: 'Admin',
-  permissions: ['DATASHEET_VIEW', 'DATASHEET_EDIT', 'DATASHEET_VERIFY', 'DATASHEET_APPROVE'] as string[],
+  permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT, PERMISSIONS.DATASHEET_VERIFY, PERMISSIONS.DATASHEET_APPROVE],
 }
 
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({

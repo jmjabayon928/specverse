@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser'
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import type { SheetAttachmentDTO } from '@/domain/datasheets/sheetTypes'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 // Jest runs in jsdom in this repo; Express/router expects setImmediate in Node-like env.
 globalThis.setImmediate ??= ((fn: (...args: any[]) => void, ...args: any[]) =>
@@ -205,7 +206,7 @@ function buildTestApp() {
 describe('Filled sheet attachments list - canonical', () => {
   it('returns canonical attachments including isFromTemplate and linkedFromSheetId by default', async () => {
     const app = buildTestApp()
-    const authCookie = createAuthCookie(['DATASHEET_VIEW'])
+    const authCookie = createAuthCookie([PERMISSIONS.DATASHEET_VIEW])
 
     const res = await request(app)
       .get('/api/backend/filledsheets/123/attachments')

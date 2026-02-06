@@ -1,5 +1,6 @@
 // src/backend/services/rolesService.ts
 import { poolPromise, sql } from '../config/db'
+import { listRoleIdsAndNames } from '../repositories/rolesRepository'
 
 interface RoleRowSQL {
   RoleID: number
@@ -132,6 +133,16 @@ export const listRoles = async (
   const total = countResult.recordset[0]?.Total ?? 0
 
   return { page, pageSize, total, rows }
+}
+
+export type RolesForDropdownResult = { roles: { roleId: number; roleName: string }[] }
+
+/**
+ * List roles for dropdown (e.g. account member management). Excludes deprecated by name.
+ */
+export const getRolesForDropdown = async (): Promise<RolesForDropdownResult> => {
+  const roles = await listRoleIdsAndNames()
+  return { roles }
 }
 
 /**

@@ -6,6 +6,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import { errorHandler } from "../../src/backend/middleware/errorHandler";
 import { AppError } from "../../src/backend/errors/AppError";
+import { PERMISSIONS } from "../../src/constants/permissions";
 
 process.env.JWT_SECRET ??= "secret";
 
@@ -29,7 +30,7 @@ const mockAuthUser = {
   userId: 1,
   roleId: 1,
   role: "Admin",
-  permissions: ["INVENTORY_MAINTENANCE_VIEW"] as string[],
+  permissions: [PERMISSIONS.INVENTORY_MAINTENANCE_VIEW],
 };
 
 jest.mock("../../src/backend/middleware/authMiddleware", () => ({
@@ -53,7 +54,7 @@ function createAuthCookie(): string {
       fullName: "Test User",
       role: "Admin",
       profilePic: null,
-      permissions: ["INVENTORY_MAINTENANCE_VIEW"],
+      permissions: [PERMISSIONS.INVENTORY_MAINTENANCE_VIEW],
     },
     process.env.JWT_SECRET ?? "secret",
     { expiresIn: "1h" }
