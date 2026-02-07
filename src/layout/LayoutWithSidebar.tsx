@@ -20,6 +20,7 @@ export default function LayoutWithSidebar({
   const router = useRouter();
 
   const isLoginPage = pathname === '/login';
+  const isInviteAcceptPage = pathname.startsWith('/invite/accept');
   const mainContentMargin = isMobileOpen
     ? 'ml-0'
     : isExpanded || isHovered
@@ -30,20 +31,20 @@ export default function LayoutWithSidebar({
   useEffect(() => {
     const delayRedirect = async () => {
       await new Promise((res) => setTimeout(res, 150)); // wait 150ms
-      if (!loading && !user && !isLoginPage) {
+      if (!loading && !user && !isLoginPage && !isInviteAcceptPage) {
         router.push('/login');
       }
     };
     delayRedirect();
-  }, [loading, user, isLoginPage, router]);
+  }, [loading, user, isLoginPage, isInviteAcceptPage, router]);
 
   // 🔒 Prevent layout rendering until session check is done
-  if (!user && !loading && !isLoginPage) {
+  if (!user && !loading && !isLoginPage && !isInviteAcceptPage) {
     return null; // or a loading spinner
   }
 
   // Show raw children for login page or loading state
-  if (isLoginPage || loading) {
+  if (isLoginPage || isInviteAcceptPage || loading) {
     return <>{children}</>;
   }
 

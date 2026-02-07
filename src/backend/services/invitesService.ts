@@ -16,9 +16,11 @@ import { setActiveAccount } from '../repositories/userActiveAccountRepository'
 import { listRoleIdsAndNames } from '../repositories/rolesRepository'
 import { getAccountNameById } from '../repositories/accountsRepository'
 import { getUserByEmail } from '../database/userQueries'
+import { createUser, updateUser } from './usersService'
 import { generateInviteToken, inviteTokenSha256Hex } from '../utils/inviteTokenUtils'
 import { devEmailSender } from './email/devEmailSender'
 import { logAuditAction } from '../utils/logAuditAction'
+import { AppError } from '../errors/AppError'
 
 const INVITE_EXPIRY_DAYS = 7
 const INVITE_BASE_URL = process.env.INVITE_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
@@ -50,6 +52,9 @@ export type ByTokenResult = {
   accountName: string
   status: 'pending' | 'expired' | 'accepted' | 'revoked' | 'declined'
   expiresAt: string
+  email: string
+  roleId: number
+  roleName: string | null
 }
 
 export type AcceptInviteResult = {
@@ -295,7 +300,7 @@ export async function revokeInvite(
 }
 
 /**
- * Public: get invite info by token for accept page. Returns minimal { accountName, status, expiresAt }.
+ * Public: get invite info by token for accept page. Returns accountName, status, expiresAt, email, roleId, roleName.
  */
 export async function getByToken(token: string): Promise<ByTokenResult | null> {
   const tokenHash = inviteTokenSha256Hex(token)
@@ -306,6 +311,9 @@ export async function getByToken(token: string): Promise<ByTokenResult | null> {
     accountName: row.accountName,
     status,
     expiresAt: row.expiresAt instanceof Date ? row.expiresAt.toISOString() : String(row.expiresAt),
+    email: row.email,
+    roleId: row.roleId,
+    roleName: row.roleName ?? null,
   }
 }
 
@@ -416,5 +424,128 @@ export async function declineInvite(
       statusCode: auditContext.statusCode ?? null,
       changes: { email: row.email, accountId: row.accountId },
     })
+  }
+}
+
+export type AcceptInvitePublicInput = {
+  token: string
+  firstName?: string | null
+  lastName?: string | null
+  password?: string | null
+}
+
+/**
+ * Public accept: create or reactivate user by invite email, claim invite, upsert membership, audit.
+ * Throws with statusCode 404 (not found), 410 (used/expired/double-accept), 409 (already active member).
+ */
+export async function acceptInvitePublic(
+  input: AcceptInvitePublicInput,
+  auditContext: { route?: string; method?: string; statusCode?: number },
+): Promise<AcceptInviteResult> {
+  const tokenHash = inviteTokenSha256Hex(input.token.trim())
+  const row = await findByTokenHash(tokenHash)
+  if (!row) {
+    const err = new Error('Invite not found')
+    ;(err as Error & { statusCode?: number }).statusCode = 404
+    throw err
+  }
+  if (row.status !== 'Pending') {
+    const err = new Error('Invite is no longer valid')
+    ;(err as Error & { statusCode?: number }).statusCode = 410
+    throw err
+  }
+  const now = new Date()
+  if (row.expiresAt < now) {
+    const err = new Error('Invite has expired')
+    ;(err as Error & { statusCode?: number }).statusCode = 410
+    throw err
+  }
+
+  const inviteEmail = row.email.trim().toLowerCase()
+  const firstName = (input.firstName ?? '').trim()
+  const lastName = (input.lastName ?? '').trim()
+  const password = (input.password ?? '').trim()
+  if (!firstName || !lastName || !password) {
+    const err = new Error('firstName, lastName, and password are required')
+    ;(err as Error & { statusCode?: number }).statusCode = 400
+    throw err
+  }
+
+  const isActiveUser = (value: unknown): boolean => {
+    if (value === true) return true
+    if (value === 1) return true
+    return false
+  }
+
+  let userId: number
+  const existingUser = await getUserByEmail(inviteEmail)
+  const activeFlag = (existingUser as Record<string, unknown>)?.IsActive
+  if (existingUser && isActiveUser(activeFlag)) {
+    throw new AppError('Account already exists. Please sign in to accept this invite.', 409)
+  }
+  if (!existingUser) {
+    userId = await createUser({
+      Email: inviteEmail,
+      Password: password,
+      FirstName: firstName || null,
+      LastName: lastName || null,
+      IsActive: true,
+    })
+  } else {
+    const uid = (existingUser as { UserID?: number }).UserID
+    if (typeof uid !== 'number' || !Number.isFinite(uid)) {
+      const err = new Error('Invalid user record')
+      ;(err as Error & { statusCode?: number }).statusCode = 500
+      throw err
+    }
+    userId = uid
+    const isActive = (existingUser as { IsActive?: boolean | number }).IsActive
+    const active = isActive === true || isActive === 1
+    if (!active) {
+      await updateUser(userId, {
+        IsActive: true,
+        FirstName: firstName || null,
+        LastName: lastName || null,
+        Password: password,
+      })
+    }
+  }
+
+  const existing = await getMemberByAccountAndUser(row.accountId, userId)
+  if (existing?.isActive) {
+    const err = new Error('You are already an active member of this account')
+    ;(err as Error & { statusCode?: number }).statusCode = 409
+    throw err
+  }
+
+  const claimed = await setStatusAcceptedIfPending(row.inviteId, userId)
+  if (!claimed) {
+    const err = new Error('Invite is no longer valid')
+    ;(err as Error & { statusCode?: number }).statusCode = 410
+    throw err
+  }
+
+  if (existing) {
+    await updateMemberStatus(row.accountId, existing.accountMemberId, true)
+    await updateMemberRole(row.accountId, existing.accountMemberId, row.roleId)
+  } else {
+    await insertAccountMember(row.accountId, userId, row.roleId)
+  }
+  await setActiveAccount(userId, row.accountId)
+
+  await logAuditAction({
+    tableName: 'AccountInvites',
+    recordId: row.inviteId,
+    action: 'invite.accepted',
+    performedBy: userId,
+    route: auditContext.route ?? null,
+    method: auditContext.method ?? null,
+    statusCode: auditContext.statusCode ?? null,
+    changes: { accountId: row.accountId, email: row.email },
+  })
+
+  return {
+    accountId: row.accountId,
+    accountName: row.accountName,
   }
 }

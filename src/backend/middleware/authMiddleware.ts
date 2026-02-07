@@ -282,12 +282,25 @@ export const requirePermission = (permissionKey: string): RequestHandler => {
         return
       }
 
+      const roleName =
+        typeof req.user.role === 'string' ? (req.user.role ?? '').trim().toLowerCase() : ''
+      const isAccountAdmin = req.user.roleId === 1 || roleName === 'admin'
+      const isPrivileged = isAccountAdmin || req.user.isSuperadmin === true
+      if (isPrivileged) {
+        next()
+        return
+      }
+
       if (!req.user.accountId) {
         next(new AppError('Missing account context', 403))
         return
       }
 
-      const hasPermission = await checkUserPermission(req.user.userId, req.user.accountId, permissionKey)
+      const hasPermission = await checkUserPermission(
+        req.user.userId,
+        req.user.accountId,
+        permissionKey
+      )
 
       if (!hasPermission) {
         next(new AppError('Permission denied', 403))

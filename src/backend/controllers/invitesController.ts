@@ -7,6 +7,7 @@ import {
   revokeInvite,
   getByToken,
   acceptInvite,
+  acceptInvitePublic,
   declineInvite,
 } from '../services/invitesService'
 import { parseIntParam, asSingleString } from '../utils/requestParam'
@@ -258,6 +259,61 @@ export const accept: RequestHandler = async (
     }
     if (code === 403) {
       res.status(403).json({ message: (err as Error).message })
+      return
+    }
+    if (code === 409) {
+      res.status(409).json({ message: (err as Error).message })
+      return
+    }
+    next(err)
+  }
+}
+
+/**
+ * POST /api/backend/invites/accept-public — body { token, firstName, lastName, password }. Public; no auth.
+ */
+export const acceptPublic: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  const body = req.body as { token?: unknown; firstName?: unknown; lastName?: unknown; password?: unknown }
+  const rawToken = body.token
+  if (rawToken === undefined || rawToken === null || typeof rawToken !== 'string') {
+    res.status(400).json({ message: 'token is required' })
+    return
+  }
+  const token = String(rawToken).trim()
+  if (!token) {
+    res.status(400).json({ message: 'token is required' })
+    return
+  }
+  const firstName = body.firstName != null ? String(body.firstName).trim() : ''
+  const lastName = body.lastName != null ? String(body.lastName).trim() : ''
+  const password = body.password != null ? String(body.password).trim() : ''
+  if (!firstName || !lastName || !password) {
+    res.status(400).json({ message: 'firstName, lastName, and password are required' })
+    return
+  }
+
+  try {
+    const result = await acceptInvitePublic(
+      { token, firstName, lastName, password },
+      { route: req.originalUrl, method: req.method, statusCode: 200 },
+    )
+    res.status(200).json(result)
+  } catch (err) {
+    const code = (err as Error & { statusCode?: number }).statusCode
+    if (code === 400) {
+      res.status(400).json({ message: (err as Error).message })
+      return
+    }
+    if (code === 404) {
+      res.status(404).json({ message: (err as Error).message })
+      return
+    }
+    if (code === 410) {
+      res.status(410).json({ message: (err as Error).message })
       return
     }
     if (code === 409) {

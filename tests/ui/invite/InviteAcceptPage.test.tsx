@@ -75,22 +75,31 @@ describe('InviteAcceptPage', () => {
     })
   })
 
-  it('shows sign in to accept when pending and not signed in', async () => {
+  it('shows setup form when pending and not signed in', async () => {
     mockGet.mockReturnValue('some-token')
     ;(globalThis.fetch as jest.Mock)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ accountName: 'Acme', status: 'pending', expiresAt: '2025-01-01' }),
+        json: async () => ({
+          accountName: 'Acme',
+          status: 'pending',
+          expiresAt: '2025-01-01',
+          email: 'user@acme.com',
+          roleId: 1,
+          roleName: 'Member',
+        }),
       })
       .mockResolvedValueOnce({ ok: false })
     render(<InviteAcceptPage />)
     await waitFor(() => {
       expect(screen.getByText(/invited to join Acme/i)).toBeInTheDocument()
-      expect(screen.getByText(/Sign in with the email/i)).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /Sign in to accept/i })).toHaveAttribute(
-        'href',
-        expect.stringContaining('login')
-      )
+      expect(screen.getByLabelText(/First name/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/Last name/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/^Password/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/Confirm password/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Create account & join/i })).toBeInTheDocument()
+      const signInLink = screen.getByRole('link', { name: /Sign in instead/i })
+      expect(signInLink).toHaveAttribute('href', expect.stringMatching(/\/login/))
     })
   })
 

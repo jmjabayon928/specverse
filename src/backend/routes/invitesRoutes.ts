@@ -8,6 +8,7 @@ import {
   revoke,
   byToken,
   accept,
+  acceptPublic,
   decline,
 } from '../controllers/invitesController'
 import { PERMISSIONS } from '@/constants/permissions'
@@ -19,6 +20,9 @@ router.get('/by-token', byToken)
 
 // Accept requires auth only (no account context; user may have no account yet)
 router.post('/accept', verifyTokenOnly, accept)
+
+// Public: accept with token + firstName, lastName, password (create or reactivate user)
+router.post('/accept-public', acceptPublic)
 
 // Decline: auth optional (so we can set performedBy when logged in)
 router.post('/decline', optionalVerifyToken, decline)

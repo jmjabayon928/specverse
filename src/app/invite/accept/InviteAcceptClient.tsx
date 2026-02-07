@@ -10,6 +10,9 @@ type ByTokenData = {
   accountName: string
   status: InviteStatus
   expiresAt: string
+  email: string
+  roleId: number
+  roleName: string | null
 }
 
 type PageState =
@@ -21,11 +24,22 @@ type PageState =
   | { kind: 'pending_signed_out'; data: ByTokenData }
   | { kind: 'pending_signed_in'; data: ByTokenData }
   | { kind: 'accepting' }
+  | { kind: 'accept_public_error'; message: string; showSignInLink?: boolean }
   | { kind: 'email_mismatch' }
   | { kind: 'declined' }
-  | { kind: 'success'; accountName: string }
+  | { kind: 'success'; accountName: string; redirectTo?: 'dashboard' | 'login' }
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
+
+function validatePassword(pwd: string): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+  if (pwd.length < 8) errors.push('At least 8 characters')
+  if (!/[A-Z]/.test(pwd)) errors.push('1 uppercase letter')
+  if (!/[a-z]/.test(pwd)) errors.push('1 lowercase letter')
+  if (!/[0-9]/.test(pwd)) errors.push('1 number')
+  if (!/[^A-Za-z0-9]/.test(pwd)) errors.push('1 special character')
+  return { valid: errors.length === 0, errors }
+}
 
 export default function InviteAcceptClient() {
   const router = useRouter()
@@ -33,6 +47,12 @@ export default function InviteAcceptClient() {
   const token = searchParams.get('token')
 
   const [state, setState] = useState<PageState>({ kind: 'loading' })
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [submitLoading, setSubmitLoading] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const fetchByToken = useCallback(async (t: string): Promise<ByTokenData | null> => {
     const res = await fetch(`${baseUrl}/api/backend/invites/by-token?token=${encodeURIComponent(t)}`, {
@@ -96,7 +116,7 @@ export default function InviteAcceptClient() {
       })
       const body = await res.json().catch(() => ({}))
       if (res.ok) {
-        setState({ kind: 'success', accountName: (body as { accountName?: string }).accountName ?? 'Account' })
+        setState({ kind: 'success', accountName: (body as { accountName?: string }).accountName ?? 'Account', redirectTo: 'dashboard' })
         setTimeout(() => router.replace('/dashboard'), 2000)
         return
       }
@@ -104,9 +124,74 @@ export default function InviteAcceptClient() {
         setState({ kind: 'email_mismatch' })
         return
       }
+      if (res.status === 410) {
+        setState({ kind: 'accept_public_error', message: 'Invite expired or already used.' })
+        return
+      }
       setState({ kind: 'invalid' })
     } catch {
       setState({ kind: 'invalid' })
+    }
+  }
+
+  const handleAcceptPublic = async () => {
+    if (submitLoading) return
+    if (!token || state.kind !== 'pending_signed_out') return
+    const errs: Record<string, string> = {}
+    const f = firstName.trim()
+    const l = lastName.trim()
+    const p = password
+    const cp = confirmPassword
+    if (!f) errs.firstName = 'First name is required'
+    if (!l) errs.lastName = 'Last name is required'
+    const pwCheck = validatePassword(p)
+    if (!pwCheck.valid) errs.password = pwCheck.errors.join('. ')
+    if (p !== cp) errs.confirmPassword = 'Passwords do not match'
+    setFieldErrors(errs)
+    if (Object.keys(errs).length > 0) return
+
+    setSubmitLoading(true)
+    setFieldErrors({})
+    try {
+      const res = await fetch(`${baseUrl}/api/backend/invites/accept-public`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          token: token.trim(),
+          firstName: f,
+          lastName: l,
+          password: p,
+        }),
+      })
+      const body = await res.json().catch(() => ({} as Record<string, unknown>))
+      const msg = (body as { message?: string }).message ?? (body as { error?: string }).error
+      if (res.status === 200 || res.status === 201) {
+        setState({ kind: 'success', accountName: (body as { accountName?: string }).accountName ?? 'Account', redirectTo: 'login' })
+        setTimeout(() => router.replace('/login'), 2000)
+        return
+      }
+      if (res.status === 409) {
+        setState({ kind: 'accept_public_error', message: msg ?? 'Account already exists. Please sign in to accept this invite.', showSignInLink: true })
+        return
+      }
+      if (res.status === 410) {
+        setState({ kind: 'accept_public_error', message: msg ?? 'Invite expired or already used.' })
+        return
+      }
+      if (res.status === 404) {
+        setState({ kind: 'accept_public_error', message: msg ?? 'Invalid invite token.' })
+        return
+      }
+      if (res.status === 400) {
+        setFieldErrors({ form: msg ?? 'Invalid input.' })
+        return
+      }
+      setFieldErrors({ form: msg ?? 'Something went wrong. Please try again.' })
+    } catch {
+      setFieldErrors({ form: 'Something went wrong. Please try again.' })
+    } finally {
+      setSubmitLoading(false)
     }
   }
 
@@ -191,21 +276,122 @@ export default function InviteAcceptClient() {
     )
   }
 
-  if (state.kind === 'pending_signed_out') {
+  if (state.kind === 'accept_public_error') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
+        <h1 className="mb-2 text-xl font-semibold text-red-600 dark:text-red-400">{state.message}</h1>
+        {state.showSignInLink && (
+          <Link href={loginUrl} className="mt-4 text-primary-600 hover:underline dark:text-primary-400">
+            Sign in
+          </Link>
+        )}
+      </div>
+    )
+  }
+
+  if (state.kind === 'pending_signed_out') {
+    const d = state.data
+    const roleLabel = d.roleName ?? (d.roleId != null ? `Role #${d.roleId}` : '—')
+    return (
+      <div className="mx-auto max-w-md px-4 py-8">
         <h1 className="mb-2 text-xl font-semibold text-gray-800 dark:text-white">
-          You&apos;re invited to join {state.data.accountName}
+          You&apos;re invited to join {d.accountName}
         </h1>
-        <p className="mb-4 text-gray-600 dark:text-gray-400">
-          Sign in with the email address that received the invite to accept.
+        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+          Account: {d.accountName} · Role: {roleLabel}
         </p>
-        <Link
-          href={loginUrl}
-          className="inline-flex items-center rounded-lg bg-primary-600 px-4 py-2 text-white hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            handleAcceptPublic()
+          }}
+          className="space-y-4"
         >
-          Sign in to accept
-        </Link>
+          {fieldErrors.form && (
+            <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.form}</p>
+          )}
+          <div>
+            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              First name <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="firstName"
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+              autoComplete="given-name"
+            />
+            {fieldErrors.firstName && <p className="mt-1 text-sm text-red-600">{fieldErrors.firstName}</p>}
+          </div>
+          <div>
+            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Last name <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="lastName"
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+              autoComplete="family-name"
+            />
+            {fieldErrors.lastName && <p className="mt-1 text-sm text-red-600">{fieldErrors.lastName}</p>}
+          </div>
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Password <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+              autoComplete="new-password"
+            />
+            {fieldErrors.password && <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>}
+            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              <p className="font-medium">Password requirements:</p>
+              <ul className="mt-1 list-inside space-y-0.5">
+                <li className={password.length >= 8 ? 'text-green-600' : ''}>At least 8 characters</li>
+                <li className={/[A-Z]/.test(password) ? 'text-green-600' : ''}>1 uppercase letter</li>
+                <li className={/[a-z]/.test(password) ? 'text-green-600' : ''}>1 lowercase letter</li>
+                <li className={/[0-9]/.test(password) ? 'text-green-600' : ''}>1 number</li>
+                <li className={/[^A-Za-z0-9]/.test(password) ? 'text-green-600' : ''}>1 special character</li>
+              </ul>
+            </div>
+          </div>
+          <div>
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Confirm password <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+              autoComplete="new-password"
+            />
+            {fieldErrors.confirmPassword && <p className="mt-1 text-sm text-red-600">{fieldErrors.confirmPassword}</p>}
+          </div>
+          <div className="flex gap-3">
+            <button
+              type="submit"
+              disabled={submitLoading}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-white hover:bg-primary-700 disabled:opacity-50 dark:bg-primary-500 dark:hover:bg-primary-600"
+            >
+              {submitLoading ? 'Creating account...' : 'Create account & join'}
+            </button>
+            <Link
+              href={loginUrl}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+            >
+              Sign in instead
+            </Link>
+          </div>
+        </form>
       </div>
     )
   }
@@ -272,10 +458,13 @@ export default function InviteAcceptClient() {
   }
 
   if (state.kind === 'success') {
+    const toLogin = state.redirectTo === 'login'
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
         <h1 className="mb-2 text-xl font-semibold text-green-600 dark:text-green-400">You&apos;ve joined {state.accountName}</h1>
-        <p className="mb-4 text-gray-600 dark:text-gray-400">Redirecting to dashboard...</p>
+        <p className="mb-4 text-gray-600 dark:text-gray-400">
+          {toLogin ? 'Redirecting to sign in...' : 'Redirecting to dashboard...'}
+        </p>
       </div>
     )
   }
