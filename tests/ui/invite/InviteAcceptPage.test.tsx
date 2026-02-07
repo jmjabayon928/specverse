@@ -288,6 +288,30 @@ describe('InviteAcceptPage', () => {
     })
   })
 
+  it('shows email mismatch when decline returns 403', async () => {
+    mockGet.mockReturnValue('some-token')
+    ;(globalThis.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ accountName: 'Acme', status: 'pending', expiresAt: '2025-01-01' }),
+      })
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: async () => ({ message: 'You must sign in with the email address that received this invite' }),
+      })
+    render(<InviteAcceptPage />)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Decline/i })).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Decline/i }))
+    await waitFor(() => {
+      expect(screen.getByText(/Email does not match/i)).toBeInTheDocument()
+      expect(screen.getByText(/sign in with the email address that received this invite/i)).toBeInTheDocument()
+    })
+  })
+
   it('shows success and redirects when accept succeeds', async () => {
     mockGet.mockReturnValue('some-token')
     ;(globalThis.fetch as jest.Mock)

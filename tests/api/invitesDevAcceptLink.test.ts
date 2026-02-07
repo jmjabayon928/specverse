@@ -173,6 +173,7 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
   })
 
   it('returns 200 with acceptUrl and token works for accept-public when NODE_ENV is development', async () => {
+    const OLD_TOKEN = 'old-token-before-rotation'
     getByIdAndAccount.mockResolvedValue({ ...pendingInviteRow })
     let capturedTokenHash: string | null = null
     updateTokenAndIncrementSend.mockImplementation(
@@ -206,6 +207,16 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
     expect(linkRes.body).toHaveProperty('acceptUrl')
     expect(linkRes.body.acceptUrl).toMatch(/\/invite\/accept\?token=/)
     expect(updateTokenAndIncrementSend).toHaveBeenCalledWith(1, expect.any(String), expect.any(Date))
+
+    const oldTokenRes = await request(app)
+      .post('/api/backend/invites/accept-public')
+      .send({
+        token: OLD_TOKEN,
+        firstName: 'Dev',
+        lastName: 'User',
+        password: 'SecurePass1!',
+      })
+    expect(oldTokenRes.status).toBe(404)
 
     const tokenMatch = linkRes.body.acceptUrl.match(/[?&]token=([^&]+)/)
     expect(tokenMatch).toBeTruthy()

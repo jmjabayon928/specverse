@@ -429,10 +429,12 @@ export async function acceptInvite(
 
 /**
  * Decline invite (public). Token becomes unusable. Audit logged only when performedByUserId is not null (authenticated decline).
+ * When authenticated, invite email must match the signed-in user's email (same as accept).
  */
 export async function declineInvite(
   token: string,
   performedByUserId: number | null,
+  userEmail: string | null | undefined,
   auditContext: { route?: string; method?: string; statusCode?: number },
 ): Promise<void> {
   const tokenHash = inviteTokenSha256Hex(token)
@@ -446,6 +448,20 @@ export async function declineInvite(
     const err = new Error('Invite is no longer valid')
     ;(err as Error & { statusCode?: number }).statusCode = 410
     throw err
+  }
+  if (performedByUserId != null) {
+    if (typeof userEmail !== 'string' || !userEmail.trim()) {
+      const err = new Error('User email is required to decline invite')
+      ;(err as Error & { statusCode?: number }).statusCode = 403
+      throw err
+    }
+    const normalizedUserEmail = userEmail.trim().toLowerCase()
+    const normalizedInviteEmail = row.email.trim().toLowerCase()
+    if (normalizedUserEmail !== normalizedInviteEmail) {
+      const err = new Error('You must sign in with the email address that received this invite')
+      ;(err as Error & { statusCode?: number }).statusCode = 403
+      throw err
+    }
   }
   await setStatusDeclined(row.inviteId)
   if (performedByUserId != null) {

@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import toast from 'react-hot-toast'
+
+const isProd = process.env.NODE_ENV === 'production'
 
 type InviteStatus = 'pending' | 'expired' | 'accepted' | 'revoked' | 'declined'
 
@@ -205,13 +208,23 @@ export default function InviteAcceptClient() {
   const handleDecline = async () => {
     if (!token || (state.kind !== 'pending_signed_in' && state.kind !== 'pending_signed_out')) return
     try {
-      await fetch(`${baseUrl}/api/backend/invites/decline`, {
+      const res = await fetch(`${baseUrl}/api/backend/invites/decline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: token.trim() }),
         credentials: 'include',
       })
-      setState({ kind: 'declined' })
+      if (res.status === 204) {
+        setState({ kind: 'declined' })
+        return
+      }
+      const j = await res.json().catch(() => ({} as Record<string, unknown>))
+      const message = typeof (j as { message?: unknown }).message === 'string' ? (j as { message: string }).message : undefined
+      if (res.status === 403) {
+        setState({ kind: 'email_mismatch' })
+        return
+      }
+      toast.error(message ?? 'Something went wrong.')
     } catch {
       setState({ kind: 'invalid' })
     }
@@ -400,14 +413,32 @@ export default function InviteAcceptClient() {
               <p className="mt-1 text-sm text-red-600 dark:text-red-400">{confirmErr ?? fieldErrors.confirmPassword}</p>
             )}
           </div>
-          <div>
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="submit"
               disabled={!formValid || submitLoading}
-              className="min-h-[44px] rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
+              className="min-h-[44px] rounded-lg px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
             >
               {submitLoading ? 'Creating account...' : 'Create account & join'}
             </button>
+            {!isProd && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!navigator.clipboard?.writeText) {
+                    toast.error('Clipboard unavailable')
+                    return
+                  }
+                  navigator.clipboard.writeText(window.location.href).then(
+                    () => toast.success('Invite link copied'),
+                    () => toast.error('Clipboard unavailable'),
+                  )
+                }}
+                className="rounded-lg px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300"
+              >
+                Copy invite link
+              </button>
+            )}
           </div>
         </form>
       </div>
@@ -425,17 +456,35 @@ export default function InviteAcceptClient() {
           <button
             type="button"
             onClick={handleAccept}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-white hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600"
+            className="rounded-lg px-4 py-2 text-white bg-blue-600 hover:bg-blue-700"
           >
             Accept invite
           </button>
           <button
             type="button"
             onClick={handleDecline}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            className="rounded-lg px-4 py-2 text-gray-900 bg-gray-100 hover:bg-gray-200 border border-gray-300"
           >
             Decline
           </button>
+          {!isProd && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!navigator.clipboard?.writeText) {
+                  toast.error('Clipboard unavailable')
+                  return
+                }
+                navigator.clipboard.writeText(window.location.href).then(
+                  () => toast.success('Invite link copied'),
+                  () => toast.error('Clipboard unavailable'),
+                )
+              }}
+              className="rounded-lg px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300"
+            >
+              Copy invite link
+            </button>
+          )}
         </div>
       </div>
     )

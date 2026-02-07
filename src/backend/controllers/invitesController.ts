@@ -365,6 +365,10 @@ export const acceptPublic: RequestHandler = async (
       res.status(409).json({ message: (err as Error).message })
       return
     }
+    if (code === 500) {
+      res.status(500).json({ message: 'An error occurred while accepting the invite. Please try again.' })
+      return
+    }
     next(err)
   }
 }
@@ -392,9 +396,10 @@ export const decline: RequestHandler = async (
   const performedBy = req.user?.userId != null && Number.isFinite(req.user.userId)
     ? req.user.userId
     : null
+  const userEmail = req.user?.email
 
   try {
-    await declineInvite(token, performedBy, {
+    await declineInvite(token, performedBy, userEmail, {
       route: req.originalUrl,
       method: req.method,
       statusCode: 204,
@@ -404,6 +409,10 @@ export const decline: RequestHandler = async (
     const code = (err as Error & { statusCode?: number }).statusCode
     if (code === 404 || code === 410) {
       res.status(code).json({ message: (err as Error).message })
+      return
+    }
+    if (code === 403) {
+      res.status(403).json({ message: (err as Error).message })
       return
     }
     next(err)

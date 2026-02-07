@@ -723,4 +723,59 @@ describe('POST /api/backend/invites/decline', () => {
 
     expect(res.status).toBe(400)
   })
+
+  it('returns 403 when authenticated user email does not match invite email', async () => {
+    findByTokenHash.mockResolvedValue({
+      inviteId: 1,
+      accountId: 1,
+      email: 'invited@example.com',
+      status: 'Pending',
+      expiresAt: new Date(Date.now() + 86400000),
+    })
+    const token = makeToken({
+      userId: 99,
+      roleId: 2,
+      role: 'Viewer',
+      email: 'other@example.com',
+      name: 'Other',
+      profilePic: null,
+      permissions: [],
+    })
+
+    const res = await request(app)
+      .post('/api/backend/invites/decline')
+      .set('Cookie', [`token=${token}`])
+      .send({ token: 'decline-token' })
+
+    expect(res.status).toBe(403)
+    expect(res.body.message).toMatch(/sign in with the email address/i)
+    expect(setStatusDeclined).not.toHaveBeenCalled()
+  })
+
+  it('returns 204 when authenticated user email matches invite email', async () => {
+    findByTokenHash.mockResolvedValue({
+      inviteId: 1,
+      accountId: 1,
+      email: 'invited@example.com',
+      status: 'Pending',
+      expiresAt: new Date(Date.now() + 86400000),
+    })
+    const token = makeToken({
+      userId: 99,
+      roleId: 2,
+      role: 'Viewer',
+      email: 'invited@example.com',
+      name: 'Invited',
+      profilePic: null,
+      permissions: [],
+    })
+
+    const res = await request(app)
+      .post('/api/backend/invites/decline')
+      .set('Cookie', [`token=${token}`])
+      .send({ token: 'decline-token' })
+
+    expect(res.status).toBe(204)
+    expect(setStatusDeclined).toHaveBeenCalledWith(1)
+  })
 })
