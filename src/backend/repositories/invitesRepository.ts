@@ -2,6 +2,7 @@
 import { poolPromise, sql } from '../config/db'
 
 export type InviteStatus = 'Pending' | 'Accepted' | 'Revoked' | 'Declined' | 'Expired'
+export type InviteListScope = 'pending' | 'all'
 
 export type InviteRow = {
   inviteId: number
@@ -204,6 +205,59 @@ export async function listPendingByAccount(accountId: number): Promise<InviteRow
       INNER JOIN dbo.Users u ON u.UserID = i.InvitedByUserID
       INNER JOIN dbo.Roles r ON r.RoleID = i.RoleID
       WHERE i.AccountID = @AccountID AND i.Status = N'Pending'
+      ORDER BY i.CreatedAt DESC
+    `)
+  return (result.recordset ?? []).map(r => mapInviteRow(r) as InviteRowWithDetails)
+}
+
+/**
+ * Lists invites for the account.
+ * - scope=pending: Status = Pending only
+ * - scope=all: all statuses
+ */
+export async function listByAccount(
+  accountId: number,
+  scope: InviteListScope,
+): Promise<InviteRowWithDetails[]> {
+  const includeAll = scope === 'all'
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('IncludeAll', sql.Bit, includeAll ? 1 : 0)
+    .query<{
+      InviteID: number
+      AccountID: number
+      Email: string
+      RoleID: number
+      TokenHash: string
+      Status: string
+      ExpiresAt: Date
+      InvitedByUserID: number
+      CreatedAt: Date
+      UpdatedAt: Date
+      AcceptedByUserID: number | null
+      AcceptedAt: Date | null
+      RevokedByUserID: number | null
+      RevokedAt: Date | null
+      SendCount: number
+      LastSentAt: Date | null
+      AccountName: string
+      InviterName: string | null
+      RoleName: string
+    }>(`
+      SELECT i.InviteID, i.AccountID, i.Email, i.RoleID, i.TokenHash, i.Status, i.ExpiresAt,
+             i.InvitedByUserID, i.CreatedAt, i.UpdatedAt, i.AcceptedByUserID, i.AcceptedAt,
+             i.RevokedByUserID, i.RevokedAt, i.SendCount, i.LastSentAt,
+             a.AccountName,
+             u.FirstName + COALESCE(N' ' + NULLIF(u.LastName, N''), N'') AS InviterName,
+             r.RoleName
+      FROM dbo.AccountInvites i
+      INNER JOIN dbo.Accounts a ON a.AccountID = i.AccountID
+      INNER JOIN dbo.Users u ON u.UserID = i.InvitedByUserID
+      INNER JOIN dbo.Roles r ON r.RoleID = i.RoleID
+      WHERE i.AccountID = @AccountID
+        AND (@IncludeAll = 1 OR i.Status = N'Pending')
       ORDER BY i.CreatedAt DESC
     `)
   return (result.recordset ?? []).map(r => mapInviteRow(r) as InviteRowWithDetails)

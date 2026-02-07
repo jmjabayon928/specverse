@@ -3,6 +3,7 @@ import {
   createInvite,
   findPendingByAccountAndEmail,
   listPendingByAccount,
+  listByAccount,
   findByTokenHash,
   getByIdAndAccount,
   updateTokenAndIncrementSend,
@@ -10,6 +11,7 @@ import {
   setStatusAcceptedIfPending,
   setStatusDeclined,
   type InviteRowWithDetails,
+  type InviteListScope,
 } from '../repositories/invitesRepository'
 import { getMemberByAccountAndUser, insertAccountMember, updateMemberRole, updateMemberStatus } from '../repositories/accountMembersRepository'
 import { setActiveAccount } from '../repositories/userActiveAccountRepository'
@@ -30,6 +32,8 @@ export type InviteDto = {
   email: string
   roleId: number
   roleName: string
+  status: 'Pending' | 'Accepted' | 'Declined' | 'Revoked' | 'Expired'
+  resolvedStatus: 'Pending' | 'Accepted' | 'Declined' | 'Revoked' | 'Expired'
   expiresAt: string
   invitedByUserId: number
   inviterName: string | null
@@ -62,12 +66,25 @@ export type AcceptInviteResult = {
   accountName: string
 }
 
-function toInviteDto(row: InviteRowWithDetails): InviteDto {
+export type InviteResolvedStatus = InviteDto['resolvedStatus']
+
+export function computeResolvedInviteStatus(
+  row: Pick<InviteRowWithDetails, 'status' | 'expiresAt'>,
+  now: Date,
+): InviteResolvedStatus {
+  if (row.status !== 'Pending') return row.status
+  return row.expiresAt < now ? 'Expired' : 'Pending'
+}
+
+function toInviteDto(row: InviteRowWithDetails, now: Date): InviteDto {
+  const resolvedStatus = computeResolvedInviteStatus(row, now)
   return {
     inviteId: row.inviteId,
     email: row.email,
     roleId: row.roleId,
     roleName: row.roleName,
+    status: row.status,
+    resolvedStatus,
     expiresAt: row.expiresAt instanceof Date ? row.expiresAt.toISOString() : String(row.expiresAt),
     invitedByUserId: row.invitedByUserId,
     inviterName: row.inviterName ?? null,
@@ -77,17 +94,14 @@ function toInviteDto(row: InviteRowWithDetails): InviteDto {
   }
 }
 
-function getResolvedStatus(row: InviteRowWithDetails): ByTokenResult['status'] {
-  if (row.status !== 'Pending') {
-    const s = row.status.toLowerCase()
-    if (s === 'accepted') return 'accepted'
-    if (s === 'revoked') return 'revoked'
-    if (s === 'declined') return 'declined'
-    return 'expired'
-  }
-  const now = new Date()
-  if (row.expiresAt < now) return 'expired'
-  return 'pending'
+function getResolvedStatus(row: InviteRowWithDetails, now: Date): ByTokenResult['status'] {
+  const resolved = computeResolvedInviteStatus(row, now)
+  if (resolved === 'Pending') return 'pending'
+  if (resolved === 'Accepted') return 'accepted'
+  if (resolved === 'Revoked') return 'revoked'
+  if (resolved === 'Declined') return 'declined'
+  // Expired or any unexpected value: preserve legacy fallback
+  return 'expired'
 }
 
 /**
@@ -136,6 +150,7 @@ export async function createOrResendInvite(
   expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS)
 
   if (pending) {
+    const auditStatusCode = 200
     const token = generateInviteToken()
     const tokenHash = inviteTokenSha256Hex(token)
     await updateTokenAndIncrementSend(pending.inviteId, tokenHash, expiresAt)
@@ -153,7 +168,7 @@ export async function createOrResendInvite(
       performedBy: invitedByUserId,
       route: auditContext.route ?? null,
       method: auditContext.method ?? null,
-      statusCode: auditContext.statusCode ?? null,
+      statusCode: auditStatusCode,
       changes: { email: normalizedEmail, accountId },
     })
     const roleName = roles.find(r => r.roleId === pending.roleId)?.roleName ?? ''
@@ -168,6 +183,7 @@ export async function createOrResendInvite(
     }
   }
 
+  const auditStatusCode = 201
   const token = generateInviteToken()
   const tokenHash = inviteTokenSha256Hex(token)
   const row = await createInvite(
@@ -192,7 +208,7 @@ export async function createOrResendInvite(
     performedBy: invitedByUserId,
     route: auditContext.route ?? null,
     method: auditContext.method ?? null,
-    statusCode: auditContext.statusCode ?? null,
+    statusCode: auditStatusCode,
     changes: { email: normalizedEmail, roleId, accountId },
   })
   const roleName = roles.find(r => r.roleId === roleId)?.roleName ?? ''
@@ -207,9 +223,13 @@ export async function createOrResendInvite(
   }
 }
 
-export async function listInvites(accountId: number): Promise<InviteDto[]> {
-  const rows = await listPendingByAccount(accountId)
-  return rows.map(toInviteDto)
+export async function listInvites(
+  accountId: number,
+  scope: InviteListScope = 'pending',
+): Promise<InviteDto[]> {
+  const rows = await listByAccount(accountId, scope)
+  const now = new Date()
+  return rows.map(r => toInviteDto(r, now))
 }
 
 /**
@@ -263,7 +283,8 @@ export async function resendInvite(
     ;(err as Error & { statusCode?: number }).statusCode = 404
     throw err
   }
-  return toInviteDto(found)
+  const now = new Date()
+  return toInviteDto(found, now)
 }
 
 export type DevAcceptLinkResult = {
@@ -341,7 +362,8 @@ export async function getByToken(token: string): Promise<ByTokenResult | null> {
   const tokenHash = inviteTokenSha256Hex(token)
   const row = await findByTokenHash(tokenHash)
   if (!row) return null
-  const status = getResolvedStatus(row)
+  const now = new Date()
+  const status = getResolvedStatus(row, now)
   return {
     accountName: row.accountName,
     status,

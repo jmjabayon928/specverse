@@ -63,7 +63,6 @@ export const create: RequestHandler = async (
     const result = await createOrResendInvite(accountId, userId, email, roleId, {
       route: req.originalUrl,
       method: req.method,
-      statusCode: 201,
     })
     const status = result.resent ? 200 : 201
     res.status(status).json(result)
@@ -82,7 +81,8 @@ export const create: RequestHandler = async (
 }
 
 /**
- * GET /api/backend/invites — list pending invites for active account.
+ * GET /api/backend/invites?scope=pending|all — list invites for active account.
+ * Default: scope=pending (preserves existing behavior).
  */
 export const list: RequestHandler = async (
   req: Request,
@@ -96,7 +96,15 @@ export const list: RequestHandler = async (
   }
 
   try {
-    const invites = await listInvites(accountId)
+    const rawScope = asSingleString(req.query.scope as string | string[] | undefined)
+    const normalized = rawScope != null ? rawScope.trim().toLowerCase() : ''
+    const scope = normalized === '' ? 'pending' : normalized
+    if (scope !== 'pending' && scope !== 'all') {
+      res.status(400).json({ message: "Invalid scope. Expected 'pending' or 'all'." })
+      return
+    }
+
+    const invites = await listInvites(accountId, scope)
     res.status(200).json({ invites })
   } catch (err) {
     next(err)

@@ -25,6 +25,7 @@ const checkUserPermission = jest.fn().mockResolvedValue(true)
 const createInviteRepo = jest.fn()
 const findPendingByAccountAndEmail = jest.fn().mockResolvedValue(null)
 const listPendingByAccount = jest.fn().mockResolvedValue([])
+const listByAccount = jest.fn().mockResolvedValue([])
 const findByTokenHash = jest.fn().mockResolvedValue(null)
 const getByIdAndAccount = jest.fn().mockResolvedValue(null)
 const updateTokenAndIncrementSend = jest.fn().mockResolvedValue(undefined)
@@ -64,6 +65,7 @@ jest.mock('../../src/backend/repositories/invitesRepository', () => ({
   createInvite: (...args: unknown[]) => createInviteRepo(...args),
   findPendingByAccountAndEmail: (...args: unknown[]) => findPendingByAccountAndEmail(...args),
   listPendingByAccount: (...args: unknown[]) => listPendingByAccount(...args),
+  listByAccount: (...args: unknown[]) => listByAccount(...args),
   findByTokenHash: (...args: unknown[]) => findByTokenHash(...args),
   getByIdAndAccount: (...args: unknown[]) => getByIdAndAccount(...args),
   updateTokenAndIncrementSend: (...args: unknown[]) => updateTokenAndIncrementSend(...args),
@@ -116,6 +118,7 @@ beforeEach(() => {
   checkUserPermission.mockResolvedValue(true)
   findPendingByAccountAndEmail.mockResolvedValue(null)
   listPendingByAccount.mockResolvedValue([])
+  listByAccount.mockResolvedValue([])
   findByTokenHash.mockResolvedValue(null)
   getByIdAndAccount.mockResolvedValue(null)
   getUserByEmail.mockResolvedValue(null)
@@ -274,18 +277,27 @@ describe('POST /api/backend/invites', () => {
 
 describe('GET /api/backend/invites', () => {
   it('returns 200 and list when user has ACCOUNT_USER_MANAGE', async () => {
-    listPendingByAccount.mockResolvedValue([
+    listByAccount.mockResolvedValue([
       {
         inviteId: 1,
+        accountId: 1,
         email: 'a@example.com',
         roleId: 2,
+        tokenHash: 'x'.repeat(64),
+        status: 'Pending',
         roleName: 'Viewer',
-        expiresAt: new Date(),
+        expiresAt: new Date(Date.now() + 86400000),
         invitedByUserId: 1,
         inviterName: 'Admin',
         sendCount: 1,
         lastSentAt: new Date(),
         createdAt: new Date(),
+        updatedAt: new Date(),
+        acceptedByUserId: null,
+        acceptedAt: null,
+        revokedByUserId: null,
+        revokedAt: null,
+        accountName: 'Test Account',
       },
     ])
     const token = makeToken({
@@ -304,7 +316,15 @@ describe('GET /api/backend/invites', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.invites).toHaveLength(1)
-    expect(listPendingByAccount).toHaveBeenCalledWith(1)
+    expect(res.body.invites[0]).toMatchObject({
+      inviteId: 1,
+      email: 'a@example.com',
+      roleId: 2,
+      roleName: 'Viewer',
+      status: 'Pending',
+      resolvedStatus: 'Pending',
+    })
+    expect(listByAccount).toHaveBeenCalledWith(1, 'pending')
   })
 
   it('returns 403 when user lacks permission', async () => {
