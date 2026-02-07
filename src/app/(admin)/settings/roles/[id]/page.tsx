@@ -45,7 +45,11 @@ export default function RoleDetailPage() {
     try {
       // role + current permissions
       const r = await fetch(`/api/backend/settings/roles/${id}/permissions`, { credentials: "include" });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? `HTTP ${r.status}`);
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        const msg = r.status === 403 ? "You don't have permission to view this role." : (body.error ?? `HTTP ${r.status}`);
+        throw new Error(msg);
+      }
       const j: RolePermissionsResponse = await r.json();
       setData(j);
 
