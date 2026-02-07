@@ -16,12 +16,124 @@ export async function getAccountNameById(accountId: number): Promise<string | nu
   return row?.AccountName ?? null
 }
 
+export type AccountDto = {
+  accountId: number
+  accountName: string
+  slug: string
+  isActive: boolean
+}
+
 export type AccountWithRole = {
   accountId: number
   accountName: string
   slug: string
   isActive: boolean
   roleName: string
+}
+
+export async function getAccountById(accountId: number): Promise<AccountDto | null> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .query<{
+      AccountID: number
+      AccountName: string
+      Slug: string
+      IsActive: boolean
+    }>(`
+      SELECT
+        a.AccountID,
+        a.AccountName,
+        a.Slug,
+        CAST(a.IsActive AS TINYINT) AS IsActive
+      FROM dbo.Accounts a
+      WHERE a.AccountID = @AccountID
+    `)
+  const row = result.recordset[0]
+  if (!row) return null
+  return {
+    accountId: row.AccountID,
+    accountName: row.AccountName,
+    slug: row.Slug,
+    isActive: Boolean(row.IsActive),
+  }
+}
+
+export async function createAccount(
+  accountName: string,
+  slug: string,
+  isActive: boolean,
+): Promise<AccountDto> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('AccountName', sql.NVarChar(255), accountName)
+    .input('Slug', sql.NVarChar(64), slug)
+    .input('IsActive', sql.Bit, isActive)
+    .query<{
+      AccountID: number
+      AccountName: string
+      Slug: string
+      IsActive: boolean
+    }>(`
+      INSERT INTO dbo.Accounts (AccountName, Slug, IsActive)
+      OUTPUT
+        inserted.AccountID,
+        inserted.AccountName,
+        inserted.Slug,
+        CAST(inserted.IsActive AS TINYINT) AS IsActive
+      VALUES (@AccountName, @Slug, @IsActive)
+    `)
+  const row = result.recordset[0]
+  // Insert with OUTPUT should always return exactly one row; guard anyway.
+  if (!row) {
+    throw new Error('Failed to create account')
+  }
+  return {
+    accountId: row.AccountID,
+    accountName: row.AccountName,
+    slug: row.Slug,
+    isActive: Boolean(row.IsActive),
+  }
+}
+
+export type AccountPatch = { accountName?: string; slug?: string; isActive?: boolean }
+
+export async function updateAccount(accountId: number, patch: AccountPatch): Promise<AccountDto | null> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('AccountName', sql.NVarChar(255), patch.accountName ?? null)
+    .input('Slug', sql.NVarChar(64), patch.slug ?? null)
+    .input('IsActive', sql.Bit, patch.isActive ?? null)
+    .query<{
+      AccountID: number
+      AccountName: string
+      Slug: string
+      IsActive: boolean
+    }>(`
+      UPDATE dbo.Accounts
+      SET
+        AccountName = COALESCE(@AccountName, AccountName),
+        Slug = COALESCE(@Slug, Slug),
+        IsActive = COALESCE(@IsActive, IsActive)
+      OUTPUT
+        inserted.AccountID,
+        inserted.AccountName,
+        inserted.Slug,
+        CAST(inserted.IsActive AS TINYINT) AS IsActive
+      WHERE AccountID = @AccountID
+    `)
+  const row = result.recordset[0]
+  if (!row) return null
+  return {
+    accountId: row.AccountID,
+    accountName: row.AccountName,
+    slug: row.Slug,
+    isActive: Boolean(row.IsActive),
+  }
 }
 
 /**
