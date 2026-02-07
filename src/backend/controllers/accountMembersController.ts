@@ -65,7 +65,11 @@ export async function updateRole(
   }
 
   try {
-    const member = await svcUpdateRole(accountId, accountMemberId, roleId)
+    const member = await svcUpdateRole(accountId, accountMemberId, roleId, {
+      performedBy: req.user!.userId,
+      route: req.originalUrl ?? null,
+      method: req.method ?? null,
+    })
     res.status(200).json(member)
   } catch (err) {
     const code = (err as Error & { statusCode?: number }).statusCode
@@ -111,7 +115,11 @@ export async function updateStatus(
   const isActive = typeof raw === 'boolean' ? raw : String(raw).toLowerCase() === 'true'
 
   try {
-    const member = await svcUpdateStatus(accountId, accountMemberId, isActive)
+    const member = await svcUpdateStatus(accountId, accountMemberId, isActive, {
+      performedBy: req.user!.userId,
+      route: req.originalUrl ?? null,
+      method: req.method ?? null,
+    })
     res.status(200).json(member)
   } catch (err) {
     const code = (err as Error & { statusCode?: number }).statusCode

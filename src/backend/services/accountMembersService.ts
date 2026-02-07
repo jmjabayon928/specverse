@@ -8,6 +8,13 @@ import {
   type AccountMemberRow,
 } from '../repositories/accountMembersRepository'
 import { isAdminRole } from '../utils/roleUtils'
+import { logAuditAction } from '../utils/logAuditAction'
+
+export type AccountMembersAuditContext = {
+  performedBy: number
+  route: string | null
+  method: string | null
+}
 
 export type MemberDto = {
   accountMemberId: number
@@ -49,6 +56,7 @@ export async function updateMemberRole(
   accountId: number,
   accountMemberId: number,
   roleId: number,
+  audit?: AccountMembersAuditContext,
 ): Promise<MemberDto> {
   const member = await getMemberInAccount(accountId, accountMemberId)
   if (!member) {
@@ -65,6 +73,7 @@ export async function updateMemberRole(
     throw err
   }
 
+  const fromRoleId = member.roleId
   await repoUpdateRole(accountId, accountMemberId, roleId)
   const updated = await getMemberInAccount(accountId, accountMemberId)
   if (!updated) {
@@ -72,6 +81,20 @@ export async function updateMemberRole(
     ;(err as Error & { statusCode?: number }).statusCode = 404
     throw err
   }
+
+  if (audit && fromRoleId !== roleId) {
+    await logAuditAction({
+      tableName: 'AccountMembers',
+      recordId: accountMemberId,
+      action: 'member.role_changed',
+      performedBy: audit.performedBy,
+      route: audit.route,
+      method: audit.method,
+      statusCode: 200,
+      changes: { targetUserId: member.userId, fromRoleId, toRoleId: roleId },
+    })
+  }
+
   return toDto(updated)
 }
 
@@ -82,6 +105,7 @@ export async function updateMemberStatus(
   accountId: number,
   accountMemberId: number,
   isActive: boolean,
+  audit?: AccountMembersAuditContext,
 ): Promise<MemberDto> {
   const member = await getMemberInAccount(accountId, accountMemberId)
   if (!member) {
@@ -98,6 +122,7 @@ export async function updateMemberStatus(
     throw err
   }
 
+  const fromIsActive = member.isActive
   await repoUpdateStatus(accountId, accountMemberId, isActive)
   const updated = await getMemberInAccount(accountId, accountMemberId)
   if (!updated) {
@@ -105,5 +130,28 @@ export async function updateMemberStatus(
     ;(err as Error & { statusCode?: number }).statusCode = 404
     throw err
   }
+
+  if (audit && fromIsActive !== isActive) {
+    const action =
+      fromIsActive === true && isActive === false
+        ? 'member.deactivated'
+        : fromIsActive === false && isActive === true
+          ? 'member.reactivated'
+          : null
+
+    if (action) {
+      await logAuditAction({
+        tableName: 'AccountMembers',
+        recordId: accountMemberId,
+        action,
+        performedBy: audit.performedBy,
+        route: audit.route,
+        method: audit.method,
+        statusCode: 200,
+        changes: { targetUserId: member.userId, fromIsActive, toIsActive: isActive },
+      })
+    }
+  }
+
   return toDto(updated)
 }
