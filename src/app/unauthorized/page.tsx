@@ -5,9 +5,17 @@ import { useRouter } from "next/navigation";
 export default function UnauthorizedPage() {
   const router = useRouter();
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    router.push("/login");
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/backend/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // ignore
+    } finally {
+      router.push("/login");
+    }
   };
 
   return (
