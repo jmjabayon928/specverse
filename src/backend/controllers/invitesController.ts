@@ -13,6 +13,8 @@ import {
 } from '../services/invitesService'
 import { parseIntParam, asSingleString } from '../utils/requestParam'
 
+export const env = { isProdEnv: (): boolean => process.env.NODE_ENV === 'production' }
+
 /**
  * POST /api/backend/invites
  * Body: { email: string, roleId: number }. Creates or resends (rotate token) if pending exists.
@@ -109,7 +111,7 @@ export const devAcceptLinkHandler: RequestHandler = async (
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
-  if (process.env.NODE_ENV === 'production') {
+  if (env.isProdEnv()) {
     res.status(404).json({ message: 'Not found' })
     return
   }

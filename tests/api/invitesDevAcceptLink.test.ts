@@ -102,6 +102,7 @@ jest.mock('../../src/backend/services/usersService', () => ({
 }))
 
 import app from '../../src/backend/app'
+import * as invitesController from '../../src/backend/controllers/invitesController'
 
 function makeToken(payload: Record<string, unknown>): string {
   return jwt.sign(payload, process.env.JWT_SECRET ?? 'secret', { expiresIn: '1h' })
@@ -131,6 +132,7 @@ const pendingInviteRow = {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  jest.spyOn(invitesController.env, 'isProdEnv').mockReturnValue(false)
   getAccountContextForUser.mockResolvedValue(defaultContext)
   getStoredActiveAccountId.mockResolvedValue(null)
   checkUserPermission.mockResolvedValue(true)
@@ -143,10 +145,13 @@ beforeEach(() => {
   getAccountNameById.mockResolvedValue('Test Account')
 })
 
+afterEach(() => {
+  jest.restoreAllMocks()
+})
+
 describe('POST /api/backend/invites/:id/dev-accept-link', () => {
   it('returns 404 when NODE_ENV is production', async () => {
-    const prev = process.env.NODE_ENV
-    process.env.NODE_ENV = 'production'
+    jest.spyOn(invitesController.env, 'isProdEnv').mockReturnValue(true)
     getByIdAndAccount.mockResolvedValueOnce(pendingInviteRow)
     const token = makeToken({
       userId: 1,
@@ -162,16 +167,12 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
       .post('/api/backend/invites/1/dev-accept-link')
       .set('Cookie', [`token=${token}`])
 
-    process.env.NODE_ENV = prev
     expect(res.status).toBe(404)
     expect(res.body).toMatchObject({ message: 'Not found' })
     expect(updateTokenAndIncrementSend).not.toHaveBeenCalled()
   })
 
   it('returns 200 with acceptUrl and token works for accept-public when NODE_ENV is development', async () => {
-    const prev = process.env.NODE_ENV
-    process.env.NODE_ENV = 'development'
-
     getByIdAndAccount.mockResolvedValue({ ...pendingInviteRow })
     let capturedTokenHash: string | null = null
     updateTokenAndIncrementSend.mockImplementation(
@@ -224,13 +225,9 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
     expect(setStatusAcceptedIfPending).toHaveBeenCalledWith(1, 999)
     expect(insertAccountMember).toHaveBeenCalledWith(1, 999, 2)
     expect(setActiveAccountRepo).toHaveBeenCalledWith(999, 1)
-
-    process.env.NODE_ENV = prev
   })
 
   it('returns 404 when invite not found (development)', async () => {
-    const prev = process.env.NODE_ENV
-    process.env.NODE_ENV = 'development'
     getByIdAndAccount.mockResolvedValue(null)
     const token = makeToken({
       userId: 1,
@@ -246,15 +243,12 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
       .post('/api/backend/invites/999/dev-accept-link')
       .set('Cookie', [`token=${token}`])
 
-    process.env.NODE_ENV = prev
     expect(res.status).toBe(404)
     expect(res.body.message).toMatch(/not found/i)
     expect(updateTokenAndIncrementSend).not.toHaveBeenCalled()
   })
 
   it('returns 410 when invite is not Pending (development)', async () => {
-    const prev = process.env.NODE_ENV
-    process.env.NODE_ENV = 'development'
     getByIdAndAccount.mockResolvedValue({ ...pendingInviteRow, status: 'Accepted' })
     const token = makeToken({
       userId: 1,
@@ -270,15 +264,12 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
       .post('/api/backend/invites/1/dev-accept-link')
       .set('Cookie', [`token=${token}`])
 
-    process.env.NODE_ENV = prev
     expect(res.status).toBe(410)
     expect(res.body.message).toMatch(/no longer valid/i)
     expect(updateTokenAndIncrementSend).not.toHaveBeenCalled()
   })
 
   it('returns 410 when invite is expired (development)', async () => {
-    const prev = process.env.NODE_ENV
-    process.env.NODE_ENV = 'development'
     getByIdAndAccount.mockResolvedValue({
       ...pendingInviteRow,
       expiresAt: new Date(Date.now() - 86400000),
@@ -297,7 +288,6 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
       .post('/api/backend/invites/1/dev-accept-link')
       .set('Cookie', [`token=${token}`])
 
-    process.env.NODE_ENV = prev
     expect(res.status).toBe(410)
     expect(res.body.message).toMatch(/expired/i)
     expect(updateTokenAndIncrementSend).not.toHaveBeenCalled()
