@@ -41,6 +41,13 @@ function validatePassword(pwd: string): { valid: boolean; errors: string[] } {
   return { valid: errors.length === 0, errors }
 }
 
+function passwordInlineMessage(pwd: string): string | null {
+  if (pwd.length < 8) return 'Password must be at least 8 characters'
+  const check = validatePassword(pwd)
+  if (!check.valid) return 'Password must include: uppercase, lowercase, number, special character'
+  return null
+}
+
 export default function InviteAcceptClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -144,8 +151,8 @@ export default function InviteAcceptClient() {
     const cp = confirmPassword
     if (!f) errs.firstName = 'First name is required'
     if (!l) errs.lastName = 'Last name is required'
-    const pwCheck = validatePassword(p)
-    if (!pwCheck.valid) errs.password = pwCheck.errors.join('. ')
+    const pwMsg = passwordInlineMessage(p)
+    if (pwMsg) errs.password = pwMsg
     if (p !== cp) errs.confirmPassword = 'Passwords do not match'
     setFieldErrors(errs)
     if (Object.keys(errs).length > 0) return
@@ -292,6 +299,15 @@ export default function InviteAcceptClient() {
   if (state.kind === 'pending_signed_out') {
     const d = state.data
     const roleLabel = d.roleName ?? (d.roleId != null ? `Role #${d.roleId}` : '—')
+    const firstNameErr = firstName.trim() === '' ? 'First name is required' : null
+    const lastNameErr = lastName.trim() === '' ? 'Last name is required' : null
+    const passwordErr = passwordInlineMessage(password)
+    const confirmErr = password !== confirmPassword ? 'Passwords do not match' : null
+    const formValid =
+      firstName.trim() !== '' &&
+      lastName.trim() !== '' &&
+      validatePassword(password).valid &&
+      password === confirmPassword
     return (
       <div className="mx-auto max-w-md px-4 py-8">
         <h1 className="mb-2 text-xl font-semibold text-gray-800 dark:text-white">
@@ -322,7 +338,9 @@ export default function InviteAcceptClient() {
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
               autoComplete="given-name"
             />
-            {fieldErrors.firstName && <p className="mt-1 text-sm text-red-600">{fieldErrors.firstName}</p>}
+            {(firstNameErr ?? fieldErrors.firstName) && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{firstNameErr ?? fieldErrors.firstName}</p>
+            )}
           </div>
           <div>
             <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -336,7 +354,9 @@ export default function InviteAcceptClient() {
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
               autoComplete="family-name"
             />
-            {fieldErrors.lastName && <p className="mt-1 text-sm text-red-600">{fieldErrors.lastName}</p>}
+            {(lastNameErr ?? fieldErrors.lastName) && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{lastNameErr ?? fieldErrors.lastName}</p>
+            )}
           </div>
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -350,7 +370,9 @@ export default function InviteAcceptClient() {
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
               autoComplete="new-password"
             />
-            {fieldErrors.password && <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>}
+            {(passwordErr ?? fieldErrors.password) && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{passwordErr ?? fieldErrors.password}</p>
+            )}
             <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
               <p className="font-medium">Password requirements:</p>
               <ul className="mt-1 list-inside space-y-0.5">
@@ -374,22 +396,18 @@ export default function InviteAcceptClient() {
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
               autoComplete="new-password"
             />
-            {fieldErrors.confirmPassword && <p className="mt-1 text-sm text-red-600">{fieldErrors.confirmPassword}</p>}
+            {(confirmErr ?? fieldErrors.confirmPassword) && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{confirmErr ?? fieldErrors.confirmPassword}</p>
+            )}
           </div>
-          <div className="flex gap-3">
+          <div>
             <button
               type="submit"
-              disabled={submitLoading}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-white hover:bg-primary-700 disabled:opacity-50 dark:bg-primary-500 dark:hover:bg-primary-600"
+              disabled={!formValid || submitLoading}
+              className="min-h-[44px] rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
             >
               {submitLoading ? 'Creating account...' : 'Create account & join'}
             </button>
-            <Link
-              href={loginUrl}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              Sign in instead
-            </Link>
           </div>
         </form>
       </div>

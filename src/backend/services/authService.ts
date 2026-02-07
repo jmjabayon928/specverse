@@ -1,6 +1,7 @@
 // src/backend/services/authService.ts
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import { verifyPassword } from './passwordHasher'
 import { poolPromise, sql } from '../config/db'
 import { getAccountContextForUser } from '../database/accountContextQueries'
 import type { JwtPayload as CustomJwtPayload } from '../../domain/auth/JwtTypes'
@@ -92,13 +93,25 @@ export const loginWithEmailAndPassword = async (
   email: string,
   password: string,
 ): Promise<AuthTokenResult | null> => {
-  const user = await findUserByEmail(email)
+  const normalizedEmail = (email ?? '').trim().toLowerCase()
+  if (!normalizedEmail) return null
+  const user = await findUserByEmail(normalizedEmail)
 
   if (!user) {
     return null
   }
 
-  const passwordMatch = await bcrypt.compare(password, user.PasswordHash)
+  const hash = user.PasswordHash
+  const isArgon = hash.startsWith('$argon2')
+  const isBcrypt =
+    hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$')
+
+  let passwordMatch = false
+  if (isArgon) {
+    passwordMatch = await verifyPassword(hash, password)
+  } else if (isBcrypt) {
+    passwordMatch = await bcrypt.compare(password, hash)
+  }
   if (!passwordMatch) {
     return null
   }

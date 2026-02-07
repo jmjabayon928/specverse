@@ -222,6 +222,15 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
 
     expect(acceptRes.status).toBe(200)
     expect(acceptRes.body).toMatchObject({ accountId: 1, accountName: 'Test Account' })
+    expect(createUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Email: 'devlink@example.com',
+        RoleID: 2,
+        FirstName: 'Dev',
+        LastName: 'User',
+        IsActive: true,
+      }),
+    )
     expect(setStatusAcceptedIfPending).toHaveBeenCalledWith(1, 999)
     expect(insertAccountMember).toHaveBeenCalledWith(1, 999, 2)
     expect(setActiveAccountRepo).toHaveBeenCalledWith(999, 1)

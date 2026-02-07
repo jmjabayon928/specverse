@@ -98,8 +98,153 @@ describe('InviteAcceptPage', () => {
       expect(screen.getByLabelText(/^Password/i)).toBeInTheDocument()
       expect(screen.getByLabelText(/Confirm password/i)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Create account & join/i })).toBeInTheDocument()
-      const signInLink = screen.getByRole('link', { name: /Sign in instead/i })
-      expect(signInLink).toHaveAttribute('href', expect.stringMatching(/\/login/))
+    })
+    expect(screen.getByRole('button', { name: /Create account & join/i })).toBeVisible()
+    expect(screen.queryByRole('link', { name: /Sign in instead/i })).not.toBeInTheDocument()
+  })
+
+  it('shows first and last name required errors and disables submit when names are empty', async () => {
+    mockGet.mockReturnValue('some-token')
+    ;(globalThis.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          accountName: 'Acme',
+          status: 'pending',
+          expiresAt: '2025-01-01',
+          email: 'user@acme.com',
+          roleId: 1,
+          roleName: 'Member',
+        }),
+      })
+      .mockResolvedValueOnce({ ok: false })
+    render(<InviteAcceptPage />)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Create account & join/i })).toBeInTheDocument()
+    })
+    expect(screen.getByText(/First name is required/i)).toBeInTheDocument()
+    expect(screen.getByText(/Last name is required/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Create account & join/i })).toBeDisabled()
+  })
+
+  it('shows password mismatch error and disables submit when confirm does not match', async () => {
+    mockGet.mockReturnValue('some-token')
+    ;(globalThis.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          accountName: 'Acme',
+          status: 'pending',
+          expiresAt: '2025-01-01',
+          email: 'user@acme.com',
+          roleId: 1,
+          roleName: 'Member',
+        }),
+      })
+      .mockResolvedValueOnce({ ok: false })
+    render(<InviteAcceptPage />)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Create account & join/i })).toBeInTheDocument()
+    })
+    fireEvent.change(screen.getByLabelText(/First name/i), { target: { value: 'Jane' } })
+    fireEvent.change(screen.getByLabelText(/Last name/i), { target: { value: 'Doe' } })
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'SecurePass1!' } })
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'OtherPass1!' } })
+    await waitFor(() => {
+      expect(screen.getByText(/Passwords do not match/i)).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /Create account & join/i })).toBeDisabled()
+  })
+
+  it('shows weak password error and disables submit when password does not meet rules', async () => {
+    mockGet.mockReturnValue('some-token')
+    ;(globalThis.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          accountName: 'Acme',
+          status: 'pending',
+          expiresAt: '2025-01-01',
+          email: 'user@acme.com',
+          roleId: 1,
+          roleName: 'Member',
+        }),
+      })
+      .mockResolvedValueOnce({ ok: false })
+    render(<InviteAcceptPage />)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Create account & join/i })).toBeInTheDocument()
+    })
+    fireEvent.change(screen.getByLabelText(/First name/i), { target: { value: 'Jane' } })
+    fireEvent.change(screen.getByLabelText(/Last name/i), { target: { value: 'Doe' } })
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'weak' } })
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'weak' } })
+    await waitFor(() => {
+      expect(screen.getByText(/Password must be at least 8 characters/i)).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /Create account & join/i })).toBeDisabled()
+  })
+
+  it('enables submit when password is valid and confirm matches', async () => {
+    mockGet.mockReturnValue('some-token')
+    ;(globalThis.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          accountName: 'Acme',
+          status: 'pending',
+          expiresAt: '2025-01-01',
+          email: 'user@acme.com',
+          roleId: 1,
+          roleName: 'Member',
+        }),
+      })
+      .mockResolvedValueOnce({ ok: false })
+    render(<InviteAcceptPage />)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Create account & join/i })).toBeInTheDocument()
+    })
+    fireEvent.change(screen.getByLabelText(/First name/i), { target: { value: 'Jane' } })
+    fireEvent.change(screen.getByLabelText(/Last name/i), { target: { value: 'Doe' } })
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'SecurePass1!' } })
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'SecurePass1!' } })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Create account & join/i })).not.toBeDisabled()
+    })
+  })
+
+  it('shows Sign in link only after 409 (existing account)', async () => {
+    mockGet.mockReturnValue('some-token')
+    ;(globalThis.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          accountName: 'Acme',
+          status: 'pending',
+          expiresAt: '2025-01-01',
+          email: 'user@acme.com',
+          roleId: 1,
+          roleName: 'Member',
+        }),
+      })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({ message: 'Account already exists. Please sign in to accept this invite.' }),
+      })
+    render(<InviteAcceptPage />)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Create account & join/i })).toBeInTheDocument()
+    })
+    fireEvent.change(screen.getByLabelText(/First name/i), { target: { value: 'Jane' } })
+    fireEvent.change(screen.getByLabelText(/Last name/i), { target: { value: 'Doe' } })
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'SecurePass1!' } })
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'SecurePass1!' } })
+    fireEvent.click(screen.getByRole('button', { name: /Create account & join/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Account already exists/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /Sign in/i })).toBeInTheDocument()
     })
   })
 

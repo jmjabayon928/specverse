@@ -519,12 +519,17 @@ export async function acceptInvitePublic(
     throw new AppError('Account already exists. Please sign in to accept this invite.', 409)
   }
   if (!existingUser) {
+    const roleId = row.roleId
+    if (!Number.isFinite(roleId)) {
+      throw new AppError('Invite role is invalid', 500)
+    }
     userId = await createUser({
       Email: inviteEmail,
       Password: password,
       FirstName: firstName || null,
       LastName: lastName || null,
       IsActive: true,
+      RoleID: roleId,
     })
   } else {
     const uid = (existingUser as { UserID?: number }).UserID
