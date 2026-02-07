@@ -129,6 +129,12 @@ describe('GET /api/backend/roles', () => {
   })
 
   it('returns 403 when user lacks ACCOUNT_VIEW', async () => {
+    getAccountContextForUser.mockResolvedValueOnce({
+      accountId: 1,
+      roleId: 2,
+      roleName: 'Engineer',
+      permissions: [],
+    })
     checkUserPermission.mockResolvedValueOnce(false)
     const token = makeToken({
       userId: 1,

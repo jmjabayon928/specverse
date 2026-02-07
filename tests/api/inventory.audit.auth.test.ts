@@ -82,6 +82,7 @@ jest.mock("../../src/backend/middleware/authMiddleware", () => ({
     }
     next();
   },
+  verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
 }));
 
 jest.mock("../../src/backend/database/inventoryAuditQueries", () => ({

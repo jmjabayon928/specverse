@@ -16,6 +16,11 @@ export const requireAdmin: RequestHandler = (
     return
   }
 
+  if (req.user.isSuperadmin === true) {
+    next()
+    return
+  }
+
   const userRole = req.user.role?.toLowerCase()
   if (userRole !== 'admin') {
     next(new AppError('Admin access required', 403))

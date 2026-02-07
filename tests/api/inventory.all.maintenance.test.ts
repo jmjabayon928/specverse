@@ -3,6 +3,7 @@
 import request from "supertest";
 import jwt from "jsonwebtoken";
 import express from "express";
+import type { Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import { errorHandler } from "../../src/backend/middleware/errorHandler";
 import { AppError } from "../../src/backend/errors/AppError";
@@ -44,6 +45,7 @@ jest.mock("../../src/backend/middleware/authMiddleware", () => ({
     next();
   },
   requirePermission: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+  verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
 }));
 
 function createAuthCookie(): string {

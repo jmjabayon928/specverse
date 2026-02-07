@@ -20,6 +20,88 @@ type UserRow = {
 
 type Paged<T> = { page: number; pageSize: number; total: number; rows: T[] };
 
+type InviteScope = "pending" | "all";
+
+type InviteStatus = "Pending" | "Accepted" | "Declined" | "Revoked" | "Expired";
+
+type AccountInviteRow = {
+  id: number;
+  email: string;
+  roleId: number | null;
+  roleName: string | null;
+  status: InviteStatus;
+  resolvedStatus: InviteStatus;
+  expiresAt: string | null;
+  sendCount: number;
+  lastSentAt: string | null;
+  createdAt: string;
+};
+
+function parseInviteStatus(raw: unknown): InviteStatus | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().toLowerCase();
+  if (v === "pending") return "Pending";
+  if (v === "accepted") return "Accepted";
+  if (v === "declined") return "Declined";
+  if (v === "revoked") return "Revoked";
+  if (v === "expired") return "Expired";
+  return null;
+}
+
+function computeResolvedStatusFallback(status: InviteStatus, expiresAt: string | null): InviteStatus {
+  if (status !== "Pending") return status;
+  if (!expiresAt) return "Pending";
+  const d = new Date(expiresAt);
+  if (Number.isNaN(d.getTime())) return "Pending";
+  return d.getTime() < Date.now() ? "Expired" : "Pending";
+}
+
+function normalizeAccountInviteRow(raw: unknown): AccountInviteRow | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const o = raw as Record<string, unknown>;
+  const id = typeof o.InviteID === "number" ? o.InviteID : typeof o.inviteId === "number" ? o.inviteId : typeof o.id === "number" ? o.id : null;
+  if (id === null) return null;
+  const email = typeof o.Email === "string" ? o.Email : typeof o.email === "string" ? o.email : "";
+  const roleId = typeof o.RoleID === "number" ? o.RoleID : typeof o.roleId === "number" ? o.roleId : null;
+  const roleName = typeof o.RoleName === "string" ? o.RoleName : typeof o.roleName === "string" ? o.roleName : null;
+  const status =
+    parseInviteStatus(typeof o.Status === "string" ? o.Status : typeof o.status === "string" ? o.status : undefined) ?? "Pending";
+  const resolvedStatus =
+    parseInviteStatus(typeof o.ResolvedStatus === "string" ? o.ResolvedStatus : typeof o.resolvedStatus === "string" ? o.resolvedStatus : undefined) ??
+    computeResolvedStatusFallback(status, typeof o.ExpiresAt === "string" ? o.ExpiresAt : typeof o.expiresAt === "string" ? o.expiresAt : null);
+  const expiresAt = typeof o.ExpiresAt === "string" ? o.ExpiresAt : typeof o.expiresAt === "string" ? o.expiresAt : null;
+  const sendCount = typeof o.SendCount === "number" ? o.SendCount : typeof o.sendCount === "number" ? o.sendCount : 0;
+  const lastSentAt = typeof o.LastSentAt === "string" ? o.LastSentAt : typeof o.lastSentAt === "string" ? o.lastSentAt : null;
+  const createdAt = typeof o.CreatedAt === "string" ? o.CreatedAt : typeof o.createdAt === "string" ? o.createdAt : "";
+  return { id, email, roleId, roleName, status, resolvedStatus, expiresAt, sendCount, lastSentAt, createdAt };
+}
+
+function normalizeAccountInvitesResponse(data: unknown): AccountInviteRow[] {
+  if (Array.isArray(data)) {
+    const out: AccountInviteRow[] = [];
+    for (const item of data) {
+      const n = normalizeAccountInviteRow(item);
+      if (n) out.push(n);
+    }
+    return out;
+  }
+  if (typeof data === "object" && data !== null) {
+    const obj = data as Record<string, unknown>;
+    const arr = obj.rows ?? obj.invites;
+    if (Array.isArray(arr)) {
+      const out: AccountInviteRow[] = [];
+      for (const item of arr) {
+        const n = normalizeAccountInviteRow(item);
+        if (n) out.push(n);
+      }
+      return out;
+    }
+  }
+  return [];
+}
+
+const isProd = process.env.NODE_ENV === "production";
+
 export default function UsersPage() {
   const { user } = useSession();
   const isAdmin = user?.role?.toLowerCase() === "admin";
@@ -82,6 +164,191 @@ export default function UsersPage() {
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<UserRow | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteRoles, setInviteRoles] = useState<RoleOption[]>([]);
+  const [inviteRolesLoading, setInviteRolesLoading] = useState(false);
+  const [inviteRolesError, setInviteRolesError] = useState<string | null>(null);
+  const inviteRolesLoadedRef = useRef(false);
+  const inviteRolesInFlightRef = useRef(false);
+
+  const [inviteScope, setInviteScope] = useState<InviteScope>("pending");
+  const [accountInvites, setAccountInvites] = useState<AccountInviteRow[]>([]);
+  const [accountInvitesLoading, setAccountInvitesLoading] = useState(false);
+  const [accountInvitesError, setAccountInvitesError] = useState<string | null>(null);
+  const accountInvitesInFlightRef = useRef(false);
+  const accountInvitesFetchedKeyRef = useRef<string | null>(null);
+
+  const fetchAccountInvites = useCallback(() => {
+    if (accountInvitesInFlightRef.current) return;
+    accountInvitesInFlightRef.current = true;
+    setAccountInvitesLoading(true);
+    setAccountInvitesError(null);
+    const params = new URLSearchParams({
+      scope: inviteScope,
+      ts: String(Date.now()),
+    });
+    const url = `/api/backend/invites?${params.toString()}`;
+    fetch(url, {
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    })
+      .then(async (r) => {
+        if (r.status === 304) {
+          return;
+        }
+        const j = await r.json().catch(() => ({} as Record<string, unknown>));
+        if (!r.ok) {
+          const msg = (j as { error?: string; message?: string }).error ?? (j as { error?: string; message?: string }).message ?? "Failed to load invites";
+          setAccountInvitesError(String(msg));
+          toast.error(String(msg));
+          setAccountInvites([]);
+          return;
+        }
+        setAccountInvites(normalizeAccountInvitesResponse(j));
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : "Failed to load invites";
+        setAccountInvitesError(msg);
+        toast.error(msg);
+        setAccountInvites([]);
+      })
+      .finally(() => {
+        accountInvitesInFlightRef.current = false;
+        setAccountInvitesLoading(false);
+      });
+  }, [inviteScope]);
+
+  const resendInvite = useCallback(
+    (inviteId: number) => {
+      if (accountInvitesLoading) return;
+      fetch(`/api/backend/invites/${inviteId}/resend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: "{}",
+      })
+        .then(async (r) => {
+          const j = await r.json().catch(() => ({} as Record<string, unknown>));
+          const msg = (j as { error?: string; message?: string }).error ?? (j as { error?: string; message?: string }).message;
+          if (r.ok) {
+            toast.success("Invite resent");
+            fetchAccountInvites();
+          } else {
+            toast.error(msg ?? "Failed to resend invite");
+          }
+        })
+        .catch(() => toast.error("Failed to resend invite"));
+    },
+    [accountInvitesLoading, fetchAccountInvites]
+  );
+
+  const revokeInvite = useCallback(
+    (inviteId: number) => {
+      if (accountInvitesLoading) return;
+      if (!window.confirm("Revoke this invite?")) return;
+      fetch(`/api/backend/invites/${inviteId}/revoke`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: "{}",
+      })
+        .then(async (r) => {
+          const j = await r.json().catch(() => ({} as Record<string, unknown>));
+          const msg = (j as { error?: string; message?: string }).error ?? (j as { error?: string; message?: string }).message;
+          if (r.ok) {
+            toast.success("Invite revoked");
+            fetchAccountInvites();
+          } else {
+            toast.error(msg ?? "Failed to revoke invite");
+          }
+        })
+        .catch(() => toast.error("Failed to revoke invite"));
+    },
+    [accountInvitesLoading, fetchAccountInvites]
+  );
+
+  const copyDevAcceptLink = useCallback((inviteId: number) => {
+    if (accountInvitesLoading) return;
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+      toast.error("Clipboard unavailable");
+      return;
+    }
+    fetch(`/api/backend/invites/${inviteId}/dev-accept-link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: "{}",
+    })
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({} as Record<string, unknown>));
+        const msg = (j as { error?: string; message?: string }).error ?? (j as { error?: string; message?: string }).message;
+        if (r.ok) {
+          const acceptUrl = typeof (j as { acceptUrl?: unknown }).acceptUrl === "string" ? (j as { acceptUrl: string }).acceptUrl : "";
+          if (!acceptUrl) {
+            toast.error(msg ?? "Failed to copy accept link");
+            return;
+          }
+          await navigator.clipboard.writeText(acceptUrl);
+          toast.success("Accept link copied to clipboard");
+        } else {
+          toast.error(msg ?? "Failed to copy accept link");
+        }
+      })
+      .catch(() => toast.error("Failed to copy accept link"));
+  }, [accountInvitesLoading]);
+
+  useEffect(() => {
+    const userId = user?.userId ?? null;
+    if (userId === null) return;
+    const key = `${userId}:${inviteScope}`;
+    if (accountInvitesFetchedKeyRef.current === key) return;
+    accountInvitesFetchedKeyRef.current = key;
+    void fetchAccountInvites();
+  }, [user?.userId, inviteScope, fetchAccountInvites]);
+
+  const fetchInviteRoles = useCallback(() => {
+    if (inviteRolesLoadedRef.current) return;
+    if (inviteRolesInFlightRef.current) return;
+    inviteRolesInFlightRef.current = true;
+    setInviteRolesLoading(true);
+    setInviteRolesError(null);
+    const url = `/api/backend/roles?ts=${Date.now()}`;
+    fetch(url, {
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    })
+      .then((r) => {
+        if (r.status === 304) return null;
+        if (!r.ok) throw new Error(`Roles fetch failed: ${r.status}`);
+        return r.json();
+      })
+      .then((data: unknown) => {
+        if (data === null) return;
+        setInviteRoles(normalizeRolesResponse(data));
+        inviteRolesLoadedRef.current = true;
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : "Failed to load roles";
+        setInviteRolesError(msg);
+        toast.error(msg);
+      })
+      .finally(() => {
+        inviteRolesInFlightRef.current = false;
+        setInviteRolesLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!showInviteModal) return;
+    void fetchInviteRoles();
+  }, [showInviteModal, fetchInviteRoles]);
+
+  const retryInviteRoles = useCallback(() => {
+    inviteRolesLoadedRef.current = false;
+    void fetchInviteRoles();
+  }, [fetchInviteRoles]);
 
   return (
     <div className="p-6 space-y-4">
@@ -111,7 +378,121 @@ export default function UsersPage() {
         >
           + New User
         </button>
+        <button
+          onClick={() => setShowInviteModal(true)}
+          className="border rounded px-3 py-2"
+        >
+          Invite User
+        </button>
       </div>
+
+      <section className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-medium">Invites</h3>
+          <div className="flex items-center gap-2">
+            <select
+              className="border rounded px-3 py-2 text-sm"
+              value={inviteScope}
+              onChange={(e) => setInviteScope(e.target.value as InviteScope)}
+              disabled={accountInvitesLoading}
+            >
+              <option value="pending">Pending</option>
+              <option value="all">All</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => void fetchAccountInvites()}
+              className="border rounded px-3 py-2 text-sm disabled:opacity-50"
+              disabled={accountInvitesLoading}
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+        {accountInvitesLoading ? (
+          <p className="text-sm text-slate-500">Loading invites…</p>
+        ) : accountInvitesError ? (
+          <div className="space-y-2">
+            <p className="text-sm text-red-600">{accountInvitesError}</p>
+            <button
+              type="button"
+              onClick={() => void fetchAccountInvites()}
+              className="border rounded px-2 py-1 text-sm disabled:opacity-50"
+              disabled={accountInvitesLoading}
+            >
+              Refresh
+            </button>
+          </div>
+        ) : accountInvites.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            {inviteScope === "pending" ? "No pending invites." : "No invites."}
+          </p>
+        ) : (
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-left border-b">
+                <th className="py-2">Email</th>
+                <th className="py-2">Role</th>
+                <th className="py-2">Status</th>
+                <th className="py-2">Expires At</th>
+                <th className="py-2">Send Count</th>
+                <th className="py-2">Last Sent</th>
+                <th className="py-2">Created</th>
+                <th className="py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accountInvites.map((inv) => (
+                <tr key={inv.id} className="border-b">
+                  <td className="py-2">{inv.email}</td>
+                  <td className="py-2">{inv.roleName ?? (inv.roleId != null ? `Role #${inv.roleId}` : "—")}</td>
+                  <td className="py-2">
+                    {inv.resolvedStatus === inv.status ? inv.resolvedStatus : `${inv.resolvedStatus} (${inv.status})`}
+                  </td>
+                  <td className="py-2">{inv.expiresAt ?? "—"}</td>
+                  <td className="py-2">{inv.sendCount}</td>
+                  <td className="py-2">{inv.lastSentAt ?? "—"}</td>
+                  <td className="py-2">{inv.createdAt || "—"}</td>
+                  <td className="py-2">
+                    {inv.status === "Pending" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="mr-2 underline disabled:opacity-50"
+                          onClick={() => resendInvite(inv.id)}
+                          disabled={accountInvitesLoading}
+                        >
+                          Resend
+                        </button>
+                        <button
+                          type="button"
+                          className="text-red-600 underline disabled:opacity-50"
+                          onClick={() => revokeInvite(inv.id)}
+                          disabled={accountInvitesLoading}
+                        >
+                          Revoke
+                        </button>
+                        {!isProd && inv.resolvedStatus === "Pending" && (
+                          <button
+                            type="button"
+                            className="ml-2 underline disabled:opacity-50"
+                            onClick={() => copyDevAcceptLink(inv.id)}
+                            disabled={accountInvitesLoading}
+                          >
+                            Copy link
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
 
       {loading ? (
         <div>Loading…</div>
@@ -219,6 +600,16 @@ export default function UsersPage() {
         <ResetPasswordModal
           user={resetPasswordUser}
           onClose={() => setResetPasswordUser(null)}
+        />
+      )}
+
+      {showInviteModal && (
+        <InviteModal
+          onClose={() => setShowInviteModal(false)}
+          roles={inviteRoles}
+          rolesLoading={inviteRolesLoading}
+          rolesError={inviteRolesError}
+          onRetryRoles={retryInviteRoles}
         />
       )}
     </div>
@@ -368,6 +759,168 @@ function UserForm(props: Readonly<{
           </button>
           <button className="px-3 py-2 border rounded" onClick={submit}>
             {isEdit ? "Save" : "Create"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type RoleOption = { RoleID: number; RoleName: string | null };
+
+function isPascalRole(x: unknown): x is { RoleID: number; RoleName: string | null } {
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    "RoleID" in x &&
+    typeof (x as { RoleID: unknown }).RoleID === "number"
+  );
+}
+
+function isCamelRole(x: unknown): x is { roleId: number; roleName: string | null } {
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    "roleId" in x &&
+    typeof (x as { roleId: unknown }).roleId === "number"
+  );
+}
+
+function normalizeRole(raw: unknown): RoleOption | null {
+  if (isPascalRole(raw)) return { RoleID: raw.RoleID, RoleName: raw.RoleName ?? null };
+  if (isCamelRole(raw)) return { RoleID: raw.roleId, RoleName: raw.roleName ?? null };
+  return null;
+}
+
+function normalizeRolesResponse(data: unknown): RoleOption[] {
+  if (Array.isArray(data)) {
+    const out: RoleOption[] = [];
+    for (const item of data) {
+      const n = normalizeRole(item);
+      if (n) out.push(n);
+    }
+    return out;
+  }
+  if (typeof data === "object" && data !== null) {
+    const obj = data as Record<string, unknown>;
+    const arr = obj.roles ?? obj.rows ?? obj.data;
+    if (Array.isArray(arr)) {
+      return arr
+        .map((item: unknown) => normalizeRole(item))
+        .filter((n): n is RoleOption => n !== null);
+    }
+  }
+  return [];
+}
+
+function InviteModal(props: Readonly<{
+  onClose: () => void;
+  roles: RoleOption[];
+  rolesLoading: boolean;
+  rolesError: string | null;
+  onRetryRoles: () => void;
+}>) {
+  const { onClose, roles, rolesLoading, rolesError, onRetryRoles } = props;
+  const [email, setEmail] = useState("");
+  const [roleId, setRoleId] = useState<number | "">("");
+  const [submitLoading, setSubmitLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      toast.error("Email is required");
+      return;
+    }
+    const rId = roleId === "" ? null : Number(roleId);
+    if (rId === null || Number.isNaN(rId)) {
+      toast.error("Role is required");
+      return;
+    }
+    setSubmitLoading(true);
+    try {
+      const r = await fetch("/api/backend/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: trimmedEmail, roleId: rId }),
+      });
+      const j = await r.json().catch(() => ({} as Record<string, unknown>));
+      const serverMessage = (j as { error?: string; message?: string }).error ?? (j as { error?: string; message?: string }).message;
+      const resent = (j as { resent?: boolean }).resent === true;
+      if (r.status === 200 || r.status === 201) {
+        toast.success(resent ? "Invite resent" : "Invite sent");
+        setEmail("");
+        setRoleId("");
+        onClose();
+        return;
+      }
+      toast.error(serverMessage ?? "Failed to send invite");
+    } catch {
+      toast.error("Failed to send invite");
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-xl space-y-3">
+        <h2 className="text-xl font-semibold">Invite User</h2>
+        {rolesLoading ? (
+          <p className="text-sm text-slate-500">Loading roles…</p>
+        ) : rolesError ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm text-red-600">{rolesError}</p>
+            <button
+              type="button"
+              className="text-sm underline disabled:opacity-50"
+              onClick={onRetryRoles}
+              disabled={rolesLoading}
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+        <div className="space-y-3">
+          <label className="flex flex-col">
+            Email <span className="text-red-500">*</span>
+            <input
+              type="email"
+              className="border rounded px-2 py-1"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </label>
+          <label className="flex flex-col">
+            Role <span className="text-red-500">*</span>
+            <select
+              className="border rounded px-2 py-1"
+              value={roleId === "" ? "" : String(roleId)}
+              onChange={(e) => setRoleId(e.target.value === "" ? "" : Number(e.target.value))}
+              required
+              disabled={rolesLoading}
+            >
+              <option value="">Select role</option>
+              {roles.map((role) => (
+                <option key={role.RoleID} value={role.RoleID}>
+                  {role.RoleName ?? `Role ${role.RoleID}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="px-3 py-2 border rounded" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="px-3 py-2 border rounded"
+            onClick={handleSubmit}
+            disabled={rolesLoading || roles.length === 0 || submitLoading}
+          >
+            {submitLoading ? "Sending…" : "Send Invite"}
           </button>
         </div>
       </div>

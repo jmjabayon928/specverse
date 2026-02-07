@@ -96,6 +96,7 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
     next()
   },
   requirePermission: (_permissionKey: string) => (_req: Request, _res: Response, next: NextFunction) => next(),
+  verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
 }))
 
 jest.mock('../../src/backend/config/db', () => {

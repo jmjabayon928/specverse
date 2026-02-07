@@ -91,14 +91,20 @@ beforeEach(() => {
 
 describe('GET /api/backend/account-members', () => {
   it('requires ACCOUNT_VIEW and returns members scoped to active account', async () => {
+    getAccountContextForUser.mockResolvedValueOnce({
+      accountId: 1,
+      roleId: 2,
+      roleName: 'Viewer',
+      permissions: [],
+    })
     const token = makeToken({
       userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
+      roleId: 2,
+      role: 'Viewer',
+      email: 'viewer@example.com',
+      name: 'Viewer',
       profilePic: null,
-      permissions: ['ACCOUNT_VIEW'],
+      permissions: [],
     })
 
     const res = await request(app)
@@ -112,6 +118,12 @@ describe('GET /api/backend/account-members', () => {
   })
 
   it('returns 403 when user lacks ACCOUNT_VIEW', async () => {
+    getAccountContextForUser.mockResolvedValueOnce({
+      accountId: 1,
+      roleId: 2,
+      roleName: 'Engineer',
+      permissions: [],
+    })
     checkUserPermission.mockResolvedValueOnce(false)
     const token = makeToken({
       userId: 1,

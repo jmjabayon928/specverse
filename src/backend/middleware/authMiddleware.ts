@@ -185,6 +185,46 @@ async function attachAccountContext(req: Request): Promise<void> {
   throw new AppError('No active account membership', 403)
 }
 
+/** Validates JWT and sets req.user; does NOT attach account context. Use for routes that need a signed-in user without account scope (e.g. invite accept). */
+export const verifyTokenOnly: RequestHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  if (req.skipAuth) {
+    next()
+    return
+  }
+
+  const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
+  if (!token) {
+    next(new AppError('Unauthorized - No token', 401))
+    return
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload
+    if (!decoded.userId) {
+      next(new AppError('Invalid token payload', 403))
+      return
+    }
+    req.user = {
+      userId: decoded.userId,
+      roleId: decoded.roleId,
+      role: decoded.role ?? undefined,
+      email: decoded.email,
+      name: decoded.name,
+      profilePic: decoded.profilePic ?? undefined,
+      permissions: decoded.permissions ?? [],
+      accountId: decoded.accountId,
+      isSuperadmin: decoded.isSuperadmin,
+    }
+    next()
+  } catch (error) {
+    if (error instanceof AppError) {
+      next(error)
+      return
+    }
+    next(new AppError('Invalid or expired session', 403))
+  }
+}
+
 export const verifyToken: RequestHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   if (req.skipAuth) {
     console.log('✅ Skipping auth for test')
@@ -242,12 +282,25 @@ export const requirePermission = (permissionKey: string): RequestHandler => {
         return
       }
 
+      const roleName =
+        typeof req.user.role === 'string' ? (req.user.role ?? '').trim().toLowerCase() : ''
+      const isAccountAdmin = req.user.roleId === 1 || roleName === 'admin'
+      const isPrivileged = isAccountAdmin || req.user.isSuperadmin === true
+      if (isPrivileged) {
+        next()
+        return
+      }
+
       if (!req.user.accountId) {
         next(new AppError('Missing account context', 403))
         return
       }
 
-      const hasPermission = await checkUserPermission(req.user.userId, req.user.accountId, permissionKey)
+      const hasPermission = await checkUserPermission(
+        req.user.userId,
+        req.user.accountId,
+        permissionKey
+      )
 
       if (!hasPermission) {
         next(new AppError('Permission denied', 403))

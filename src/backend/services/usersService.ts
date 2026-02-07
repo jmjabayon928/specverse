@@ -211,6 +211,7 @@ export const createUser = async (
   input: CreateUserInput
 ): Promise<number> => {
   const hashed = await hashPassword(input.Password)
+  const now = new Date()
 
   try {
     const pool = await poolPromise
@@ -228,6 +229,8 @@ export const createUser = async (
         sql.Bit,
         typeof input.IsActive === 'boolean' ? input.IsActive : true
       )
+      .input('CreatedAt', sql.DateTime2(0), now)
+      .input('UpdatedAt', sql.DateTime2(0), now)
       .query<{ UserID: number }>(`
         INSERT INTO dbo.Users (
           FirstName,
@@ -236,7 +239,9 @@ export const createUser = async (
           PasswordHash,
           RoleID,
           ProfilePic,
-          IsActive
+          IsActive,
+          CreatedAt,
+          UpdatedAt
         )
         OUTPUT inserted.UserID
         VALUES (
@@ -246,7 +251,9 @@ export const createUser = async (
           @PasswordHash,
           @RoleID,
           @ProfilePic,
-          @IsActive
+          @IsActive,
+          @CreatedAt,
+          @UpdatedAt
         );
       `)
 

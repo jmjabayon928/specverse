@@ -4,6 +4,7 @@
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import express from 'express'
+import type { Request, Response, NextFunction } from 'express'
 import cookieParser from 'cookie-parser'
 import { AppError } from '../../src/backend/errors/AppError'
 import { PERMISSIONS } from '../../src/constants/permissions'
@@ -92,6 +93,7 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
   },
   requirePermission: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   optionalVerifyToken: (_req: unknown, _res: unknown, next: () => void) => next(),
+  verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
 }))
 
 function toHttpError(err: unknown): { statusCode: number; message: string } {
