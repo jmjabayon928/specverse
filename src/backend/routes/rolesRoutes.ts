@@ -1,6 +1,7 @@
 // src/backend/routes/rolesRoutes.ts
 import { Router } from 'express'
-import { verifyToken } from '../middleware/authMiddleware'
+import { verifyToken, requirePermission } from '../middleware/authMiddleware'
+import { PERMISSIONS } from '@/constants/permissions'
 import {
   listRoles,
   getRole,
@@ -15,18 +16,18 @@ import {
 
 const router = Router()
 
-// All role routes require a valid session
-router.get('/', verifyToken, listRoles)
-router.get('/:id', verifyToken, getRole)
+// All role routes require a valid session; READ = ACCOUNT_VIEW, MUTATE = ACCOUNT_ROLE_MANAGE
+router.get('/', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_VIEW), listRoles)
+router.get('/:id', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_VIEW), getRole)
 
-router.get('/:id/permissions', verifyToken, getRolePermissions)
-router.get('/:id/permissions/available', verifyToken, getRoleAvailablePermissions)
+router.get('/:id/permissions', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_VIEW), getRolePermissions)
+router.get('/:id/permissions/available', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_VIEW), getRoleAvailablePermissions)
 
-router.post('/:id/permissions', verifyToken, addPermissionToRole)
-router.delete('/:id/permissions/:permissionId', verifyToken, removePermissionFromRole)
+router.post('/:id/permissions', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_ROLE_MANAGE), addPermissionToRole)
+router.delete('/:id/permissions/:permissionId', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_ROLE_MANAGE), removePermissionFromRole)
 
-router.post('/', verifyToken, createRole)
-router.patch('/:id', verifyToken, updateRole)
-router.delete('/:id', verifyToken, deleteRole)
+router.post('/', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_ROLE_MANAGE), createRole)
+router.patch('/:id', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_ROLE_MANAGE), updateRole)
+router.delete('/:id', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_ROLE_MANAGE), deleteRole)
 
 export default router
