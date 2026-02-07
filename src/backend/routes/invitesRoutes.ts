@@ -6,6 +6,7 @@ import {
   list,
   resend,
   revoke,
+  devAcceptLinkHandler,
   byToken,
   accept,
   acceptPublic,
@@ -30,6 +31,7 @@ router.post('/decline', optionalVerifyToken, decline)
 // All below: verifyToken + account context + ACCOUNT_USER_MANAGE
 router.get('/', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_USER_MANAGE), list)
 router.post('/', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_USER_MANAGE), create)
+router.post('/:id/dev-accept-link', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_USER_MANAGE), devAcceptLinkHandler)
 router.post('/:id/resend', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_USER_MANAGE), resend)
 router.post('/:id/revoke', verifyToken, requirePermission(PERMISSIONS.ACCOUNT_USER_MANAGE), revoke)
 

@@ -5,6 +5,7 @@ import {
   listInvites,
   resendInvite,
   revokeInvite,
+  devAcceptLink,
   getByToken,
   acceptInvite,
   acceptInvitePublic,
@@ -96,6 +97,48 @@ export const list: RequestHandler = async (
     const invites = await listInvites(accountId)
     res.status(200).json({ invites })
   } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * POST /api/backend/invites/:id/dev-accept-link — DEV-only: rotate token, return accept URL (no email). 404 when NODE_ENV === 'production'.
+ */
+export const devAcceptLinkHandler: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  if (process.env.NODE_ENV === 'production') {
+    res.status(404).json({ message: 'Not found' })
+    return
+  }
+
+  const accountId = req.user?.accountId
+  if (typeof accountId !== 'number' || !Number.isFinite(accountId)) {
+    res.status(403).json({ message: 'Missing account context' })
+    return
+  }
+
+  const inviteId = parseIntParam(req.params.id)
+  if (inviteId === undefined || inviteId <= 0) {
+    res.status(404).json({ message: 'Invite not found' })
+    return
+  }
+
+  try {
+    const result = await devAcceptLink(accountId, inviteId)
+    res.status(200).json(result)
+  } catch (err) {
+    const code = (err as Error & { statusCode?: number }).statusCode
+    if (code === 404) {
+      res.status(404).json({ message: (err as Error).message })
+      return
+    }
+    if (code === 410) {
+      res.status(410).json({ message: (err as Error).message })
+      return
+    }
     next(err)
   }
 }

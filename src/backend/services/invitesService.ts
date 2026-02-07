@@ -266,6 +266,41 @@ export async function resendInvite(
   return toInviteDto(found)
 }
 
+export type DevAcceptLinkResult = {
+  acceptUrl: string
+}
+
+/**
+ * DEV-only: rotate invite token and return accept URL (no email). Call only when NODE_ENV !== 'production'.
+ */
+export async function devAcceptLink(accountId: number, inviteId: number): Promise<DevAcceptLinkResult> {
+  const row = await getByIdAndAccount(inviteId, accountId)
+  if (!row) {
+    const err = new Error('Invite not found')
+    ;(err as Error & { statusCode?: number }).statusCode = 404
+    throw err
+  }
+  if (row.status !== 'Pending') {
+    const err = new Error('Invite is no longer valid')
+    ;(err as Error & { statusCode?: number }).statusCode = 410
+    throw err
+  }
+  const now = new Date()
+  if (row.expiresAt < now) {
+    const err = new Error('Invite has expired')
+    ;(err as Error & { statusCode?: number }).statusCode = 410
+    throw err
+  }
+
+  const token = generateInviteToken()
+  const tokenHash = inviteTokenSha256Hex(token)
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS)
+  await updateTokenAndIncrementSend(inviteId, tokenHash, expiresAt)
+  const acceptUrl = `${INVITE_BASE_URL}/invite/accept?token=${encodeURIComponent(token)}`
+  return { acceptUrl }
+}
+
 /**
  * Revoke invite. Invite must be Pending and in account.
  */
