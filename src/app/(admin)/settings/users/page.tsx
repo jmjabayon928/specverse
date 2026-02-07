@@ -72,6 +72,8 @@ function normalizePendingInvitesResponse(data: unknown): PendingInviteRow[] {
   return [];
 }
 
+const isProd = process.env.NODE_ENV === "production";
+
 export default function UsersPage() {
   const { user } = useSession();
   const isAdmin = user?.role?.toLowerCase() === "admin";
@@ -233,6 +235,36 @@ export default function UsersPage() {
     [pendingInvitesLoading, fetchPendingInvites]
   );
 
+  const copyDevAcceptLink = useCallback((inviteId: number) => {
+    if (pendingInvitesLoading) return;
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+      toast.error("Clipboard unavailable");
+      return;
+    }
+    fetch(`/api/backend/invites/${inviteId}/dev-accept-link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: "{}",
+    })
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({} as Record<string, unknown>));
+        const msg = (j as { error?: string; message?: string }).error ?? (j as { error?: string; message?: string }).message;
+        if (r.ok) {
+          const acceptUrl = typeof (j as { acceptUrl?: unknown }).acceptUrl === "string" ? (j as { acceptUrl: string }).acceptUrl : "";
+          if (!acceptUrl) {
+            toast.error(msg ?? "Failed to copy accept link");
+            return;
+          }
+          await navigator.clipboard.writeText(acceptUrl);
+          toast.success("Accept link copied to clipboard");
+        } else {
+          toast.error(msg ?? "Failed to copy accept link");
+        }
+      })
+      .catch(() => toast.error("Failed to copy accept link"));
+  }, [pendingInvitesLoading]);
+
   useEffect(() => {
     const userId = user?.userId ?? null;
     if (userId === null) return;
@@ -391,6 +423,16 @@ export default function UsersPage() {
                         >
                           Revoke
                         </button>
+                        {!isProd && (
+                          <button
+                            type="button"
+                            className="ml-2 underline disabled:opacity-50"
+                            onClick={() => copyDevAcceptLink(inv.id)}
+                            disabled={pendingInvitesLoading}
+                          >
+                            Copy link
+                          </button>
+                        )}
                       </>
                     ) : (
                       "—"
