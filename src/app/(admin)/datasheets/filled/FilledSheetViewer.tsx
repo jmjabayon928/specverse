@@ -11,6 +11,7 @@ import OtherConversionsCell from "@/utils/OtherConversionsCell";
 import ChangeLogTable from "@/components/datasheets/ChangeLogTable";
 import VerificationRecordsList from "@/components/datasheets/VerificationRecordsList";
 import RatingsBlocksList from "@/components/datasheets/RatingsBlocksList";
+import InstrumentsLoopsSection from "@/components/datasheets/InstrumentsLoopsSection";
 import { computeCompleteness, getSubsheetKey } from "@/utils/datasheetCompleteness";
 import type { SubsheetCompleteness } from "@/utils/datasheetCompleteness";
 import SectionCompletenessSummary from "@/components/datasheets/SectionCompletenessSummary";
@@ -582,6 +583,17 @@ const FilledSheetViewer: React.FC<Props> = ({
             sheetStatus={sheet.status}
             isRevision={isRevision}
           />
+        </fieldset>
+      )}
+
+      {/* Instruments & Loops */}
+      {sheetId != null && (
+        <fieldset className="border rounded p-4">
+          <div className="text-xl font-semibold mb-2">Instruments &amp; Loops</div>
+          <div className="text-sm text-gray-600 mb-4">
+            Instruments linked to this datasheet and their loop context.
+          </div>
+          <InstrumentsLoopsSection sheetId={sheetId} readOnly={isRevision} />
         </fieldset>
       )}
 

@@ -41,7 +41,10 @@ import exportJobsRoutes from './routes/exportJobsRoutes'
 import verificationRecordsRoutes from './routes/verificationRecordsRoutes'
 import datasheetVerificationRecordsRoutes from './routes/datasheetVerificationRecordsRoutes'
 import datasheetRatingsRoutes from './routes/datasheetRatingsRoutes'
+import datasheetInstrumentsRoutes from './routes/datasheetInstrumentsRoutes'
 import ratingsRoutes from './routes/ratingsRoutes'
+import instrumentsRoutes from './routes/instrumentsRoutes'
+import instrumentLoopsRoutes from './routes/instrumentLoopsRoutes'
 import { errorHandler } from './middleware/errorHandler'
 
 const app: Application = express()
@@ -73,6 +76,7 @@ app.use('/api/backend/settings/suppliers', suppliersRoutes)
 app.use('/api/categories', categoriesRoutes)
 app.use('/api/backend/datasheets', datasheetVerificationRecordsRoutes)
 app.use('/api/backend/datasheets', datasheetRatingsRoutes)
+app.use('/api/backend/datasheets', datasheetInstrumentsRoutes)
 app.use('/api/backend/layouts', layoutRoutes)
 app.use('/api/backend/inventory', inventoryRoutes)
 app.use('/api/backend/estimation', estimationRoutes)
@@ -99,6 +103,8 @@ app.use('/api/backend/audit-logs', auditLogsRoutes)
 app.use('/api/backend/exports/jobs', exportJobsRoutes)
 app.use('/api/backend/verification-records', verificationRecordsRoutes)
 app.use('/api/backend/ratings', ratingsRoutes)
+app.use('/api/backend/instruments', instrumentsRoutes)
+app.use('/api/backend/instrument-loops', instrumentLoopsRoutes)
 
 // ─────────────────────────────────────────────
 // Dev-only routes inspector
