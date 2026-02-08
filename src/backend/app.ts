@@ -45,6 +45,8 @@ import datasheetInstrumentsRoutes from './routes/datasheetInstrumentsRoutes'
 import ratingsRoutes from './routes/ratingsRoutes'
 import instrumentsRoutes from './routes/instrumentsRoutes'
 import instrumentLoopsRoutes from './routes/instrumentLoopsRoutes'
+import schedulesRoutes from './routes/schedulesRoutes'
+import assetsRoutes from './routes/assetsRoutes'
 import { errorHandler } from './middleware/errorHandler'
 
 const app: Application = express()
@@ -105,6 +107,8 @@ app.use('/api/backend/verification-records', verificationRecordsRoutes)
 app.use('/api/backend/ratings', ratingsRoutes)
 app.use('/api/backend/instruments', instrumentsRoutes)
 app.use('/api/backend/instrument-loops', instrumentLoopsRoutes)
+app.use('/api/backend/schedules', schedulesRoutes)
+app.use('/api/backend/assets', assetsRoutes)
 
 // ─────────────────────────────────────────────
 // Dev-only routes inspector
