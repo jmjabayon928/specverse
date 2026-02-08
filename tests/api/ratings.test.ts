@@ -1,0 +1,427 @@
+// tests/api/ratings.test.ts
+import request from 'supertest'
+import type { Request, Response, NextFunction } from 'express'
+import { AppError } from '../../src/backend/errors/AppError'
+import app from '../../src/backend/app'
+import { PERMISSIONS } from '../../src/constants/permissions'
+
+let currentTestAccountId = 1
+let currentTestUserIsAdmin = true
+
+jest.mock('../../src/backend/middleware/authMiddleware', () => ({
+  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
+    req.user = {
+      userId: 1,
+      accountId: currentTestAccountId,
+      role: currentTestUserIsAdmin ? 'Admin' : 'Viewer',
+      roleId: currentTestUserIsAdmin ? 1 : 2,
+      isSuperadmin: false,
+      permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT],
+    }
+    next()
+  },
+  requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+  optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
+  verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
+}))
+
+jest.mock('../../src/backend/database/permissionQueries', () => ({
+  checkUserPermission: jest.fn().mockResolvedValue(true),
+}))
+
+const mockListForSheet = jest.fn()
+const mockGetById = jest.fn()
+const mockCreate = jest.fn()
+const mockUpdate = jest.fn()
+const mockRemove = jest.fn()
+const mockLock = jest.fn()
+const mockUnlock = jest.fn()
+
+jest.mock('../../src/backend/services/ratingsService', () => ({
+  listForSheet: (...args: unknown[]) => mockListForSheet(...args),
+  getById: (...args: unknown[]) => mockGetById(...args),
+  create: (...args: unknown[]) => mockCreate(...args),
+  update: (...args: unknown[]) => mockUpdate(...args),
+  remove: (...args: unknown[]) => mockRemove(...args),
+  lock: (...args: unknown[]) => mockLock(...args),
+  unlock: (...args: unknown[]) => mockUnlock(...args),
+}))
+
+describe('Ratings API', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    currentTestAccountId = 1
+    currentTestUserIsAdmin = true
+  })
+
+  describe('GET /api/backend/datasheets/:sheetId/ratings', () => {
+    it('returns list of blocks for sheet', async () => {
+      mockListForSheet.mockResolvedValue([
+        {
+          ratingsBlockId: 10,
+          sheetId: 5,
+          blockType: 'Nameplate',
+          lockedAt: null,
+          lockedBy: null,
+          updatedAt: new Date('2025-01-01'),
+        },
+      ])
+
+      const res = await request(app).get('/api/backend/datasheets/5/ratings')
+
+      expect(res.status).toBe(200)
+      expect(res.body).toHaveLength(1)
+      expect(res.body[0].ratingsBlockId).toBe(10)
+      expect(res.body[0].sheetId).toBe(5)
+      expect(mockListForSheet).toHaveBeenCalledWith(1, 5)
+    })
+
+    it('returns 400 for invalid sheet id', async () => {
+      const res = await request(app).get('/api/backend/datasheets/abc/ratings')
+
+      expect(res.status).toBe(400)
+      expect(mockListForSheet).not.toHaveBeenCalled()
+    })
+
+    it('returns 404 when sheet not found', async () => {
+      mockListForSheet.mockRejectedValue(new AppError('Sheet not found or does not belong to account', 404))
+
+      const res = await request(app).get('/api/backend/datasheets/999/ratings')
+
+      expect(res.status).toBe(404)
+      expect(res.body?.error).toMatch(/not found|belong/i)
+    })
+  })
+
+  describe('GET /api/backend/ratings/:id', () => {
+    it('returns block with entries', async () => {
+      mockGetById.mockResolvedValue({
+        block: {
+          ratingsBlockId: 10,
+          sheetId: 5,
+          blockType: 'Nameplate',
+          sourceValueSetId: null,
+          lockedAt: null,
+          lockedBy: null,
+          notes: null,
+          createdAt: new Date('2025-01-01'),
+          updatedAt: new Date('2025-01-01'),
+        },
+        entries: [
+          { entryId: 1, ratingsBlockId: 10, key: 'Manufacturer', value: 'Acme', uom: null, orderIndex: 0 },
+        ],
+      })
+
+      const res = await request(app).get('/api/backend/ratings/10')
+
+      expect(res.status).toBe(200)
+      expect(res.body.block.ratingsBlockId).toBe(10)
+      expect(res.body.entries).toHaveLength(1)
+      expect(res.body.entries[0].key).toBe('Manufacturer')
+      expect(mockGetById).toHaveBeenCalledWith(1, 10)
+    })
+
+    it('returns 404 when block not found', async () => {
+      mockGetById.mockResolvedValue(null)
+
+      const res = await request(app).get('/api/backend/ratings/999')
+
+      expect(res.status).toBe(404)
+      expect(res.body?.error).toMatch(/not found/i)
+    })
+
+    it('returns 400 for invalid block id', async () => {
+      const res = await request(app).get('/api/backend/ratings/invalid')
+
+      expect(res.status).toBe(400)
+      expect(mockGetById).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('POST /api/backend/ratings', () => {
+    it('creates block with entries', async () => {
+      const created = {
+        ratingsBlockId: 20,
+        sheetId: 5,
+        blockType: 'Nameplate',
+        sourceValueSetId: null,
+        lockedAt: null,
+        lockedBy: null,
+        notes: 'Test',
+        createdAt: new Date('2025-01-01'),
+        updatedAt: new Date('2025-01-01'),
+      }
+      mockCreate.mockResolvedValue(created)
+
+      const res = await request(app)
+        .post('/api/backend/ratings')
+        .send({
+          sheetId: 5,
+          blockType: 'Nameplate',
+          notes: 'Test',
+          entries: [{ key: 'Manufacturer', value: 'Acme', orderIndex: 0 }],
+        })
+
+      expect(res.status).toBe(201)
+      expect(res.body.ratingsBlockId).toBe(20)
+      expect(mockCreate).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          sheetId: 5,
+          blockType: 'Nameplate',
+          notes: 'Test',
+          entries: expect.arrayContaining([expect.objectContaining({ key: 'Manufacturer', value: 'Acme' })]),
+        }),
+        expect.objectContaining({ userId: 1 })
+      )
+    })
+
+    it('rejects invalid payload', async () => {
+      const res = await request(app)
+        .post('/api/backend/ratings')
+        .send({})
+
+      expect(res.status).toBe(400)
+      expect(res.body?.error).toMatch(/Invalid ratings payload/i)
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 when too many entries', async () => {
+      const entries = Array.from({ length: 201 }, (_, i) => ({ key: `k${i}`, value: 'v' }))
+
+      const res = await request(app)
+        .post('/api/backend/ratings')
+        .send({
+          sheetId: 5,
+          blockType: 'Nameplate',
+          entries,
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body?.error).toMatch(/Invalid ratings payload/i)
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 when key too long', async () => {
+      const res = await request(app)
+        .post('/api/backend/ratings')
+        .send({
+          sheetId: 5,
+          blockType: 'Nameplate',
+          entries: [{ key: 'a'.repeat(101), value: 'v' }],
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body?.error).toMatch(/Invalid ratings payload/i)
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 when uom too long', async () => {
+      const res = await request(app)
+        .post('/api/backend/ratings')
+        .send({
+          sheetId: 5,
+          blockType: 'Nameplate',
+          entries: [{ key: 'MAWP', value: '100', uom: 'a'.repeat(51) }],
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body?.error).toMatch(/Invalid ratings payload/i)
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 when blockType too long', async () => {
+      const res = await request(app)
+        .post('/api/backend/ratings')
+        .send({
+          sheetId: 5,
+          blockType: 'a'.repeat(51),
+          entries: [],
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body?.error).toMatch(/Invalid ratings payload/i)
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('PATCH /api/backend/ratings/:id', () => {
+    it('updates block and returns block with entries', async () => {
+      mockUpdate.mockResolvedValue({
+        block: {
+          ratingsBlockId: 10,
+          sheetId: 5,
+          blockType: 'Ratings',
+          sourceValueSetId: null,
+          lockedAt: null,
+          lockedBy: null,
+          notes: 'Updated',
+          createdAt: new Date('2025-01-01'),
+          updatedAt: new Date('2025-01-02'),
+        },
+        entries: [
+          { entryId: 1, ratingsBlockId: 10, key: 'MAWP', value: '100', uom: 'bar', orderIndex: 0 },
+        ],
+      })
+
+      const res = await request(app)
+        .patch('/api/backend/ratings/10')
+        .send({ blockType: 'Ratings', notes: 'Updated', entries: [{ key: 'MAWP', value: '100', uom: 'bar' }] })
+
+      expect(res.status).toBe(200)
+      expect(res.body.block.notes).toBe('Updated')
+      expect(res.body.entries[0].key).toBe('MAWP')
+      expect(mockUpdate).toHaveBeenCalledWith(
+        1,
+        10,
+        expect.objectContaining({
+          blockType: 'Ratings',
+          notes: 'Updated',
+          entries: expect.any(Array),
+        }),
+        expect.objectContaining({ userId: 1 })
+      )
+    })
+
+    it('returns 409 when block is locked', async () => {
+      mockUpdate.mockRejectedValue(new AppError('Ratings block is locked', 409))
+
+      const res = await request(app)
+        .patch('/api/backend/ratings/10')
+        .send({ blockType: 'Ratings' })
+
+      expect(res.status).toBe(409)
+      expect(res.body?.error).toMatch(/locked/i)
+    })
+
+    it('returns 400 when too many entries on PATCH', async () => {
+      const entries = Array.from({ length: 201 }, (_, i) => ({ key: `k${i}`, value: 'v' }))
+
+      const res = await request(app)
+        .patch('/api/backend/ratings/10')
+        .send({ entries })
+
+      expect(res.status).toBe(400)
+      expect(res.body?.error).toMatch(/Invalid ratings payload/i)
+      expect(mockUpdate).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('DELETE /api/backend/ratings/:id', () => {
+    it('deletes block', async () => {
+      mockRemove.mockResolvedValue(true)
+
+      const res = await request(app).delete('/api/backend/ratings/10')
+
+      expect(res.status).toBe(200)
+      expect(res.body.deleted).toBe(true)
+      expect(mockRemove).toHaveBeenCalledWith(1, 10, expect.objectContaining({ userId: 1 }))
+    })
+
+    it('returns 404 when block not found', async () => {
+      mockRemove.mockRejectedValue(new AppError('Ratings block not found', 404))
+
+      const res = await request(app).delete('/api/backend/ratings/999')
+
+      expect(res.status).toBe(404)
+      expect(res.body?.error).toMatch(/not found/i)
+    })
+
+    it('returns 409 when block is locked', async () => {
+      mockRemove.mockRejectedValue(new AppError('Ratings block is locked', 409))
+
+      const res = await request(app).delete('/api/backend/ratings/10')
+
+      expect(res.status).toBe(409)
+      expect(res.body?.error).toMatch(/locked/i)
+    })
+  })
+
+  describe('POST /api/backend/ratings/:id/lock', () => {
+    const lockedBlock = {
+      block: {
+        ratingsBlockId: 10,
+        sheetId: 5,
+        blockType: 'Nameplate',
+        sourceValueSetId: null,
+        lockedAt: new Date('2025-01-02'),
+        lockedBy: 1,
+        notes: null,
+        createdAt: new Date('2025-01-01'),
+        updatedAt: new Date('2025-01-02'),
+      },
+      entries: [],
+    }
+
+    it('locks block successfully when sheet is approved', async () => {
+      mockLock.mockResolvedValue(lockedBlock)
+
+      const res = await request(app).post('/api/backend/ratings/10/lock')
+
+      expect(res.status).toBe(200)
+      expect(res.body.block.lockedAt).toBeDefined()
+      expect(res.body.block.lockedBy).toBe(1)
+      expect(mockLock).toHaveBeenCalledWith(1, 10, 1, expect.objectContaining({ userId: 1 }))
+    })
+
+    it('returns 409 when sheet is not approved', async () => {
+      mockLock.mockRejectedValue(
+        new AppError('Ratings can only be locked for approved datasheets.', 409)
+      )
+
+      const res = await request(app).post('/api/backend/ratings/10/lock')
+
+      expect(res.status).toBe(409)
+      expect(res.body?.error).toMatch(/approved datasheets/i)
+    })
+
+    it('returns 200 idempotent when block already locked', async () => {
+      mockLock.mockResolvedValue(lockedBlock)
+
+      const res = await request(app).post('/api/backend/ratings/10/lock')
+
+      expect(res.status).toBe(200)
+      expect(res.body.block.lockedAt).toBeDefined()
+      expect(mockLock).toHaveBeenCalledWith(1, 10, 1, expect.any(Object))
+    })
+  })
+
+  describe('POST /api/backend/ratings/:id/unlock', () => {
+    const unlockedBlock = {
+      block: {
+        ratingsBlockId: 10,
+        sheetId: 5,
+        blockType: 'Nameplate',
+        sourceValueSetId: null,
+        lockedAt: null,
+        lockedBy: null,
+        notes: null,
+        createdAt: new Date('2025-01-01'),
+        updatedAt: new Date('2025-01-02'),
+      },
+      entries: [],
+    }
+
+    it('unlocks block when user is admin', async () => {
+      currentTestUserIsAdmin = true
+      mockUnlock.mockResolvedValue(unlockedBlock)
+
+      const res = await request(app).post('/api/backend/ratings/10/unlock')
+
+      expect(res.status).toBe(200)
+      expect(res.body.block.lockedAt).toBeNull()
+      expect(res.body.block.lockedBy).toBeNull()
+      expect(mockUnlock).toHaveBeenCalledWith(1, 10, expect.objectContaining({ userId: 1 }))
+    })
+
+    it('returns 403 when user is not admin', async () => {
+      currentTestUserIsAdmin = false
+
+      const res = await request(app).post('/api/backend/ratings/10/unlock')
+
+      expect(res.status).toBe(403)
+      expect(res.body?.error).toMatch(/admin|superadmin/i)
+      expect(mockUnlock).not.toHaveBeenCalled()
+    })
+  })
+})

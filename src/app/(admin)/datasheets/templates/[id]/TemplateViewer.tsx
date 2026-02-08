@@ -7,6 +7,7 @@ import { translations as labelTranslations } from '@/constants/translations'
 import { convertToUSC } from '@/utils/unitConversionTable'
 import ChangeLogTable from '@/components/datasheets/ChangeLogTable'
 import VerificationRecordsList from '@/components/datasheets/VerificationRecordsList'
+import RatingsBlocksList from '@/components/datasheets/RatingsBlocksList'
 
 function safeFormatDate(input: string | Date | null | undefined): string {
   if (!input) return '-'
@@ -603,6 +604,17 @@ export default function TemplateViewer(props: Readonly<Props>) {
               originalName: a.name ?? `Attachment ${a.attachmentId}`,
             }))}
           />
+        </fieldset>
+      )}
+
+      {/* Ratings & Nameplate */}
+      {sheetId != null && (
+        <fieldset className='border rounded p-4'>
+          <div className='text-xl font-semibold mb-2'>Ratings &amp; Nameplate</div>
+          <div className='text-sm text-gray-600 mb-4'>
+            Ratings blocks linked to this datasheet.
+          </div>
+          <RatingsBlocksList sheetId={sheetId} sheetStatus={data.status} />
         </fieldset>
       )}
 
