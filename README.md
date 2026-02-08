@@ -60,6 +60,32 @@ SpecVerse has already implemented the following roadmap phases in production-rea
 - Account-aware authorization and query enforcement
 - Safe isolation of datasheets, estimations, inventory, and verification records
 
+### Phase 2.6 — User Management & Invitations (Complete)
+- User & Account Management
+  - Multi-account / multi-tenant architecture (Phase 2.5)
+  - Account-scoped users, datasheets, inventory, estimations
+  - Account admin vs regular member roles
+  - Admin-only account settings pages
+  - Role-based access control (RBAC) with:
+    - Roles
+    - Fine-grained permissions (ACCOUNT_VIEW, ACCOUNT_ROLE_MANAGE, etc.)
+    - Backend enforcement (verifyToken + requirePermission)
+    -Frontend gating (SecurePage, 403 handling)
+- Invitations
+  - Admin can invite users by email
+  - Email-based invite acceptance flow
+  - Invite lifecycle (pending / accepted / expired / revoked)
+  - Account-scoped membership via invites
+  - Audit logs for member + role changes
+  - Dev-only email sender for local/demo
+  - Hardened acceptance flow + tests
+- Role Management UI
+  - Admin roles list
+  - Role detail page
+  - Assign / remove permissions
+  - Backend + frontend aligned DTOs
+  - Authz enforced on all role routes
+
 ### Phase 3 — Verification & Inspection Records (Complete)
 - First-class Verification Records (QA/QC objects)
 - Standard-aware certification and inspection tracking
