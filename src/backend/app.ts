@@ -40,6 +40,8 @@ import auditLogsRoutes from './routes/auditLogsRoutes'
 import exportJobsRoutes from './routes/exportJobsRoutes'
 import verificationRecordsRoutes from './routes/verificationRecordsRoutes'
 import datasheetVerificationRecordsRoutes from './routes/datasheetVerificationRecordsRoutes'
+import datasheetRatingsRoutes from './routes/datasheetRatingsRoutes'
+import ratingsRoutes from './routes/ratingsRoutes'
 import { errorHandler } from './middleware/errorHandler'
 
 const app: Application = express()
@@ -70,6 +72,7 @@ app.use('/api/backend/settings/manufacturers', manufacturersRoutes)
 app.use('/api/backend/settings/suppliers', suppliersRoutes)
 app.use('/api/categories', categoriesRoutes)
 app.use('/api/backend/datasheets', datasheetVerificationRecordsRoutes)
+app.use('/api/backend/datasheets', datasheetRatingsRoutes)
 app.use('/api/backend/layouts', layoutRoutes)
 app.use('/api/backend/inventory', inventoryRoutes)
 app.use('/api/backend/estimation', estimationRoutes)
@@ -95,6 +98,7 @@ app.use('/api/backend/dev', devRoutes)
 app.use('/api/backend/audit-logs', auditLogsRoutes)
 app.use('/api/backend/exports/jobs', exportJobsRoutes)
 app.use('/api/backend/verification-records', verificationRecordsRoutes)
+app.use('/api/backend/ratings', ratingsRoutes)
 
 // ─────────────────────────────────────────────
 // Dev-only routes inspector

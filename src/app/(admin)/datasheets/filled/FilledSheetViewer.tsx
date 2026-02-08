@@ -10,6 +10,7 @@ import { convertToUSC } from "@/utils/unitConversionTable";
 import OtherConversionsCell from "@/utils/OtherConversionsCell";
 import ChangeLogTable from "@/components/datasheets/ChangeLogTable";
 import VerificationRecordsList from "@/components/datasheets/VerificationRecordsList";
+import RatingsBlocksList from "@/components/datasheets/RatingsBlocksList";
 import { computeCompleteness, getSubsheetKey } from "@/utils/datasheetCompleteness";
 import type { SubsheetCompleteness } from "@/utils/datasheetCompleteness";
 import SectionCompletenessSummary from "@/components/datasheets/SectionCompletenessSummary";
@@ -565,6 +566,21 @@ const FilledSheetViewer: React.FC<Props> = ({
               attachmentId: a.id,
               originalName: a.originalName,
             }))}
+          />
+        </fieldset>
+      )}
+
+      {/* Ratings & Nameplate */}
+      {sheetId != null && (
+        <fieldset className="border rounded p-4">
+          <div className="text-xl font-semibold mb-2">Ratings &amp; Nameplate</div>
+          <div className="text-sm text-gray-600 mb-4">
+            Ratings blocks linked to this datasheet.
+          </div>
+          <RatingsBlocksList
+            sheetId={sheetId}
+            sheetStatus={sheet.status}
+            isRevision={isRevision}
           />
         </fieldset>
       )}
