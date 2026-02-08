@@ -4,176 +4,401 @@
 [![CI (staging)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg?branch=staging)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml?branch=staging)
 [![CI (release/v0.5)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg?branch=release/v0.5)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml?branch=release/v0.5)
 
-SpecVerse is an all-in-one engineering datasheet and project estimation system tailored for EPC and industrial projects. It supports datasheet creation, equipment specification, multi-language exports, cost estimation, procurement tracking, and more.
+SpecVerse
 
----
+SpecVerse is a production-grade engineering system of record for EPC, industrial, and facilities projects. It is designed for engineering teams, EPC firms, and asset-heavy organizations that need structured, auditable, and scalable control over engineering data across projects and disciplines.
 
-## 🌟 Key Innovation
+It unifies datasheets, equipment specifications, schedules, estimations, inventory, verification records, and exports into a single, auditable, multi-tenant platform—designed to scale across disciplines, projects, and organizations.
 
-SpecVerse was designed to solve a real-world engineering bottleneck: **every time a new datasheet format was needed, developers had to build a new app or database to support it.**
+Unlike traditional tools that treat datasheets as static documents, SpecVerse models engineering data as structured, lifecycle-aware entities with approvals, revisions, traceability, and downstream impact on cost, procurement, and operations.
 
-With SpecVerse’s dynamic template engine:
+## 🌟 Key Innovation — Dynamic Engineering Data, Not Static Forms
 
-* Subsheet structures and templates are fully configurable
-* No code or schema changes are needed to support new datasheets
-* Engineers or admins can define new datasheets themselves
+SpecVerse solves a long-standing engineering bottleneck:
 
-This enables **true no-code datasheet configuration** — a huge time and cost saver for EPC and industrial firms.
+Every time a new datasheet or schedule format was needed, teams had to build a new app, spreadsheet, or database schema.
 
-## Phase 1 – Multi-discipline datasheets
+SpecVerse eliminates this entirely.
 
-SpecVerse now supports multiple engineering disciplines end-to-end using the same template-driven datasheet engine. Discipline and subtype are stored on templates and filled datasheets, surfaced consistently across list and detail views with filters and badges.
+At its core is a dynamic, no-code template engine:
 
-Phase 1 introduces seeded disciplines (Piping and Instrumentation) and a Pressure Transmitter subtype, with an optional seed script that creates a realistic Instrumentation datasheet template for demonstration. This phase intentionally avoids schema redesign or engine changes, proving that the existing universal datasheet model supports cross-discipline use without specialization.
+Datasheet and schedule structures are configurable at runtime
 
-> **Status:** Implemented and in active use.  
-> This phase validates that SpecVerse’s universal datasheet engine supports cross-discipline expansion without schema redesign.
+Subsections, fields, units, rules, and workflows are defined without code
 
+No schema or application changes are required for new formats
 
----
+Engineers and admins—not developers—own and evolve templates
 
-## ✅ Implemented Platform Phases
+This enables true no-code engineering configuration, dramatically reducing custom development cost and tool sprawl while improving consistency, auditability, and reuse across projects.
 
-SpecVerse has already implemented the following roadmap phases in production-ready form:
+## 🧭 Architectural Positioning
 
-### Phase 0 — Core Datasheet Platform (Complete)
-- Template-based datasheets with subsheets and typed fields
-- Filled vs template datasheets
-- Unit validation and multilingual support
-- Approval workflows
-- Attachments, notes, and exports
-- Estimation and inventory linkage
+SpecVerse is intentionally designed as:
 
-### Phase 1 — Multi-Discipline Datasheets (Complete)
-- Discipline-agnostic datasheet engine
-- Discipline and subtype stored on templates and filled sheets
-- Cross-discipline support without schema specialization
-- Seeded examples for Piping and Instrumentation
+A system of record — not a document repository or file manager
 
-### Phase 2 — Requirement vs Offered vs As-Built Modeling (Complete)
-- Datasheet fields support multiple value sources
-- Clear separation of purchaser requirements, vendor-offered values, and verified/as-built values
-- Variance awareness for compliance and procurement workflows
+A multi-tenant engineering platform with strict account isolation, roles, and permissions
 
-### Phase 2.5 — Multi-Account / Multi-Tenant Architecture (Complete)
-- Account-scoped data model across all core entities
-- Account-aware authorization and query enforcement
-- Safe isolation of datasheets, estimations, inventory, and verification records
+A QA/QC and compliance-ready foundation with approvals, verification records, audit trails, and exportable evidence
 
-### Phase 2.6 — User Management & Invitations (Complete)
-- User & Account Management
-  - Multi-account / multi-tenant architecture (Phase 2.5)
-  - Account-scoped users, datasheets, inventory, estimations
-  - Account admin vs regular member roles
-  - Admin-only account settings pages
-  - Role-based access control (RBAC) with:
-    - Roles
-    - Fine-grained permissions (ACCOUNT_VIEW, ACCOUNT_ROLE_MANAGE, etc.)
-    - Backend enforcement (verifyToken + requirePermission)
-    -Frontend gating (SecurePage, 403 handling)
-- Invitations
-  - Admin can invite users by email
-  - Email-based invite acceptance flow
-  - Invite lifecycle (pending / accepted / expired / revoked)
-  - Account-scoped membership via invites
-  - Audit logs for member + role changes
-  - Dev-only email sender for local/demo
-  - Hardened acceptance flow + tests
-- Role Management UI
-  - Admin roles list
-  - Role detail page
-  - Assign / remove permissions
-  - Backend + frontend aligned DTOs
-  - Authz enforced on all role routes
+An AI-ready platform that can evolve toward assistive intelligence without compromising engineering judgment or accountability
 
-### Phase 3 — Verification & Inspection Records (Complete)
-- First-class Verification Records (QA/QC objects)
-- Standard-aware certification and inspection tracking
-- Attachments linked to assets and datasheets
-- Full auditability and traceability
-
-By completing Phases 0–3, SpecVerse already operates as:
-- A structured system of record for engineering data
-- A procurement-aware datasheet platform
-- A QA/QC and verification traceability system
-- A multi-tenant, production-grade SaaS architecture
-
-Later phases extend these foundations rather than replacing them.
-
----
+Every architectural decision — schema design, replace-all transactions, audit logging, permission enforcement, and comprehensive testing — reinforces these principles.
 
 ## 🧩 Core Modules
 
-### 📄 Datasheets
+SpecVerse is a modular, multi-tenant engineering data platform designed to manage the full lifecycle of equipment data — from datasheets and procurement to verification, instrumentation, and facility-scale schedules.
 
-* ✅ Create/edit datasheet templates (with subsheets and information templates)
-* ✅ Fill datasheets with actual project/equipment data
-* ✅ Inline editing with unit validation (SI/USC support)
-* ✅ Clone datasheets and track revisions
-* ✅ Multi-language support via database + i18next
-* ✅ Export to PDF and Excel (translated + UOM converted; includes Audit Trail section)
-* ✅ Approval workflow: Draft → Rejected (if needed) → Modified → Verified → Approved
-* ✅ Notes & collaboration: per-sheet threaded notes; template notes auto-copied to new filled sheets *(new)*
-* ✅ Attachments: attach files to templates/datasheets; filled sheets **reference** template attachments to save storage *(new)*
-* ✅ Full audit trail & change logs: template structure changes + field value changes; shown in viewers (newest first, “Show more”) and included in exports (up to 50 entries) *(new)*
-* ✅ Dashboard + AI-ready metadata (new)
+## 📄 Datasheets (Multi-Discipline, Lifecycle-Aware)
 
-### 📊 Estimations
+Structured engineering datasheets form the backbone of SpecVerse.
 
-* ✅ Create project estimations with packages and items
-* ✅ Add and compare multiple supplier quotes
-* ✅ Auto-compute totals and select winning quotes
-* ✅ Filter by status, client, or project
-* ✅ Export estimation to:
+**Capabilities**
 
-  * Full Report PDF/Excel
-  * Summary PDF/Excel
-  * Procurement sheets (per package or full)
-* ✅ Approval workflow: Draft → Verified → Approved
-* ✅ Dashboard + estimation analytics (cost breakdowns, supplier comparison)
+* ✅ Create and manage datasheet templates with subsheets and typed information fields
 
-### 🛆 Inventory
+## ✅ Fill datasheets with real project / equipment data
 
-* ✅ Track inventory per item and warehouse
-* ✅ Edit and update quantity, logs, and metadata
-* ✅ View stock levels and item linkage to datasheets
-* ✅ Export inventory and usage trends (Excel)
-* ✅ Inventory analytics: usage forecast, category breakdown
-* ✅ Role-based access for maintenance, restocking
+* ✅ Discipline-agnostic design (piping, instrumentation, mechanical, electrical, HVAC, etc.)
 
----
+## ✅ Inline editing with unit validation (SI / USC support)
+
+## ✅ Multi-language support (database-backed translations + i18next)
+
+## ✅ Clone datasheets and track engineering revisions
+
+* ✅ Approval workflow:
+
+Draft → Rejected (optional) → Modified → Verified → Approved
+
+## ✅ Support for Requirement vs Offered vs As-Built values
+
+* ✅ Attachments:
+
+Templates and filled datasheets
+
+Filled sheets reference template attachments to avoid duplication
+
+## ✅ Threaded notes and collaboration
+
+Template notes automatically copied to filled sheets
+
+* ✅ Full audit trail:
+
+Template structure changes
+
+Field value changes
+
+Displayed in viewers and included in exports
+
+## ✅ Export to PDF and Excel
+
+Translated
+
+Unit-converted
+
+Includes audit trail section
+
+## ✅ Account-scoped, multi-tenant enforcement
+
+## ✅ AI-ready metadata and structure
+
+**Outcome**
+SpecVerse acts as a system of record for engineering datasheets, not just a document store.
+
+## 📊 Estimations (Procurement-Aware)
+
+Engineering estimation is tightly integrated with datasheets and inventory.
+
+**Capabilities**
+
+## ✅ Create project estimations with packages and line items
+
+## ✅ Link items to datasheets and inventory
+
+## ✅ Add and compare multiple supplier quotes
+
+## ✅ Auto-compute totals and select winning quotes
+
+## ✅ Filter by status, client, or project
+
+* ✅ Approval workflow:
+
+Draft → Verified → Approved
+
+* ✅ Export:
+
+Full report (PDF / Excel)
+
+Summary reports
+
+Procurement sheets (per package or full)
+
+* ✅ Estimation analytics:
+
+Cost breakdowns
+
+Supplier comparison
+
+Project totals
+
+**Outcome**
+SpecVerse bridges engineering definition and procurement decision-making.
+
+## 🛆 Inventory (Asset-Linked)
+
+Inventory management is asset-aware and datasheet-linked.
+
+**Capabilities**
+
+## ✅ Track inventory by item and warehouse
+
+## ✅ Maintain quantity, logs, and metadata
+
+## ✅ Link inventory items to datasheets and estimations
+
+## ✅ Role-based access for maintenance and restocking
+
+## ✅ Export inventory and usage trends (Excel)
+
+* ✅ Inventory analytics:
+
+Usage forecasts
+
+Category breakdowns
+
+**Outcome**
+Inventory is treated as a live engineering resource, not a static stock list.
+
+## 🧪 Verification & Inspection Records (QA / QC)
+
+Verification is modeled as a first-class engineering object, not an afterthought.
+
+**Capabilities**
+
+## ✅ Verification and inspection records
+
+## ✅ Standard-aware certification tracking
+
+* ✅ Link records to:
+
+Datasheets
+
+Assets
+
+Attachments
+
+## ✅ Full auditability and traceability
+
+## ✅ Account-scoped access control
+
+**Outcome**
+SpecVerse supports QA/QC, compliance, and inspection workflows with traceable evidence.
+
+## 🎛 Instrumentation & Loop Awareness (Lightweight)
+
+SpecVerse provides instrument and loop awareness without becoming a P&ID system.
+
+**Capabilities**
+
+## ✅ Instrument registry (account-scoped)
+
+## ✅ Loop definitions and membership
+
+## ✅ Canonical tag normalization (ISA-5.1 inspired)
+
+* ✅ Cross-links between:
+
+Instruments
+
+Loops
+
+Datasheets
+
+## ✅ Validation and search by normalized tags
+
+Explicitly Out of Scope
+
+## ❌ Drawing editors
+
+## ❌ Full P&ID authoring
+
+**Outcome**
+SpecVerse integrates cleanly into I&C workflows while preserving scope discipline.
+
+Together, these modules allow SpecVerse to function as a single source of truth for engineering definition, procurement, verification, and facility-scale documentation.
+
+
+## 🏢 Facilities, Schedules & Operational Visibility
+
+Together, the modules below allow SpecVerse to operate as a single source of truth for:
+
+engineering definition, procurement, verification, and facility-scale documentation.
+
+## 🏭 Equipment Schedules & Facilities Engineering
+
+SpecVerse supports facility-scale documentation, not just one-off equipment datasheets.
+
+**Capabilities**
+
+## ✅ Equipment schedules for many similar assets
+
+## ✅ Asset-first schedule rows (assets are the primary entity)
+
+* ✅ Typed schedule columns:
+
+string / number / boolean / date / enum
+
+## ✅ Transactional replace-all saves for consistency and safety
+
+* ✅ Strong validation guarantees:
+
+One typed value per cell
+
+No duplicate assets per schedule
+
+No duplicate column keys (post-normalization)
+
+## ✅ Schedule ↔ asset ↔ datasheet linkage
+
+## ✅ Bulk editing with full audit safety
+
+## ✅ Account, asset, and sheet ownership enforcement
+
+**Standards Alignment**
+
+ASHRAE Guideline 1.4
+
+HVAC documentation and commissioning practices
+
+**Outcome**
+
+SpecVerse supports facility documentation, commissioning, and operations at scale, without sacrificing traceability or data integrity.
+
+* 🔜 Phase 6.1 (Coming Soon): reusable schedule column templates by Discipline / Subtype.
 
 ## 📊 Dashboards, Analytics & Reports
 
-* ✅ Role-specific dashboards for Engineer, Supervisor, Admin
-* ✅ Multi-series Recharts visualizations
-  
-* ✅ Dashboard:
-  * Datasheets by Status
-  * Templates Created Over Time
-  * Pending Verifications
-  * Active Users by Role
-  * Inventory Stock Levels
-  * Estimation Totals by Project
+Operational visibility is built into the platform, not bolted on.
 
-* ✅ Analytics:
-  * Datasheet Lifecycle Duration
-  * Verification Bottlenecks
-  * Monthly Template Usage
-  * Team Performance Overview
-  * Field Completion Trends
+**Dashboards**
 
-* ✅ Reports:
-  * Estimation Cost Breakdown by Project
-  * Inventory Usage Forecast
-  * Inventory Category Contribution
-  * Rejected Templates Over Time
-  * Rejected Datasheets Over Time
-  * Workflow Stream for Templates and Datasheets
-  * Supplier Comparison by Item
-  * AI Findings & Quality Signals (planned; surfaced alongside audit logs)
+Datasheets by status
 
-* ✅ View data behind charts via modal tables
+Templates created over time
+
+Pending verifications
+
+Active users by role
+
+Inventory stock levels
+
+Estimation totals by project
+
+**Analytics**
+
+Datasheet lifecycle duration
+
+Verification bottlenecks
+
+Monthly template usage
+
+Team performance overview
+
+Field completion trends
+
+**Reports**
+
+Estimation cost breakdowns
+
+Inventory usage forecasts
+
+Category contribution analysis
+
+Rejected templates and datasheets over time
+
+Workflow streams for templates and datasheets
+
+Supplier comparison by item
+
+AI findings & quality signals (planned)
+
+Platform Capabilities
+
+## ✅ Role-specific dashboards (Engineer, Manager, Admin, etc.)
+
+## ✅ Interactive charts with modal data inspection
+
+## 🚧 Near-Term Platform Expansion
+
+The following initiatives extend SpecVerse’s production-ready foundation.
+They are planned next steps — not experimental prototypes.
+
+## 🧱 Labor Costing (Planned)
+
+A dedicated module for structured labor estimation, aligned with EPC and industrial best practices.
+
+Planned Capabilities
+
+Role-based labor breakdowns
+## (e.g., Welder, Supervisor, Electrician)
+
+Labor allocation per:
+
+estimation package
+
+equipment item
+
+or task
+
+Productivity-based standards
+## (e.g., weld-inches/day, units/hour)
+
+Manual overrides with full audit trails
+
+Derived cost calculation:
+Quantity × Hours × Rate
+
+Smart labor forecasting using reusable Labor Standards
+
+Integration With
+
+Estimation exports
+
+Dashboards and analytics
+
+Approval workflows
+
+**Outcome**
+
+SpecVerse extends from material-centric estimation into labor-aware project costing, while preserving approval control, traceability, and auditability.
+
+## 🔧 Upcoming Enhancements (Short Horizon)
+
+Phase 5.2 — Instrumentation Enhancements
+
+Richer validation rules
+
+Improved filtering
+
+Loop visualization improvements
+
+Phase 6.1 — Reusable Schedule Templates
+
+Discipline- and subtype-based column templates
+
+Self-Service Membership
+
+Join, leave, and switch accounts
+
+Superadmin Console
+
+Cross-account oversight
+
+System health monitoring
+
+Global audit visibility
 
 ---
 
@@ -211,192 +436,513 @@ before changes are applied.
 
 ---
 
-## 🧪 In Progress / Experimental Features
+## 🧭 Strategic Roadmap (Long-Term Vision)
 
-* Gantt-style timeline view for datasheets and estimations
-* Real-time alerts for pending approvals
-* Procurement request generator and approval workflow
-* Auto-tagging datasheets by system/discipline
-* Full version control for datasheets and estimations
-* Data quality score per sheet (completeness, consistency)
+The initiatives below are not yet implemented.
+They illustrate the directional intent of the platform and are designed to augment — not replace — engineering judgment.
 
----
+## 🧠 AI-Assisted Engineering Intelligence (Vision)
 
-## 📘 Planned Modules
+AI in SpecVerse is positioned as decision support, never as an authority.
 
-### 🧱 Labor Costing (Upcoming)
+Conceptual capabilities
 
-A new module to support structured labor cost estimation per role, package, or task. Based on industrial and EPC best practices:
+Datasheet completeness and quality indicators
 
-* Role-based labor breakdowns (e.g., Welder, Supervisor, Electrician)
-* Per-package or per-item labor allocation
-* Reference-based productivity standards (e.g., weld-inches/day)
-* Optional manual overrides with audit logs
-* Derived cost calculation: `Qty × Hours × Rate`
-* Smart forecasting using Labor Standards (e.g., manhour tables)
-* Integration with Estimation exports and dashboards
+Detection of anomalies and inconsistencies
 
-This module will support both manual entry and auto-suggestion based on scope and productivity metrics, with full reporting and approval support.
+Suggested values based on:
 
----
+historical projects
 
-## 🧭 Strategic Roadmap (Vision)
+peer equipment
 
-This section outlines **long-term platform directions** under consideration for SpecVerse.  
-The capabilities described here are **not yet implemented** and are presented to illustrate the architectural direction and future potential of the platform.
-These initiatives are intended to complement—not replace—human engineering judgment and approval workflows.
+Natural-language queries
+## (e.g., “show pumps operating above 120 °C”)
 
-The phases below describe planned and conceptual capabilities.
-Phases beyond Phase 3 are **not yet implemented** and are included to illustrate the platform’s architectural direction.
+Risk flags for QA, verification, and management review
 
-## Phase 4 – Ratings & Nameplate Modeling
+Principles
 
-### Motivation
-Ratings are safety-critical and operational truth.
+All AI outputs are:
 
-### Implementation
-- Structured ratings blocks (locked after approval)
-- Nameplate data capture
-- Installation and protection references
+reviewable
 
-### Standards Alignment
-- NEMA MG 1
-- IEC motor standards
-- Pressure vessel nameplate practices
+auditable
 
-### Outcome
-SpecVerse supports **installation, commissioning, and O&M accuracy**.
+approval-gated
 
----
+Human engineers remain the final authority.
 
-## Phase 5 – Instrumentation & Loop Awareness (Lightweight)
+## 🏭 SpecVerse PlantSync — CAD / EPC Integration (Vision)
 
-### Scope (Intentionally Limited)
-- Instrument index
-- Loop IDs
-- Tag formatting rules (ISA-5.1 inspired)
-- Cross-links between instruments, loops, and datasheets
+A strategic integration layer between Autodesk Plant 3D and SpecVerse’s engineering core.
 
-### What is Explicitly Out of Scope
-- Drawing editors
-- Full P&ID systems
+Conceptual capabilities
 
-### Outcome
-SpecVerse integrates into I&C workflows **without exploding scope**.
+Ingest P&ID and Plant 3D databases into a unified SpecVerse model
 
----
+Track additions, deletions, and modifications via staged sync logs
 
-## Phase 6 – Equipment Schedules & Facilities Engineering
+Enforce:
 
-### Motivation
-Buildings and facilities rely on **schedules and systems manuals**, not one-off datasheets.
+tag uniqueness
 
-### Features
-- Schedule views (many similar assets)
-- Bulk editing
-- Location / space / system metadata
-- Links to detailed datasheets
+category constraints
 
-### Standards Alignment
-- ASHRAE Guideline 1.4
-- HVAC documentation practices
+cross-table consistency
 
-### Outcome
-SpecVerse supports **facility-scale documentation and commissioning**.
+Visual dashboards for:
 
----
+sync coverage
 
-## Phase 7 – AI-Assisted Intelligence (Optional / Incremental)
+errors
 
-### User-Visible Capabilities
-- Datasheet completeness scoring and quality indicators
-- Detection of anomalies and inconsistencies
-- Suggested values based on historical and peer data
-- Natural-language queries (e.g., “show pumps >120 °C”)
-- Risk flags and attention markers for QA and managers
+unrouted or orphaned objects
 
-### Positioning
-AI augments **engineering judgment** — it does not replace it.
-All suggestions are reviewable, auditable, and require human approval.
+Business value
 
----
+Enables Plant-integrated datasheet management
+## (a rare EPC differentiator)
 
-### 🏭 SpecVerse PlantSync — EPC CAD Integration *(Vision)*
+Reduces manual re-entry and accelerates handover
 
-SpecVerse PlantSync is a strategic integration layer designed to bridge **Autodesk Plant 3D** with SpecVerse’s datasheet, estimation, and inventory core.
+Opens future SaaS and licensing opportunities
 
-**Conceptual capabilities include:**
-- Ingesting P&ID and piping databases from Plant 3D into a unified SpecVerse model
-- Tracking additions, deletions, and modifications via staging and synchronization logs
-- Enforcing tag uniqueness, category constraints, and cross-table consistency
-- Surfacing coverage gaps, sync errors, and unrouted objects via visual dashboards
+**Positioning**
+SpecVerse becomes the system-of-record layer between design tools and downstream engineering, procurement, and operations.
 
-**Business value:**
-- Enables Plant3D-integrated datasheet management — a rare, high-value EPC differentiator
-- Reduces manual data entry and accelerates engineering handover
-- Opens future licensing and SaaS revenue opportunities for CAD-integrated workflows
+## 🧠 AI Foundation & Continuous Intelligence (Architecture Vision)
 
-This direction positions SpecVerse as a **system-of-record layer between design tools and downstream engineering, procurement, and estimation processes**.
+SpecVerse is architected to evolve into a telemetry-driven engineering platform.
+
+**Foundation concepts**
+
+Key system events emitted as structured telemetry:
+
+datasheet lifecycle changes
+
+inventory movements
+
+estimation revisions
+
+Background analysis services producing:
+
+findings
+
+trends
+
+forecasts
+
+AI outputs persisted alongside audit logs for traceability
+
+**Architectural considerations**
+
+Semantic indexing for cross-project intelligence
+
+Switchable LLM gateways (dev vs. production)
+
+Progressive evolution from heuristics → ML → managed services
+
+This approach enables AI to be introduced incrementally and safely, without compromising engineering accountability.
 
 ---
 
-### 🧠 AI Foundation & Continuous Intelligence *(Architecture Vision)*
+## 🧪 Testing Strategy & Quality Assurance
 
-SpecVerse is designed to evolve into a **telemetry-driven, self-learning engineering platform** that continuously monitors data quality and operational signals.
+SpecVerse emphasizes provable correctness over optimistic assumptions, with tests designed to enforce invariants across permissions, tenancy, transactions, and audit behavior. It is developed with a production-grade testing strategy spanning backend, frontend, domain logic, and security boundaries. Tests are organized by layer and responsibility, mirroring the platform’s architecture.
 
-**Foundation concepts:**
-- Key system events (datasheet lifecycle, inventory movements, estimation changes) emitted into structured telemetry stores
-- Background analysis services producing findings and forecasts
-- AI outputs persisted alongside audit logs for traceability and review
+## 🔧 Backend API Tests
 
-**Architectural considerations:**
-- Semantic indexing and embeddings for cross-project intelligence
-- Switchable LLM gateways for development vs. production
-- Progressive evolution from lightweight analysis to managed ML services
+Covers REST endpoints, authorization, and cross-entity rules:
 
-This foundation enables AI features to be introduced **incrementally, safely, and auditably**, without compromising engineering accountability.
+Account & multi-tenant scoping
+
+Authentication, sessions, and invites
+
+Datasheets (templates, filled sheets, revisions, attachments)
+
+Equipment schedules & facilities (Phase 6)
+
+Estimations, inventory, and transactions
+
+Instrumentation, loops, and ratings
+
+Reports, exports, dashboards, and stats
+
+Audit logs, verification records, and approvals
+
+Permission enforcement and role gating
+
+## ✔ Ensures correct HTTP status codes, error shapes, and RBAC enforcement
+## ✔ Prevents cross-account data leakage
+## ✔ Verifies replace-all transactional semantics and edge cases
+
+## 🧠 Domain & Service Tests
+
+Validates core business rules independent of transport/UI:
+
+Datasheet lifecycle guards (create → verify → approve → revise)
+
+Value validation, unit normalization, and conversions
+
+Revision diffing and audit consistency
+
+Schedule entry constraints (asset-first, unique keys, typed values)
+
+Verification and QA/QC workflows
+
+Export helpers (Excel/PDF structure, audit sections)
+
+Internationalization (i18n) and UOM helpers
+
+## ✔ Ensures correctness of engineering logic, not just endpoints
+## ✔ Guards invariants introduced in Phases 2–6
+
+## 🧩 Repository & Middleware Tests
+
+Focuses on infrastructure correctness:
+
+Repository query behavior
+
+Transaction handling (runInTransaction)
+
+Authorization middleware
+
+Permission resolution and role utilities
+
+Audit deduplication and linking
+
+## ✔ Confirms data-layer safety and consistency
+## ✔ Prevents silent partial writes and privilege escalation
+
+## 🖥️ Frontend UI Tests
+
+Uses React Testing Library to validate real user flows:
+
+Secure page gating (403 handling, redirects)
+
+Account switching and membership management
+
+Datasheet editors, builders, and comparisons
+
+Estimation dashboards and tables
+
+Equipment schedules editor (Phase 6)
+
+Invitations, verification pages, and admin settings
+
+Sidebar navigation and layout behavior
+
+## ✔ Tests user-visible behavior, not implementation details
+## ✔ Ensures frontend and backend authorization stay aligned
+
+## 🧪 Utilities, Schemas & Guards
+
+Additional test coverage includes:
+
+Zod schema validation
+
+Completeness scoring utilities
+
+Chart data preparation
+
+Export formatting helpers
+
+Unit conversion tables
+
+Permission maps and role utilities
+
+## ✅ Quality Gates
+
+All changes are validated through:
+
+npm run lint
+
+npm run type-check
+
+Scoped test runs during development
+
+Full test suite before merge
+
+Production builds (npm run build)
+
+This approach ensures SpecVerse remains:
+
+Safe by default
+
+Predictable under change
+
+Extensible across new phases and modules
 
 ---
 
-## 🛠️ Test Data Simulation (For Demos)
+## 🔐 Access Control, Roles & Permissions
 
-To populate dashboards and reports for testing or demos:
+SpecVerse implements a fine-grained, permission-driven RBAC system designed for real engineering, QA/QC, and operations workflows.
 
-* ✅ Clone templates into filled datasheets with realistic values
-* ✅ Randomly assign users, dates, rejection comments
-* ✅ Simulate estimation items with multiple supplier quotes
-* ✅ Populate inventory stock levels per category or warehouse
+Access control is not hard-coded by role.
+Instead, roles are collections of explicit permissions, enforced consistently across backend APIs and frontend UI.
+
+Roles (Current)
+
+SpecVerse supports multiple operational roles aligned with real-world engineering organizations:
+
+Admin
+
+Full system access within an account
+
+Manages users, roles, permissions, and account settings
+
+Can override approvals when explicitly permitted
+
+Manager
+
+Oversight role across datasheets, estimations, schedules, and reports
+
+Typically holds approval, verification, and reporting permissions
+
+Engineer
+
+Creates and edits datasheets, templates, instrumentation, ratings, and schedules
+
+Cannot approve or override without explicit permissions
+
+Estimator
+
+Focused on estimation creation, editing, verification, and export
+
+No implicit access to datasheet approval or account management
+
+QA
+
+Verification and inspection-oriented role
+
+Manages verification records, reviews compliance evidence, and audits changes
+
+Reviewer
+
+Read-heavy role for structured review workflows
+
+May verify or comment without authoring privileges
+
+Maintenance
+
+Inventory maintenance and operational updates
+
+Handles maintenance logs, asset condition updates, and related records
+
+Warehouse
+
+Inventory-focused role
+
+Manages stock levels, transactions, and exports without access to engineering edits
+
+Viewer
+
+Read-only access
+
+Can view and export permitted records but cannot modify data
+
+Note:
+The legacy Supervisor role is deprecated. Its responsibilities are now modeled explicitly through permissions and newer roles (Manager, QA, Reviewer).
+
+Permission Model
+
+Permissions are explicit, composable, and enforceable, covering all major system actions.
+
+Examples include:
+
+Datasheets
+
+DATASHEET_CREATE, DATASHEET_EDIT, DATASHEET_VERIFY, DATASHEET_APPROVE
+
+DATASHEET_REVISE, DATASHEET_EXPORT, DATASHEET_DELETE
+
+Notes and attachments handled via dedicated permissions
+
+Templates
+
+TEMPLATE_CREATE, TEMPLATE_EDIT, TEMPLATE_VERIFY, TEMPLATE_APPROVE
+
+TEMPLATE_REVISE, TEMPLATE_EXPORT
+
+Estimations
+
+ESTIMATION_CREATE, ESTIMATION_EDIT, ESTIMATION_VERIFY, ESTIMATION_APPROVE
+
+ESTIMATION_EXPORT
+
+Inventory
+
+INVENTORY_CREATE, INVENTORY_EDIT, INVENTORY_VIEW
+
+Transactions, maintenance, and exports handled separately
+
+Facilities & Schedules
+
+SCHEDULES_CREATE, SCHEDULES_EDIT, SCHEDULES_VIEW
+
+Instrumentation & Ratings
+
+Instrumentation and loop permissions
+
+Ratings and nameplate permissions (create/edit/view)
+
+Verification
+
+VERIFICATION_CREATE, VERIFICATION_EDIT, VERIFICATION_VIEW
+
+Platform & Governance
+
+Role and permission management
+
+Account settings
+
+Audit log access
+
+Export job visibility and cleanup
+
+Explicit system override permissions
+
+Enforcement
+
+Permissions are enforced end-to-end:
+
+Backend
+
+Token verification + permission guards on every protected route
+
+Account-scoped data isolation
+
+No implicit privilege escalation
+
+Frontend
+
+Route-level gating
+
+Conditional UI rendering
+
+Graceful 403 handling
+
+This architecture allows:
+
+Safe delegation of responsibilities
+
+Clear separation of engineering, QA, estimation, and operations
+
+Future expansion without schema or authorization rewrites
 
 ---
 
-## 🔐 User Access & Permissions
+## 📟 Audit, Traceability & System Logs
 
-### Roles
+SpecVerse implements platform-wide audit and change tracking across all core modules — not just datasheets.
+Auditability is treated as a first-class system concern, enforced consistently at API, service, and export layers.
 
-* **Admin** – Full access, manages users, overrides approvals
-* **Supervisor** – Verifies/approves datasheets and estimations
-* **Engineer** – Creates/edits records but cannot approve
-* **Viewer** – Read-only, can view and export
+## 🔍 What Is Audited
 
-### Fine-grained Permissions
+Datasheets & Templates
 
-Includes:
+Full lifecycle actions: create, edit, verify, approve, reject
 
-* `TEMPLATE_CREATE`, `DATASHEET_APPROVE`, `INVENTORY_EDIT`, etc.
-* Enforced on both backend and frontend using `SecurePage`
+Field-level change logs (before/after values)
 
----
+Revision metadata (revision number, revision date, engineering revision)
 
-## 📟 Audit & Logging
+Export actions (PDF / Excel), including unit system and language
 
-* ✅ `UserLogs` table for all major actions (VIEW, CREATE, UPDATE, EXPORT, DELETE)
-* ✅ `InformationChangeLogs` for field-level updates
-* ✅ Approval and verification history per sheet and estimation
-* ✅ Verification records with linked evidence attachments
-* Planned: AI-generated findings and recommendations recorded alongside
-  human actions for traceability and review
+Linked verification records and evidence attachments
 
-These verification and audit capabilities correspond to **Phase 3 of the SpecVerse roadmap**, establishing SpecVerse as a QA/QC and compliance backbone rather than a passive document repository.
+Canonical attachment add/delete with deduplication guarantees
+
+Estimations
+
+Estimation creation, updates, and history access
+
+Export jobs (sync and async) with status transitions
+
+Cross-tenant access protection verified by tests
+
+Inventory
+
+Inventory item lifecycle actions
+
+Stock transactions (in/out/adjustments)
+
+Maintenance logs (repairs, inspections, notes)
+
+Global inventory audit and maintenance views
+
+CSV exports with filter-aware audit coverage
+
+Schedules & Assets
+
+Equipment schedules and asset records
+
+Schedule edits, structure changes, and exports
+
+Consistent audit linkage back to owning entities
+
+Accounts, Users & Membership
+
+Account member invites, accept/decline flows
+
+Role changes, activation/deactivation, reactivation
+
+Self-service and admin-initiated membership changes
+
+Anonymous vs authenticated actions handled explicitly
+
+Exports & Background Jobs
+
+Export job creation, execution, retry, cancel, expiry
+
+Secure download tokens with expiration handling
+
+Cleanup jobs and failed export recovery paths
+
+## 🧾 Audit Log Characteristics
+
+Unified audit model across modules (consistent shape and IDs)
+
+Entity-aware linking (audit entries resolve to the correct UI page)
+
+Deduplicated logging (guaranteed single audit per logical action)
+
+Cross-tenant safe (404/401 enforced and test-covered)
+
+Export-embedded (audit + change logs included in PDF/Excel outputs)
+
+Human-readable + machine-verifiable
+
+Audit and change logs are exposed via:
+
+Dedicated backend APIs
+
+Admin UI audit views
+
+Embedded export sections (PDF/Excel)
+
+Test-verified schemas and pagination guarantees
+
+## 🧪 Test Coverage & Guarantees
+
+Audit behavior is explicitly tested, including:
+
+Required audit emission per action
+
+Absence of audits when intentionally excluded
+
+ID stability and uniqueness
+
+Pagination and filtering correctness
+
+Cross-account isolation
+
+Regression protection (routing, dedupe, exports)
+
+This makes audit logging provable, not aspirational.
 
 ---
 
@@ -411,95 +957,111 @@ These verification and audit capabilities correspond to **Phase 3 of the SpecVer
 
 ## 📦 Tech Stack
 
-* **Frontend:** Next.js 14+, TailwindCSS, TypeScript, react-i18next, Recharts, TailAdmin
-* **Backend:** Express.js, Node.js, SQL Server
-* **PDF/Excel Export:** `puppeteer`, `exceljs`
-* **Authentication:** JWT (with session middleware and SecurePage enforcement)
-* **Hosting:** Vercel (frontend), Render or Azure (backend)
-* **Storage:** Local public folder for logos, avatars (S3-ready)
-* **CI/CD:** Render or GitHub Actions for automated deployment *(in progress)*
+SpecVerse is built as a production-grade, full-stack engineering SaaS with strong emphasis on data integrity, auditability, and long-term extensibility.
 
-### 🖨️ PDF export (Puppeteer) — local dev / CI prerequisites
+## 🧠 Backend
 
-SpecVerse generates datasheet PDFs using **Puppeteer**. Your machine/CI runner must have a usable Chrome/Chromium binary available.
+Node.js + Express (TypeScript) — layered controller → service → repository architecture
 
-**Option A — Install Google Chrome (recommended for local dev)**
+SQL Server — normalized, account-scoped relational model
 
-- Install Chrome normally (Windows/macOS/Linux).
-- The PDF generator includes a local-dev fallback that tries to launch **system Chrome** via Puppeteer’s `channel: 'chrome'` when Puppeteer-managed browser binaries are missing.
+Strict authorization — JWT + session middleware + permission checks on every route
 
-**Option B — Install Puppeteer-managed browser binaries (recommended for CI)**
+Multi-tenant by design — AccountID enforced at query, service, and trigger level
 
-Run this once after `npm install`:
+Replace-all transactional APIs — deterministic writes with rollback guarantees
 
-```powershell
-npx puppeteer browsers install chrome
-```
+Canonical data rules — enforced via schema validation + DB triggers
 
-You can also inspect what Puppeteer sees:
+## 🔐 Authentication, Security & Multi-Tenancy
 
-```powershell
-npx puppeteer browsers list
-```
+JWT-based authentication
 
-**Quick “doctor” check (verify PDF export prerequisites)**
+Active account sessions (multi-account switching)
 
-This launches a headless browser and immediately closes it:
+Role-based access control (RBAC) with fine-grained permissions
 
-```powershell
-node -e "require('puppeteer').launch({ headless: true }).then(b => b.close()).then(() => console.log('✅ Puppeteer OK')).catch(e => { console.error('⛔ Puppeteer failed:', e && e.message ? e.message : e); process.exit(1) })"
-```
+Backend-enforced authorization (verifyToken, requirePermission)
 
-**Troubleshooting**
+Frontend enforcement (route gating + UI affordances)
 
-- If you see: `Error: Could not find Chrome (ver. ...)`  
-  Install Chrome (Option A) or run `npx puppeteer browsers install chrome` (Option B), then retry the export.
+Cross-tenant isolation verified by tests
 
----
+## 🌐 Frontend
 
-## ✅ Testing & Quality Assurance
+Next.js (App Router) — server-first rendering with client interactivity where required
 
-SpecVerse includes a growing suite of automated tests to ensure code quality and prevent regressions.
+TypeScript (strict) — end-to-end type safety
 
-### 🧢 UI & Component Tests
+React + Tailwind CSS — componentized UI with utility-first styling
 
-* Built using **Jest** and **React Testing Library**
-* Tests core UI components including login form, dashboards, and charts
-* Mocks API requests and DOM features like `ResizeObserver`
-* Ensures proper rendering and interaction
+react-i18next — runtime multilingual support (DB-driven translations)
 
-### ⚙️ Backend API Tests *(in progress)*
+Recharts — dashboards, analytics, and reports
 
-* Designed with **Jest** and **Supertest**
-* Targets key API routes like estimation, datasheets, and inventory
-* Validates response structure, authorization, and CRUD logic
+Role-aware routing — SecurePage, permission gating, 403 handling
 
-### ✅ Test Setup
+Tested UI flows — datasheets, estimations, schedules, inventory, accounts
 
-* Configured via `jest.config.ts` and `jest.setup.ts`
-* Supports TypeScript and custom path aliases (`@/`)
-* Mocks assets (SVG, CSS) to prevent crashes during render
-* Includes a reusable `<SecurePage />` wrapper test
+## 📄 PDF & Excel Exports
 
-### 📂 Test Locations
+Puppeteer — pixel-accurate PDF exports (datasheets, estimations, schedules)
 
-* UI tests: `tests/ui/`
-* Backend tests: `tests/api/`
-* Shared mocks: `__mocks__/`
-* Setup: `jest.config.ts`, `jest.setup.ts`
+ExcelJS — structured, multi-sheet Excel exports with audit sections
 
-### ▶️ Running Tests
+Async export jobs — background processing with status, retry, expiry
 
-```bash
-# Run all tests
-npm test
+Embedded audit trails — exports include change logs, approvals, and metadata
 
-# Watch test files for changes
-yarn test:watch
+## 🗄️ Storage
 
-# Run a specific test file
-npx jest tests/ui/loginForm.test.tsx
-```
+Database-backed metadata for all core entities
+
+File attachments with canonical reference model (deduplication-safe)
+
+Local public storage for dev/demo
+
+Cloud-ready design (S3/Azure Blob compatible)
+
+## 🧪 Testing & Quality
+
+Extensive automated test suite (API, service, domain, middleware, UI)
+
+Authorization & account-scope tests for every major module
+
+Replace-all and transactional behavior verified
+
+Audit and export correctness tested
+
+Type-check + lint enforced
+
+SpecVerse favors provable correctness over optimistic assumptions.
+
+## 🚀 Deployment & Environments
+
+Frontend: Vercel
+
+Backend: Render or Azure App Services
+
+Database: SQL Server (Azure-ready)
+
+Environment isolation: dev / demo / production-ready
+
+CI-friendly setup with deterministic builds
+
+## 🖨️ PDF Export (Puppeteer) — Local Dev & CI Notes
+
+SpecVerse uses Puppeteer for PDF generation.
+
+For local development or CI runners:
+
+A Chromium / Chrome binary must be available
+
+Environment variables can be configured to point to the executable
+
+Works in local dev, Render, and Azure environments
+
+This setup ensures consistent, production-quality PDF output across environments.
 
 ---
 
@@ -509,10 +1071,9 @@ npx jest tests/ui/loginForm.test.tsx
 
 ---
 
-## 📄 Setup Instructions
+## 📄 Local Setup & Development
 
-```bash
-# Clone this repo
+# Clone the repository
 git clone https://github.com/jmjabayon928/specverse.git
 cd specverse
 
@@ -523,40 +1084,88 @@ npm install
 npm run dev-backend
 npm run dev
 
-# Setup environment variables
-.env.local for frontend
-.env for backend
-.env.production for deployment
-```
+Environment configuration
 
-### Demo reset (local / dev only)
+SpecVerse uses separate environment files for clarity and safety:
 
-For local development or recruiter demos, you can seed an admin user and reset the admin password via dev-only API endpoints. **These are disabled in production.**
+Frontend
 
-See **[docs/demo-reset.md](docs/demo-reset.md)** for:
+## .env.local — Next.js frontend configuration
 
-- Required env flags (`DEV_ADMIN_UTILS=1`, `NODE_ENV` not production)
-- cURL and PowerShell examples for seed-admin and reset-admin-password
-- Recommended demo workflow
+Backend
 
----
+## .env — local development
 
-## Contributing
+## .env.production — deployment/runtime configuration
+
+Environment variables cover:
+
+Database connections
+
+Authentication & session settings
+
+Export jobs (PDF / Excel)
+
+Dev-only utilities (disabled in production)
+
+⚠️ Dev-only utilities are explicitly guarded and cannot run in production.
+
+## 🧪 Demo & Recruiter Reset (Local / Dev Only)
+
+For local demos or recruiter walkthroughs, SpecVerse provides dev-only utilities to:
+
+Seed an admin account
+
+Reset the admin password safely
+
+Start from a known clean state
+
+These endpoints are hard-disabled in production builds.
+
+See docs/demo-reset.md
+ for:
+
+Required environment flags (DEV_ADMIN_UTILS=1, NODE_ENV !== production)
+
+cURL and PowerShell examples
+
+Recommended demo workflow
+
+## 🧪 Testing & Quality Gates
+
+SpecVerse uses a layered testing strategy covering backend, domain logic, and UI.
 
 Before opening a PR, run locally:
 
-* `npm ci`
-* `npm run lint`
-* `npm run type-check`
-* `npm test -- --runInBand --no-cache`
+npm ci
+npm run lint
+npm run type-check
+npm test -- --runInBand --no-cache
 
-CI must pass for PRs to be merged. The CI workflow runs on pushes to `main`, `staging`, and `release/**`.
+
+The test suite includes:
+
+API tests (auth, datasheets, schedules, inventory, estimations, audits)
+
+Service and domain logic tests
+
+Schema validation tests
+
+Permission and authorization guards
+
+UI tests for critical workflows
+
+CI
+
+CI runs on pushes to main, staging, and release/**
+
+All linting, type-checking, and tests must pass before merge
 
 ---
 
 ## 👨‍💼 Author
 
 **Jeff Martin Abayon**
-📍 Calgary, Canada
-📧 [jmjabayon@gmail.com](mailto:jmjabayon@gmail.com)
-[LinkedIn Profile](https://www.linkedin.com/in/jeff-martin-abayon-calgary/)
+## 📍 Calgary, Canada
+## 📧 [jmjabayon@gmail.com](mailto:jmjabayon@gmail.com)
+## [LinkedIn Profile](https://www.linkedin.com/in/jeff-martin-abayon-calgary/)
