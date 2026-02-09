@@ -1,27 +1,34 @@
 // tests/api/verificationRecords.accountScope.test.ts
 import request from 'supertest'
-import type { Request, Response, NextFunction } from 'express'
+import jwt from 'jsonwebtoken'
+import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
 import { PERMISSIONS } from '../../src/constants/permissions'
 
+process.env.JWT_SECRET ??= 'secret'
+
 let currentTestAccountId = 1
 
-jest.mock('../../src/backend/middleware/authMiddleware', () => ({
-  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
-    req.user = {
-      userId: 1,
-      accountId: currentTestAccountId,
+function makeToken(payload: { userId: number; accountId: number }): string {
+  return jwt.sign(
+    {
+      userId: payload.userId,
+      email: 'test@example.com',
       role: 'Admin',
-      roleId: 1,
       permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT],
-    }
-    next()
-  },
-  requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
-  optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
-  verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
-}))
+      accountId: payload.accountId,
+    },
+    process.env.JWT_SECRET ?? 'secret',
+    { expiresIn: '1h' }
+  )
+}
+
+jest.mock('../../src/backend/middleware/authMiddleware', () => {
+  const actual = jest.requireActual('../../src/backend/middleware/authMiddleware')
+  const { createAuthMiddlewareMock } = jest.requireActual('../helpers/authMiddlewareMock')
+  return createAuthMiddlewareMock({ actual, mode: 'token' })
+})
 
 jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),
@@ -65,7 +72,10 @@ describe('VerificationRecords API account scoping', () => {
       })
 
       currentTestAccountId = 2
-      const res = await request(app).get('/api/backend/verification-records')
+      const token = makeToken({ userId: 1, accountId: 2 })
+      const res = await request(app)
+        .get('/api/backend/verification-records')
+        .set('Cookie', [`token=${token}`])
 
       expect(res.status).toBe(200)
       expect(res.body).toEqual([])
@@ -76,7 +86,10 @@ describe('VerificationRecords API account scoping', () => {
       mockListForAccount.mockResolvedValue([{ verificationRecordId: 100, accountId: 1 }])
 
       currentTestAccountId = 1
-      const res = await request(app).get('/api/backend/verification-records')
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .get('/api/backend/verification-records')
+        .set('Cookie', [`token=${token}`])
 
       expect(res.status).toBe(200)
       expect(res.body).toEqual([{ verificationRecordId: 100, accountId: 1 }])
@@ -94,7 +107,10 @@ describe('VerificationRecords API account scoping', () => {
       })
 
       currentTestAccountId = 2
-      const res = await request(app).get('/api/backend/verification-records/100')
+      const token = makeToken({ userId: 1, accountId: 2 })
+      const res = await request(app)
+        .get('/api/backend/verification-records/100')
+        .set('Cookie', [`token=${token}`])
 
       expect(res.status).toBe(404)
       expect(res.body?.error).toMatch(/not found/i)
@@ -105,7 +121,10 @@ describe('VerificationRecords API account scoping', () => {
       mockGetById.mockResolvedValue({ verificationRecordId: 100, accountId: 1 })
 
       currentTestAccountId = 1
-      const res = await request(app).get('/api/backend/verification-records/100')
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .get('/api/backend/verification-records/100')
+        .set('Cookie', [`token=${token}`])
 
       expect(res.status).toBe(200)
       expect(res.body).toEqual({ verificationRecordId: 100, accountId: 1 })
@@ -118,8 +137,10 @@ describe('VerificationRecords API account scoping', () => {
       mockCreate.mockResolvedValue({ verificationRecordId: 200, accountId: 1 })
 
       currentTestAccountId = 1
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .post('/api/backend/verification-records')
+        .set('Cookie', [`token=${token}`])
         .send({ verificationTypeId: 1, result: 'Pending' })
 
       expect(res.status).toBe(201)
@@ -133,8 +154,10 @@ describe('VerificationRecords API account scoping', () => {
 
     it('should reject invalid payload', async () => {
       currentTestAccountId = 1
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .post('/api/backend/verification-records')
+        .set('Cookie', [`token=${token}`])
         .send({})
 
       expect(res.status).toBe(400)
@@ -150,7 +173,10 @@ describe('VerificationRecords API account scoping', () => {
       ])
 
       currentTestAccountId = 1
-      const res = await request(app).get('/api/backend/verification-records/verification-record-types')
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .get('/api/backend/verification-records/verification-record-types')
+        .set('Cookie', [`token=${token}`])
 
       expect(res.status).toBe(200)
       expect(res.body).toEqual([

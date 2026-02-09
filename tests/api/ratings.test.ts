@@ -1,29 +1,39 @@
 // tests/api/ratings.test.ts
 import request from 'supertest'
-import type { Request, Response, NextFunction } from 'express'
+import jwt from 'jsonwebtoken'
+import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
 import { PERMISSIONS } from '../../src/constants/permissions'
 
+process.env.JWT_SECRET ??= 'secret'
+
 let currentTestAccountId = 1
 let currentTestUserIsAdmin = true
 
-jest.mock('../../src/backend/middleware/authMiddleware', () => ({
-  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
-    req.user = {
-      userId: 1,
-      accountId: currentTestAccountId,
-      role: currentTestUserIsAdmin ? 'Admin' : 'Viewer',
-      roleId: currentTestUserIsAdmin ? 1 : 2,
-      isSuperadmin: false,
+jest.mock('../../src/backend/middleware/authMiddleware', () => {
+  const actual = jest.requireActual('../../src/backend/middleware/authMiddleware')
+  const { createAuthMiddlewareMock } = jest.requireActual('../helpers/authMiddlewareMock')
+  return createAuthMiddlewareMock({ actual, mode: 'token' })
+})
+
+function makeToken(payload: { userId: number; accountId: number; isOwner?: boolean; roleId?: number; role?: string }): string {
+  return jwt.sign(
+    {
+      userId: payload.userId,
+      accountId: payload.accountId,
+      email: 'test@example.com',
+      role: payload.role ?? 'Admin',
+      roleId: payload.roleId ?? 1,
       permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT],
-    }
-    next()
-  },
-  requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
-  optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
-  verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
-}))
+      isOwner: payload.isOwner,
+    },
+    process.env.JWT_SECRET ?? 'secret',
+    { expiresIn: '1h' }
+  )
+}
+
+const authCookie = `token=${makeToken({ userId: 1, accountId: 1 })}`
 
 jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),
@@ -67,7 +77,9 @@ describe('Ratings API', () => {
         },
       ])
 
-      const res = await request(app).get('/api/backend/datasheets/5/ratings')
+      const res = await request(app)
+        .get('/api/backend/datasheets/5/ratings')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(200)
       expect(res.body).toHaveLength(1)
@@ -77,7 +89,9 @@ describe('Ratings API', () => {
     })
 
     it('returns 400 for invalid sheet id', async () => {
-      const res = await request(app).get('/api/backend/datasheets/abc/ratings')
+      const res = await request(app)
+        .get('/api/backend/datasheets/abc/ratings')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(400)
       expect(mockListForSheet).not.toHaveBeenCalled()
@@ -86,7 +100,9 @@ describe('Ratings API', () => {
     it('returns 404 when sheet not found', async () => {
       mockListForSheet.mockRejectedValue(new AppError('Sheet not found or does not belong to account', 404))
 
-      const res = await request(app).get('/api/backend/datasheets/999/ratings')
+      const res = await request(app)
+        .get('/api/backend/datasheets/999/ratings')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(404)
       expect(res.body?.error).toMatch(/not found|belong/i)
@@ -112,7 +128,9 @@ describe('Ratings API', () => {
         ],
       })
 
-      const res = await request(app).get('/api/backend/ratings/10')
+      const res = await request(app)
+        .get('/api/backend/ratings/10')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(200)
       expect(res.body.block.ratingsBlockId).toBe(10)
@@ -124,14 +142,18 @@ describe('Ratings API', () => {
     it('returns 404 when block not found', async () => {
       mockGetById.mockResolvedValue(null)
 
-      const res = await request(app).get('/api/backend/ratings/999')
+      const res = await request(app)
+        .get('/api/backend/ratings/999')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(404)
       expect(res.body?.error).toMatch(/not found/i)
     })
 
     it('returns 400 for invalid block id', async () => {
-      const res = await request(app).get('/api/backend/ratings/invalid')
+      const res = await request(app)
+        .get('/api/backend/ratings/invalid')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(400)
       expect(mockGetById).not.toHaveBeenCalled()
@@ -155,6 +177,7 @@ describe('Ratings API', () => {
 
       const res = await request(app)
         .post('/api/backend/ratings')
+        .set('Cookie', [authCookie])
         .send({
           sheetId: 5,
           blockType: 'Nameplate',
@@ -179,6 +202,7 @@ describe('Ratings API', () => {
     it('rejects invalid payload', async () => {
       const res = await request(app)
         .post('/api/backend/ratings')
+        .set('Cookie', [authCookie])
         .send({})
 
       expect(res.status).toBe(400)
@@ -191,6 +215,7 @@ describe('Ratings API', () => {
 
       const res = await request(app)
         .post('/api/backend/ratings')
+        .set('Cookie', [authCookie])
         .send({
           sheetId: 5,
           blockType: 'Nameplate',
@@ -205,6 +230,7 @@ describe('Ratings API', () => {
     it('returns 400 when key too long', async () => {
       const res = await request(app)
         .post('/api/backend/ratings')
+        .set('Cookie', [authCookie])
         .send({
           sheetId: 5,
           blockType: 'Nameplate',
@@ -219,6 +245,7 @@ describe('Ratings API', () => {
     it('returns 400 when uom too long', async () => {
       const res = await request(app)
         .post('/api/backend/ratings')
+        .set('Cookie', [authCookie])
         .send({
           sheetId: 5,
           blockType: 'Nameplate',
@@ -233,6 +260,7 @@ describe('Ratings API', () => {
     it('returns 400 when blockType too long', async () => {
       const res = await request(app)
         .post('/api/backend/ratings')
+        .set('Cookie', [authCookie])
         .send({
           sheetId: 5,
           blockType: 'a'.repeat(51),
@@ -266,6 +294,7 @@ describe('Ratings API', () => {
 
       const res = await request(app)
         .patch('/api/backend/ratings/10')
+        .set('Cookie', [authCookie])
         .send({ blockType: 'Ratings', notes: 'Updated', entries: [{ key: 'MAWP', value: '100', uom: 'bar' }] })
 
       expect(res.status).toBe(200)
@@ -288,6 +317,7 @@ describe('Ratings API', () => {
 
       const res = await request(app)
         .patch('/api/backend/ratings/10')
+        .set('Cookie', [authCookie])
         .send({ blockType: 'Ratings' })
 
       expect(res.status).toBe(409)
@@ -299,6 +329,7 @@ describe('Ratings API', () => {
 
       const res = await request(app)
         .patch('/api/backend/ratings/10')
+        .set('Cookie', [authCookie])
         .send({ entries })
 
       expect(res.status).toBe(400)
@@ -311,7 +342,9 @@ describe('Ratings API', () => {
     it('deletes block', async () => {
       mockRemove.mockResolvedValue(true)
 
-      const res = await request(app).delete('/api/backend/ratings/10')
+      const res = await request(app)
+        .delete('/api/backend/ratings/10')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(200)
       expect(res.body.deleted).toBe(true)
@@ -321,7 +354,9 @@ describe('Ratings API', () => {
     it('returns 404 when block not found', async () => {
       mockRemove.mockRejectedValue(new AppError('Ratings block not found', 404))
 
-      const res = await request(app).delete('/api/backend/ratings/999')
+      const res = await request(app)
+        .delete('/api/backend/ratings/999')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(404)
       expect(res.body?.error).toMatch(/not found/i)
@@ -330,7 +365,9 @@ describe('Ratings API', () => {
     it('returns 409 when block is locked', async () => {
       mockRemove.mockRejectedValue(new AppError('Ratings block is locked', 409))
 
-      const res = await request(app).delete('/api/backend/ratings/10')
+      const res = await request(app)
+        .delete('/api/backend/ratings/10')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(409)
       expect(res.body?.error).toMatch(/locked/i)
@@ -356,7 +393,9 @@ describe('Ratings API', () => {
     it('locks block successfully when sheet is approved', async () => {
       mockLock.mockResolvedValue(lockedBlock)
 
-      const res = await request(app).post('/api/backend/ratings/10/lock')
+      const res = await request(app)
+        .post('/api/backend/ratings/10/lock')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(200)
       expect(res.body.block.lockedAt).toBeDefined()
@@ -369,7 +408,9 @@ describe('Ratings API', () => {
         new AppError('Ratings can only be locked for approved datasheets.', 409)
       )
 
-      const res = await request(app).post('/api/backend/ratings/10/lock')
+      const res = await request(app)
+        .post('/api/backend/ratings/10/lock')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(409)
       expect(res.body?.error).toMatch(/approved datasheets/i)
@@ -378,7 +419,9 @@ describe('Ratings API', () => {
     it('returns 200 idempotent when block already locked', async () => {
       mockLock.mockResolvedValue(lockedBlock)
 
-      const res = await request(app).post('/api/backend/ratings/10/lock')
+      const res = await request(app)
+        .post('/api/backend/ratings/10/lock')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(200)
       expect(res.body.block.lockedAt).toBeDefined()
@@ -406,7 +449,9 @@ describe('Ratings API', () => {
       currentTestUserIsAdmin = true
       mockUnlock.mockResolvedValue(unlockedBlock)
 
-      const res = await request(app).post('/api/backend/ratings/10/unlock')
+      const res = await request(app)
+        .post('/api/backend/ratings/10/unlock')
+        .set('Cookie', [authCookie])
 
       expect(res.status).toBe(200)
       expect(res.body.block.lockedAt).toBeNull()
@@ -416,8 +461,12 @@ describe('Ratings API', () => {
 
     it('returns 403 when user is not admin', async () => {
       currentTestUserIsAdmin = false
+      const nonAdminToken = makeToken({ userId: 1, accountId: 1, roleId: 2, role: 'User' })
+      const nonAdminCookie = `token=${nonAdminToken}`
 
-      const res = await request(app).post('/api/backend/ratings/10/unlock')
+      const res = await request(app)
+        .post('/api/backend/ratings/10/unlock')
+        .set('Cookie', [nonAdminCookie])
 
       expect(res.status).toBe(403)
       expect(res.body?.error).toMatch(/admin|superadmin/i)

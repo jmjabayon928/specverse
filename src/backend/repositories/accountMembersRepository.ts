@@ -10,9 +10,12 @@ export type AccountMemberRow = {
   roleId: number
   roleName: string
   isActive: boolean
+  isOwner: boolean
   createdAt: Date
   updatedAt: Date
 }
+
+const isOwnerExpr = `CASE WHEN (am.IsOwner = 1) OR (a.OwnerUserID = am.UserID) THEN 1 ELSE 0 END`
 
 /**
  * Lists members for an account (AccountMembers + Users + Roles). Scoped by accountId only.
@@ -31,6 +34,7 @@ export async function listMembers(accountId: number): Promise<AccountMemberRow[]
       RoleID: number
       RoleName: string
       IsActive: boolean
+      IsOwner: number
       CreatedAt: Date
       UpdatedAt: Date
     }>(`
@@ -43,9 +47,11 @@ export async function listMembers(accountId: number): Promise<AccountMemberRow[]
         am.RoleID,
         r.RoleName,
         CAST(am.IsActive AS TINYINT) AS IsActive,
+        ${isOwnerExpr} AS IsOwner,
         am.CreatedAt,
         am.UpdatedAt
       FROM dbo.AccountMembers am
+      INNER JOIN dbo.Accounts a ON a.AccountID = am.AccountID
       INNER JOIN dbo.Users u ON u.UserID = am.UserID
       INNER JOIN dbo.Roles r ON r.RoleID = am.RoleID
       WHERE am.AccountID = @AccountID
@@ -60,6 +66,7 @@ export async function listMembers(accountId: number): Promise<AccountMemberRow[]
     roleId: row.RoleID,
     roleName: row.RoleName,
     isActive: Boolean(row.IsActive),
+    isOwner: row.IsOwner === 1,
     createdAt: row.CreatedAt,
     updatedAt: row.UpdatedAt,
   }))
@@ -86,6 +93,7 @@ export async function getMemberByAccountAndUser(
       RoleID: number
       RoleName: string
       IsActive: boolean
+      IsOwner: number
       CreatedAt: Date
       UpdatedAt: Date
     }>(`
@@ -98,9 +106,11 @@ export async function getMemberByAccountAndUser(
         am.RoleID,
         r.RoleName,
         CAST(am.IsActive AS TINYINT) AS IsActive,
+        ${isOwnerExpr} AS IsOwner,
         am.CreatedAt,
         am.UpdatedAt
       FROM dbo.AccountMembers am
+      INNER JOIN dbo.Accounts a ON a.AccountID = am.AccountID
       INNER JOIN dbo.Users u ON u.UserID = am.UserID
       INNER JOIN dbo.Roles r ON r.RoleID = am.RoleID
       WHERE am.AccountID = @AccountID AND am.UserID = @UserID
@@ -116,6 +126,7 @@ export async function getMemberByAccountAndUser(
     roleId: row.RoleID,
     roleName: row.RoleName,
     isActive: Boolean(row.IsActive),
+    isOwner: row.IsOwner === 1,
     createdAt: row.CreatedAt,
     updatedAt: row.UpdatedAt,
   }
@@ -142,6 +153,7 @@ export async function getMemberInAccount(
       RoleID: number
       RoleName: string
       IsActive: boolean
+      IsOwner: number
       CreatedAt: Date
       UpdatedAt: Date
     }>(`
@@ -154,9 +166,11 @@ export async function getMemberInAccount(
         am.RoleID,
         r.RoleName,
         CAST(am.IsActive AS TINYINT) AS IsActive,
+        ${isOwnerExpr} AS IsOwner,
         am.CreatedAt,
         am.UpdatedAt
       FROM dbo.AccountMembers am
+      INNER JOIN dbo.Accounts a ON a.AccountID = am.AccountID
       INNER JOIN dbo.Users u ON u.UserID = am.UserID
       INNER JOIN dbo.Roles r ON r.RoleID = am.RoleID
       WHERE am.AccountID = @AccountID AND am.AccountMemberID = @AccountMemberID
@@ -172,6 +186,7 @@ export async function getMemberInAccount(
     roleId: row.RoleID,
     roleName: row.RoleName,
     isActive: Boolean(row.IsActive),
+    isOwner: row.IsOwner === 1,
     createdAt: row.CreatedAt,
     updatedAt: row.UpdatedAt,
   }
@@ -195,6 +210,63 @@ export async function countActiveAdminsInAccount(accountId: number): Promise<num
         AND LOWER(LTRIM(RTRIM(r.RoleName))) = N'admin'
     `)
   return result.recordset[0]?.Cnt ?? 0
+}
+
+/**
+ * Count of active members who are owners (am.IsOwner = 1 or a.OwnerUserID = am.UserID). No double count.
+ */
+export async function countActiveOwnersInAccount(accountId: number): Promise<number> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .query<{ Cnt: number }>(`
+      SELECT COUNT(*) AS Cnt
+      FROM dbo.AccountMembers am
+      INNER JOIN dbo.Accounts a ON a.AccountID = am.AccountID
+      WHERE am.AccountID = @AccountID
+        AND am.IsActive = 1
+        AND ((am.IsOwner = 1) OR (a.OwnerUserID = am.UserID))
+    `)
+  return result.recordset[0]?.Cnt ?? 0
+}
+
+/**
+ * Clears IsOwner for all members in the account. Use before setting exactly one member as owner.
+ */
+export async function clearAccountMemberOwnerFlags(
+  accountId: number,
+  tx?: InstanceType<typeof sql.Transaction>,
+): Promise<void> {
+  const req = tx ? tx.request() : (await poolPromise).request()
+  await req
+    .input('AccountID', sql.Int, accountId)
+    .query(`
+      UPDATE dbo.AccountMembers
+      SET IsOwner = 0, UpdatedAt = GETDATE()
+      WHERE AccountID = @AccountID
+    `)
+}
+
+/**
+ * Sets IsOwner flag for a member. Caller must ensure row exists.
+ */
+export async function setMemberIsOwner(
+  accountId: number,
+  accountMemberId: number,
+  isOwner: boolean,
+  tx?: InstanceType<typeof sql.Transaction>,
+): Promise<void> {
+  const req = tx ? tx.request() : (await poolPromise).request()
+  await req
+    .input('AccountID', sql.Int, accountId)
+    .input('AccountMemberID', sql.Int, accountMemberId)
+    .input('IsOwner', sql.Bit, isOwner ? 1 : 0)
+    .query(`
+      UPDATE dbo.AccountMembers
+      SET IsOwner = @IsOwner, UpdatedAt = GETDATE()
+      WHERE AccountID = @AccountID AND AccountMemberID = @AccountMemberID
+    `)
 }
 
 /**

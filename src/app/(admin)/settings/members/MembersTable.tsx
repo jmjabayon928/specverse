@@ -13,6 +13,7 @@ export type MemberRow = {
   roleId: number
   roleName: string
   isActive: boolean
+  isOwner?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -130,7 +131,12 @@ export default function MembersTable({ members: initialMembers, roles, permissio
             <tr key={m.accountMemberId}>
               <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                 <span className="block font-medium">{name(m)}</span>
-                {m.email && <span className="text-gray-500 dark:text-gray-400">{m.email}</span>}
+                {m.isOwner && (
+                  <span className="ml-1.5 inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                    Owner
+                  </span>
+                )}
+                {m.email && <span className="block text-gray-500 dark:text-gray-400">{m.email}</span>}
               </td>
               <td className="px-4 py-3">
                 <select
@@ -149,7 +155,7 @@ export default function MembersTable({ members: initialMembers, roles, permissio
               <td className="px-4 py-3">
                 <button
                   type="button"
-                  disabled={!canChangeStatus || updatingId === m.accountMemberId}
+                  disabled={!canChangeStatus || updatingId === m.accountMemberId || m.isOwner}
                   onClick={() => void updateStatus(m.accountMemberId, !m.isActive)}
                   className={`rounded px-2 py-1 text-sm font-medium ${
                     m.isActive
