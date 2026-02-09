@@ -4,6 +4,8 @@
 import Link from 'next/link'
 import { EyeIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
 import type { Estimation } from '@/domain/estimations/estimationTypes'
+import { useSession } from '@/hooks/useSession'
+import { PERMISSIONS } from '@/constants/permissions'
 
 interface EstimationTableProps {
   estimations: Estimation[]
@@ -35,6 +37,9 @@ const formatCurrency = (amount: number | null | undefined): string => {
 
 const EstimationTable = (props: Readonly<EstimationTableProps>) => {
   const { estimations, onDelete } = props
+  const { user } = useSession()
+  const canEdit = user?.permissions?.includes(PERMISSIONS.ESTIMATION_EDIT) === true
+  const canView = user?.permissions?.includes(PERMISSIONS.ESTIMATION_VIEW) === true || canEdit
 
   const handleDelete = async (id: number) => {
     const confirmed = globalThis.confirm(
@@ -123,27 +128,31 @@ const EstimationTable = (props: Readonly<EstimationTableProps>) => {
                 </td>
                 <td className='px-4 py-2'>
                   <div className='flex items-center justify-center gap-3 text-gray-600'>
-                    <Link
-                      href={`/estimation/${estimation.EstimationID}`}
-                      title='View'
-                    >
-                      <EyeIcon className='h-5 w-5 hover:text-blue-600' />
-                    </Link>
-
-                    <Link
-                      href={`/estimation/${estimation.EstimationID}/edit`}
-                      title='Edit'
-                    >
-                      <PencilIcon className='h-5 w-5 hover:text-emerald-600' />
-                    </Link>
-
-                    <button
-                      type='button'
-                      onClick={() => handleDelete(estimation.EstimationID)}
-                      title='Delete'
-                    >
-                      <TrashIcon className='h-5 w-5 hover:text-red-600' />
-                    </button>
+                    {canView && (
+                      <Link
+                        href={`/estimation/${estimation.EstimationID}`}
+                        title='View'
+                      >
+                        <EyeIcon className='h-5 w-5 hover:text-blue-600' />
+                      </Link>
+                    )}
+                    {canEdit && (
+                      <Link
+                        href={`/estimation/${estimation.EstimationID}/edit`}
+                        title='Edit'
+                      >
+                        <PencilIcon className='h-5 w-5 hover:text-emerald-600' />
+                      </Link>
+                    )}
+                    {user?.permissions?.includes(PERMISSIONS.ESTIMATION_DELETE) === true && (
+                      <button
+                        type='button'
+                        onClick={() => handleDelete(estimation.EstimationID)}
+                        title='Delete'
+                      >
+                        <TrashIcon className='h-5 w-5 hover:text-red-600' />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

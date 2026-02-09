@@ -39,6 +39,10 @@ export function useSession(): UseSessionResult {
         }
 
         const data: UserSession = await res.json()
+        // Ensure permissions is always an array (never undefined/null)
+        if (!Array.isArray(data.permissions)) {
+          data.permissions = []
+        }
         setUser(data)
       } catch {
         setUser(null)

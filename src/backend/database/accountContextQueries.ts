@@ -5,7 +5,40 @@ export type AccountContext = {
   roleId: number;
   roleName: string;
   permissions: string[];
+  isOwner: boolean;
+  ownerUserId: number | null;
 };
+
+function isAdmin(roleId: number, roleName: string): boolean {
+  if (roleId === 1) return true;
+  const name = typeof roleName === "string" ? roleName.trim().toLowerCase() : "";
+  return name === "admin";
+}
+
+async function getPermissionsForRole(
+  roleId: number,
+  roleName: string,
+  pool: Awaited<typeof poolPromise>
+): Promise<string[]> {
+  if (isAdmin(roleId, roleName)) {
+    const result = await pool.request().query<{ PermissionKey: string }>(`
+      SELECT PermissionKey
+      FROM dbo.Permissions
+      ORDER BY PermissionKey
+    `);
+    return result.recordset.map((r) => r.PermissionKey);
+  }
+  const result = await pool
+    .request()
+    .input("RoleID", sql.Int, roleId)
+    .query<{ PermissionKey: string }>(`
+      SELECT p.PermissionKey
+      FROM dbo.RolePermissions rp
+      INNER JOIN dbo.Permissions p ON p.PermissionID = rp.PermissionID
+      WHERE rp.RoleID = @RoleID
+    `);
+  return result.recordset.map((r) => r.PermissionKey);
+}
 
 export async function getDefaultAccountId(): Promise<number | null> {
   const pool = await poolPromise;
@@ -51,11 +84,13 @@ export async function getAccountContextForUser(
   const member = await pool
     .request()
     .input("UserID", sql.Int, userId)
-    .query<{ AccountID: number; RoleID: number; RoleName: string }>(`
+    .query<{ AccountID: number; RoleID: number; RoleName: string; OwnerUserID: number | null; IsOwner: number }>(`
       SELECT TOP 1
         am.AccountID,
         am.RoleID,
-        r.RoleName
+        r.RoleName,
+        a.OwnerUserID AS OwnerUserID,
+        CASE WHEN (am.IsOwner = 1) OR (a.OwnerUserID = @UserID) THEN 1 ELSE 0 END AS IsOwner
       FROM dbo.AccountMembers am
       INNER JOIN dbo.Accounts a ON a.AccountID = am.AccountID
       INNER JOIN dbo.Roles r ON r.RoleID = am.RoleID
@@ -70,21 +105,15 @@ export async function getAccountContextForUser(
   const row = member.recordset[0];
   if (!row) return null;
 
-  const perms = await pool
-    .request()
-    .input("RoleID", sql.Int, row.RoleID)
-    .query<{ PermissionKey: string }>(`
-      SELECT p.PermissionKey
-      FROM dbo.RolePermissions rp
-      INNER JOIN dbo.Permissions p ON p.PermissionID = rp.PermissionID
-      WHERE rp.RoleID = @RoleID
-    `);
+  const permissions = await getPermissionsForRole(row.RoleID, row.RoleName, pool);
 
   return {
     accountId: row.AccountID,
     roleId: row.RoleID,
     roleName: row.RoleName,
-    permissions: perms.recordset.map(r => r.PermissionKey),
+    permissions,
+    ownerUserId: row.OwnerUserID ?? null,
+    isOwner: row.IsOwner === 1,
   };
 }
 
@@ -102,8 +131,10 @@ export async function getAccountContextForUserAndAccount(
     .request()
     .input("UserID", sql.Int, userId)
     .input("AccountID", sql.Int, accountId)
-    .query<{ AccountID: number; RoleID: number; RoleName: string }>(`
-      SELECT am.AccountID, am.RoleID, r.RoleName
+    .query<{ AccountID: number; RoleID: number; RoleName: string; OwnerUserID: number | null; IsOwner: number }>(`
+      SELECT am.AccountID, am.RoleID, r.RoleName,
+        a.OwnerUserID AS OwnerUserID,
+        CASE WHEN (am.IsOwner = 1) OR (a.OwnerUserID = @UserID) THEN 1 ELSE 0 END AS IsOwner
       FROM dbo.AccountMembers am
       INNER JOIN dbo.Accounts a ON a.AccountID = am.AccountID
       INNER JOIN dbo.Roles r ON r.RoleID = am.RoleID
@@ -116,21 +147,15 @@ export async function getAccountContextForUserAndAccount(
   const row = member.recordset[0];
   if (!row) return null;
 
-  const perms = await pool
-    .request()
-    .input("RoleID", sql.Int, row.RoleID)
-    .query<{ PermissionKey: string }>(`
-      SELECT p.PermissionKey
-      FROM dbo.RolePermissions rp
-      INNER JOIN dbo.Permissions p ON p.PermissionID = rp.PermissionID
-      WHERE rp.RoleID = @RoleID
-    `);
+  const permissions = await getPermissionsForRole(row.RoleID, row.RoleName, pool);
 
   return {
     accountId: row.AccountID,
     roleId: row.RoleID,
     roleName: row.RoleName,
-    permissions: perms.recordset.map(r => r.PermissionKey),
+    permissions,
+    ownerUserId: row.OwnerUserID ?? null,
+    isOwner: row.IsOwner === 1,
   };
 }
 

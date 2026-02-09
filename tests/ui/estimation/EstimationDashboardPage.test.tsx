@@ -29,9 +29,42 @@ jest.mock('next/dynamic', () => ({
   },
 }))
 
+function urlFromInput(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input
+  if (input instanceof URL) return input.href
+  return input.url
+}
+
 describe('EstimationDashboardPage', () => {
   beforeEach(() => {
-    globalThis.fetch = jest.fn()
+    globalThis.fetch = jest.fn((input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = urlFromInput(input)
+      if (url.includes('/api/backend/auth/session')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ userId: 1, roleId: 1, role: 'Admin', permissions: [], accountId: 1, isOwner: true, ownerUserId: 1 }),
+        } as Response)
+      }
+      if (url.includes('/api/backend/settings/clients')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ page: 1, pageSize: 20, total: 1, rows: [{ ClientID: 1, ClientName: 'Acme Corp' }] }),
+        } as Response)
+      }
+      if (url.includes('/api/backend/projects')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ page: 1, pageSize: 20, total: 1, rows: [{ ProjectID: 1, ProjName: 'Phase 1' }] }),
+        } as Response)
+      }
+      if (url.includes('/api/backend/estimation/filter')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ data: [], totalCount: 0 }),
+        } as Response)
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) } as Response)
+    }) as typeof fetch
   })
 
   afterEach(() => {
@@ -39,10 +72,6 @@ describe('EstimationDashboardPage', () => {
   })
 
   it('fetches clients and projects with credentials include', async () => {
-    (globalThis.fetch as jest.Mock)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ page: 1, pageSize: 20, total: 0, rows: [] }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ page: 1, pageSize: 20, total: 0, rows: [] }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [], totalCount: 0 }) })
     render(<EstimationDashboardPage />)
     await waitFor(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -57,26 +86,6 @@ describe('EstimationDashboardPage', () => {
   })
 
   it('maps client and project rows into options when API returns data', async () => {
-    (globalThis.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          page: 1,
-          pageSize: 20,
-          total: 1,
-          rows: [{ ClientID: 1, ClientName: 'Acme Corp' }],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          page: 1,
-          pageSize: 20,
-          total: 1,
-          rows: [{ ProjectID: 1, ProjName: 'Phase 1' }],
-        }),
-      })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [], totalCount: 0 }) })
     render(<EstimationDashboardPage />)
     await waitFor(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -88,10 +97,6 @@ describe('EstimationDashboardPage', () => {
   })
 
   it('handles non-200 responses and sets empty options', async () => {
-    (globalThis.fetch as jest.Mock)
-      .mockResolvedValueOnce({ ok: false })
-      .mockResolvedValueOnce({ ok: false })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [], totalCount: 0 }) })
     render(<EstimationDashboardPage />)
     await waitFor(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/backend/settings/clients', expect.any(Object))

@@ -7,6 +7,7 @@ import InventoryDetails from "@/components/inventory/InventoryDetails";
 import InventoryTabLink from "@/components/inventory/InventoryTabLink";
 import InventoryTabContent from "@/components/inventory/InventoryTabContent";
 import { requireAuth } from "@/utils/sessionUtils.server";
+import { PERMISSIONS } from "@/constants/permissions";
 
 interface InventoryPageProps {
   params: Promise<{ id?: string }>;
@@ -30,6 +31,8 @@ export default async function InventoryDetailPage(
   const { categories, suppliers, manufacturers } = await fetchReferenceOptions(accountId);
   const resolvedSearchParams = await searchParams;
   const activeTab = resolvedSearchParams.tab ?? "overview";
+  const canEditStock = session.permissions?.includes(PERMISSIONS.INVENTORY_TRANSACTION_CREATE) ?? false;
+  const canEditMaintenance = session.permissions?.includes(PERMISSIONS.INVENTORY_MAINTENANCE_CREATE) ?? false;
 
   return (
     <div className="p-4">
@@ -73,8 +76,8 @@ export default async function InventoryDetailPage(
             <InventoryTabContent
               inventoryId={itemId}
               activeTab={activeTab}
-              canEditStock={true}
-              canEditMaintenance={true}
+              canEditStock={canEditStock}
+              canEditMaintenance={canEditMaintenance}
             />
           )}
         </div>

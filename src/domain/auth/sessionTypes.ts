@@ -21,4 +21,7 @@ export interface UserSession {
 
   // Phase 2.5: active account for tenant-scoped data
   accountId?: number
+
+  isOwner?: boolean
+  ownerUserId?: number | null
 }
