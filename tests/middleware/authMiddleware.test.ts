@@ -3,8 +3,9 @@ import request from "supertest";
 import express from "express";
 import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
-import { verifyToken } from "../../src/backend/middleware/authMiddleware";
+import { verifyToken, requireOwner } from "../../src/backend/middleware/authMiddleware";
 import authRoutes from "../../src/backend/routes/authRoutes";
+import { errorHandler } from "../../src/backend/middleware/errorHandler";
 
 jest.mock("../../src/backend/database/accountContextQueries", () => {
   return {
@@ -13,6 +14,8 @@ jest.mock("../../src/backend/database/accountContextQueries", () => {
       roleId: 1,
       roleName: "Admin",
       permissions: [],
+      isOwner: true,
+      ownerUserId: 1,
     }),
     getAccountContextForUserAndAccount: jest.fn().mockResolvedValue(null),
     getDefaultAccountId: jest.fn().mockResolvedValue(1),
@@ -48,6 +51,8 @@ describe("verifyToken middleware", () => {
       roleId: 1,
       roleName: "Admin",
       permissions: [],
+      isOwner: true,
+      ownerUserId: 1,
     });
     (getActiveAccountId as jest.Mock).mockResolvedValue(5);
   });
@@ -338,6 +343,76 @@ describe("verifyToken middleware", () => {
       expect(res.statusCode).toBe(200);
       expect(res.body.accountId).toBe(1);
       expect(clearActiveAccount).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe("requireOwner middleware", () => {
+    it("returns 403 when user is not owner", async () => {
+      const app = express();
+      app.use(express.json());
+      app.use(cookieParser());
+      app.get("/owner-only", verifyToken, requireOwner, (_req, res) => {
+        res.json({ ok: true });
+      });
+      app.use(errorHandler);
+
+      (getAccountContextForUser as jest.Mock).mockResolvedValueOnce({
+        accountId: 1,
+        roleId: 2,
+        roleName: "Engineer",
+        permissions: ["DATASHEET_VIEW"],
+        isOwner: false,
+        ownerUserId: 99,
+      });
+
+      const token = makeToken({
+        userId: 1,
+        roleId: 2,
+        role: "Engineer",
+        email: "e@example.com",
+        name: "Engineer",
+        profilePic: null,
+        permissions: [],
+      });
+
+      const res = await request(app).get("/owner-only").set("Cookie", [`token=${token}`]);
+
+      expect(res.statusCode).toBe(403);
+      expect(res.body.message).toBe("Owner access required");
+    });
+
+    it("allows access when user is owner", async () => {
+      const app = express();
+      app.use(express.json());
+      app.use(cookieParser());
+      app.get("/owner-only", verifyToken, requireOwner, (_req, res) => {
+        res.json({ ok: true });
+      });
+      app.use(errorHandler);
+
+      (getAccountContextForUser as jest.Mock).mockResolvedValueOnce({
+        accountId: 1,
+        roleId: 1,
+        roleName: "Admin",
+        permissions: [],
+        isOwner: true,
+        ownerUserId: 1,
+      });
+
+      const token = makeToken({
+        userId: 1,
+        roleId: 1,
+        role: "Admin",
+        email: "owner@example.com",
+        name: "Owner",
+        profilePic: null,
+        permissions: [],
+      });
+
+      const res = await request(app).get("/owner-only").set("Cookie", [`token=${token}`]);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.ok).toBe(true);
     });
   });
 

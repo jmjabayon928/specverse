@@ -28,8 +28,16 @@ const checkUserPermission = jest.fn().mockResolvedValue(true)
 const listMembersRepo = jest.fn().mockResolvedValue([])
 const getMemberInAccount = jest.fn().mockResolvedValue(null)
 const countActiveAdminsInAccount = jest.fn().mockResolvedValue(1)
+const countActiveOwnersInAccount = jest.fn().mockResolvedValue(1)
 const updateMemberRoleRepo = jest.fn().mockResolvedValue(undefined)
 const updateMemberStatusRepo = jest.fn().mockResolvedValue(undefined)
+
+const getAccountById = jest.fn().mockResolvedValue(null)
+
+jest.mock('../../src/backend/repositories/accountsRepository', () => ({
+  ...jest.requireActual('../../src/backend/repositories/accountsRepository'),
+  getAccountById: (...args: unknown[]) => getAccountById(...args),
+}))
 
 jest.mock('../../src/backend/database/accountContextQueries', () => ({
   getAccountContextForUser,
@@ -52,6 +60,7 @@ jest.mock('../../src/backend/repositories/accountMembersRepository', () => ({
   listMembers: (...args: unknown[]) => listMembersRepo(...args),
   getMemberInAccount: (...args: unknown[]) => getMemberInAccount(...args),
   countActiveAdminsInAccount: (...args: unknown[]) => countActiveAdminsInAccount(...args),
+  countActiveOwnersInAccount: (...args: unknown[]) => countActiveOwnersInAccount(...args),
   updateMemberRole: (...args: unknown[]) => updateMemberRoleRepo(...args),
   updateMemberStatus: (...args: unknown[]) => updateMemberStatusRepo(...args),
 }))
@@ -71,6 +80,7 @@ const sampleMember = {
   roleId: 2,
   roleName: 'Engineer',
   isActive: true,
+  isOwner: false,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 }
@@ -87,6 +97,8 @@ beforeEach(() => {
       updatedAt: sampleMember.updatedAt.toISOString(),
     },
   ])
+  countActiveOwnersInAccount.mockResolvedValue(1)
+  getAccountById.mockResolvedValue(null)
 })
 
 describe('GET /api/backend/account-members', () => {
@@ -140,6 +152,32 @@ describe('GET /api/backend/account-members', () => {
       .set('Cookie', [`token=${token}`])
 
     expect(res.status).toBe(403)
+  })
+
+  it('returns members with isOwner when present', async () => {
+    listMembersRepo.mockResolvedValueOnce([
+      {
+        ...sampleMember,
+        isOwner: true,
+        createdAt: sampleMember.createdAt.toISOString(),
+        updatedAt: sampleMember.updatedAt.toISOString(),
+      },
+    ])
+    const token = makeToken({
+      userId: 1,
+      roleId: 1,
+      role: 'Admin',
+      email: 'admin@example.com',
+      name: 'Admin',
+      profilePic: null,
+      permissions: ['ACCOUNT_VIEW'],
+    })
+    const res = await request(app)
+      .get('/api/backend/account-members')
+      .set('Cookie', [`token=${token}`])
+    expect(res.status).toBe(200)
+    expect(res.body.members).toHaveLength(1)
+    expect(res.body.members[0].isOwner).toBe(true)
   })
 
   it('returns 409 when no active account selected (safety net)', async () => {
@@ -344,5 +382,72 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
       .send({})
 
     expect(res.status).toBe(400)
+  })
+
+  it('returns 403 when deactivating last active Owner', async () => {
+    getMemberInAccount.mockResolvedValue({
+      ...sampleMember,
+      roleName: 'Admin',
+      isActive: true,
+      isOwner: true,
+    })
+    countActiveAdminsInAccount.mockResolvedValue(2)
+    countActiveOwnersInAccount.mockResolvedValue(1)
+
+    const token = makeToken({
+      userId: 1,
+      roleId: 1,
+      role: 'Admin',
+      email: 'admin@example.com',
+      name: 'Admin',
+      profilePic: null,
+      permissions: ['ACCOUNT_USER_MANAGE'],
+    })
+
+    const res = await request(app)
+      .patch('/api/backend/account-members/10/status')
+      .set('Cookie', [`token=${token}`])
+      .send({ isActive: false })
+
+    expect(res.status).toBe(403)
+    expect(res.body.message).toMatch(/last.*owner|deactivate/i)
+    expect(updateMemberStatusRepo).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 when deactivating canonical account owner', async () => {
+    getMemberInAccount.mockResolvedValue({
+      ...sampleMember,
+      userId: 2,
+      isActive: true,
+      isOwner: true,
+    })
+    getAccountById.mockResolvedValueOnce({
+      accountId: 1,
+      accountName: 'Acme',
+      slug: 'acme',
+      isActive: true,
+      ownerUserId: 2,
+    })
+    countActiveAdminsInAccount.mockResolvedValue(2)
+    countActiveOwnersInAccount.mockResolvedValue(2)
+
+    const token = makeToken({
+      userId: 1,
+      roleId: 1,
+      role: 'Admin',
+      email: 'admin@example.com',
+      name: 'Admin',
+      profilePic: null,
+      permissions: ['ACCOUNT_USER_MANAGE'],
+    })
+
+    const res = await request(app)
+      .patch('/api/backend/account-members/10/status')
+      .set('Cookie', [`token=${token}`])
+      .send({ isActive: false })
+
+    expect(res.status).toBe(403)
+    expect(res.body.message).toBe('Cannot deactivate the account owner; transfer ownership first.')
+    expect(updateMemberStatusRepo).not.toHaveBeenCalled()
   })
 })

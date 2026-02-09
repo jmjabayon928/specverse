@@ -21,6 +21,7 @@ export type AccountDto = {
   accountName: string
   slug: string
   isActive: boolean
+  ownerUserId: number | null
 }
 
 export type AccountWithRole = {
@@ -41,12 +42,14 @@ export async function getAccountById(accountId: number): Promise<AccountDto | nu
       AccountName: string
       Slug: string
       IsActive: boolean
+      OwnerUserID: number | null
     }>(`
       SELECT
         a.AccountID,
         a.AccountName,
         a.Slug,
-        CAST(a.IsActive AS TINYINT) AS IsActive
+        CAST(a.IsActive AS TINYINT) AS IsActive,
+        a.OwnerUserID
       FROM dbo.Accounts a
       WHERE a.AccountID = @AccountID
     `)
@@ -57,6 +60,7 @@ export async function getAccountById(accountId: number): Promise<AccountDto | nu
     accountName: row.AccountName,
     slug: row.Slug,
     isActive: Boolean(row.IsActive),
+    ownerUserId: row.OwnerUserID ?? null,
   }
 }
 
@@ -95,6 +99,7 @@ export async function createAccount(
     accountName: row.AccountName,
     slug: row.Slug,
     isActive: Boolean(row.IsActive),
+    ownerUserId: null,
   }
 }
 
@@ -113,6 +118,7 @@ export async function updateAccount(accountId: number, patch: AccountPatch): Pro
       AccountName: string
       Slug: string
       IsActive: boolean
+      OwnerUserID: number | null
     }>(`
       UPDATE dbo.Accounts
       SET
@@ -123,7 +129,8 @@ export async function updateAccount(accountId: number, patch: AccountPatch): Pro
         inserted.AccountID,
         inserted.AccountName,
         inserted.Slug,
-        CAST(inserted.IsActive AS TINYINT) AS IsActive
+        CAST(inserted.IsActive AS TINYINT) AS IsActive,
+        inserted.OwnerUserID
       WHERE AccountID = @AccountID
     `)
   const row = result.recordset[0]
@@ -133,7 +140,24 @@ export async function updateAccount(accountId: number, patch: AccountPatch): Pro
     accountName: row.AccountName,
     slug: row.Slug,
     isActive: Boolean(row.IsActive),
+    ownerUserId: row.OwnerUserID ?? null,
   }
+}
+
+export async function updateAccountOwner(
+  accountId: number,
+  ownerUserId: number | null,
+  tx?: InstanceType<typeof sql.Transaction>,
+): Promise<void> {
+  const req = tx ? tx.request() : (await poolPromise).request()
+  await req
+    .input('AccountID', sql.Int, accountId)
+    .input('OwnerUserID', sql.Int, ownerUserId)
+    .query(`
+      UPDATE dbo.Accounts
+      SET OwnerUserID = @OwnerUserID
+      WHERE AccountID = @AccountID
+    `)
 }
 
 /**

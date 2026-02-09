@@ -1,28 +1,19 @@
 // tests/api/instrument-loops.test.ts
 import request from 'supertest'
-import type { Request, Response, NextFunction } from 'express'
+import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
 import { PERMISSIONS } from '../../src/constants/permissions'
 
 let currentTestAccountId = 1
-
-jest.mock('../../src/backend/middleware/authMiddleware', () => ({
-  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
-    req.user = {
-      userId: 1,
-      accountId: currentTestAccountId,
-      role: 'Admin',
-      roleId: 1,
-      isSuperadmin: false,
-      permissions: [PERMISSIONS.DATASHEET_VIEW],
-    }
-    next()
-  },
-  requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
-  optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
-  verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
-}))
+jest.mock('../../src/backend/middleware/authMiddleware', () => {
+  const actual = jest.requireActual('../../src/backend/middleware/authMiddleware')
+  const helper = jest.requireActual('../helpers/authMiddlewareMock')
+  return (helper as typeof import('../helpers/authMiddlewareMock')).createAuthMiddlewareMock({
+    actual,
+    mode: 'passthrough',
+  })
+})
 
 jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),

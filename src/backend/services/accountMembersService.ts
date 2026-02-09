@@ -3,10 +3,12 @@ import {
   listMembers as repoList,
   getMemberInAccount,
   countActiveAdminsInAccount,
+  countActiveOwnersInAccount,
   updateMemberRole as repoUpdateRole,
   updateMemberStatus as repoUpdateStatus,
   type AccountMemberRow,
 } from '../repositories/accountMembersRepository'
+import { getAccountById } from '../repositories/accountsRepository'
 import { isAdminRole } from '../utils/roleUtils'
 import { logAuditAction } from '../utils/logAuditAction'
 
@@ -25,6 +27,7 @@ export type MemberDto = {
   roleId: number
   roleName: string
   isActive: boolean
+  isOwner: boolean
   createdAt: string
   updatedAt: string
 }
@@ -39,6 +42,7 @@ function toDto(row: AccountMemberRow): MemberDto {
     roleId: row.roleId,
     roleName: row.roleName,
     isActive: row.isActive,
+    isOwner: row.isOwner,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
     updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
   }
@@ -114,10 +118,30 @@ export async function updateMemberStatus(
     throw err
   }
 
+  const account = await getAccountById(accountId)
+  const isDeactivating = member.isActive && !isActive
+  if (
+    account?.ownerUserId != null &&
+    member.userId === account.ownerUserId &&
+    isDeactivating
+  ) {
+    const err = new Error('Cannot deactivate the account owner; transfer ownership first.')
+    ;(err as Error & { statusCode?: number }).statusCode = 403
+    throw err
+  }
+
   const adminCount = await countActiveAdminsInAccount(accountId)
   const isDeactivatingAdmin = isAdminRole(member.roleName) && member.isActive && !isActive
   if (isDeactivatingAdmin && adminCount <= 1) {
     const err = new Error('Cannot deactivate the last active Admin in the account')
+    ;(err as Error & { statusCode?: number }).statusCode = 403
+    throw err
+  }
+
+  const ownerCount = await countActiveOwnersInAccount(accountId)
+  const isDeactivatingOwner = member.isOwner && member.isActive && !isActive
+  if (isDeactivatingOwner && ownerCount <= 1) {
+    const err = new Error('Cannot deactivate the last active Owner in the account')
     ;(err as Error & { statusCode?: number }).statusCode = 403
     throw err
   }

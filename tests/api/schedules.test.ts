@@ -1,28 +1,34 @@
 // tests/api/schedules.test.ts
 import request from 'supertest'
-import type { Request, Response, NextFunction } from 'express'
+import jwt from 'jsonwebtoken'
+import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
 import { PERMISSIONS } from '../../src/constants/permissions'
 
+process.env.JWT_SECRET ??= 'secret'
+
 let currentTestAccountId = 1
 
-jest.mock('../../src/backend/middleware/authMiddleware', () => ({
-  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
-    req.user = {
-      userId: 1,
-      accountId: currentTestAccountId,
+jest.mock('../../src/backend/middleware/authMiddleware', () => {
+  const actual = jest.requireActual('../../src/backend/middleware/authMiddleware')
+  const { createAuthMiddlewareMock } = jest.requireActual('../helpers/authMiddlewareMock')
+  return createAuthMiddlewareMock({ actual, mode: 'token' })
+})
+
+function makeToken(payload: { userId: number; accountId: number }): string {
+  return jwt.sign(
+    {
+      userId: payload.userId,
+      accountId: payload.accountId,
+      email: 'test@example.com',
       role: 'Admin',
-      roleId: 1,
-      isSuperadmin: false,
       permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.DATASHEET_EDIT],
-    }
-    next()
-  },
-  requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
-  optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
-  verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
-}))
+    },
+    process.env.JWT_SECRET ?? 'secret',
+    { expiresIn: '1h' }
+  )
+}
 
 jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: jest.fn().mockResolvedValue(true),
@@ -108,7 +114,10 @@ describe('Schedules API', () => {
         { scheduleId: 1, name: 'HVAC Schedule', scope: null, accountId: 1 },
       ])
 
-      const res = await request(app).get('/api/backend/schedules')
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .get('/api/backend/schedules')
+        .set('Cookie', [`token=${token}`])
 
       expect(res.status).toBe(200)
       expect(res.body).toHaveLength(1)
@@ -135,8 +144,10 @@ describe('Schedules API', () => {
       }
       mockCreateSchedule.mockResolvedValue(created)
 
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .post('/api/backend/schedules')
+        .set('Cookie', [`token=${token}`])
         .send({ name: 'New Schedule', disciplineId: 1, subtypeId: 2 })
 
       expect(res.status).toBe(201)
@@ -145,8 +156,10 @@ describe('Schedules API', () => {
     })
 
     it('returns 400 for invalid body', async () => {
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .post('/api/backend/schedules')
+        .set('Cookie', [`token=${token}`])
         .send({})
 
       expect(res.status).toBe(400)
@@ -164,7 +177,10 @@ describe('Schedules API', () => {
       }
       mockGetDetail.mockResolvedValue(detail)
 
-      const res = await request(app).get('/api/backend/schedules/10')
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .get('/api/backend/schedules/10')
+        .set('Cookie', [`token=${token}`])
 
       expect(res.status).toBe(200)
       expect(res.body.schedule.scheduleId).toBe(10)
@@ -176,14 +192,20 @@ describe('Schedules API', () => {
     it('returns 404 when schedule not found', async () => {
       mockGetDetail.mockResolvedValue(null)
 
-      const res = await request(app).get('/api/backend/schedules/999')
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .get('/api/backend/schedules/999')
+        .set('Cookie', [`token=${token}`])
 
       expect(res.status).toBe(404)
       expect(res.body?.error).toMatch(/not found/i)
     })
 
     it('returns 400 for invalid schedule id', async () => {
-      const res = await request(app).get('/api/backend/schedules/abc')
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .get('/api/backend/schedules/abc')
+        .set('Cookie', [`token=${token}`])
 
       expect(res.status).toBe(400)
       expect(mockGetDetail).not.toHaveBeenCalled()
@@ -197,8 +219,10 @@ describe('Schedules API', () => {
       ]
       mockReplaceColumns.mockResolvedValue(returned)
 
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .put('/api/backend/schedules/10/columns')
+        .set('Cookie', [`token=${token}`])
         .send({
           columns: [{ columnKey: 'tag', columnLabel: 'Tag', dataType: 'string', displayOrder: 0, isRequired: false, isEditable: true }],
         })
@@ -209,8 +233,10 @@ describe('Schedules API', () => {
     })
 
     it('returns 400 on duplicate column key in payload', async () => {
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .put('/api/backend/schedules/10/columns')
+        .set('Cookie', [`token=${token}`])
         .send({
           columns: [
             { columnKey: 'tag', columnLabel: 'Tag', dataType: 'string', displayOrder: 0, isRequired: false, isEditable: true },
@@ -224,8 +250,10 @@ describe('Schedules API', () => {
     })
 
     it('returns 400 when columnKey normalizes to empty', async () => {
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .put('/api/backend/schedules/10/columns')
+        .set('Cookie', [`token=${token}`])
         .send({
           columns: [
             { columnKey: '   ', columnLabel: 'Tag', dataType: 'string', displayOrder: 0, isRequired: false, isEditable: true },
@@ -238,8 +266,10 @@ describe('Schedules API', () => {
     })
 
     it('returns 400 when columns contain duplicate columnKey after normalization', async () => {
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .put('/api/backend/schedules/10/columns')
+        .set('Cookie', [`token=${token}`])
         .send({
           columns: [
             { columnKey: 'Tag Name', columnLabel: 'Tag Name', dataType: 'string', displayOrder: 0, isRequired: false, isEditable: true },
@@ -258,8 +288,10 @@ describe('Schedules API', () => {
       ]
       mockReplaceColumns.mockResolvedValue(returned)
 
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .put('/api/backend/schedules/10/columns')
+        .set('Cookie', [`token=${token}`])
         .send({
           columns: [
             { columnKey: 'Tag Name', columnLabel: 'Tag', dataType: 'string', displayOrder: 0, isRequired: false, isEditable: true },
@@ -279,8 +311,10 @@ describe('Schedules API', () => {
         { scheduleColumnId: 1, columnKey: 'tag', columnLabel: 'Tag', dataType: 'string', enumOptionsJson: null, displayOrder: 0, isRequired: false, isEditable: true, createdAt: new Date(), createdBy: null },
       ])
 
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .put('/api/backend/schedules/10/entries')
+        .set('Cookie', [`token=${token}`])
         .send({
           entries: [
             { assetId: 1, sheetId: null, values: [{ columnKey: 'tag', valueString: 'PT-001' }] },
@@ -293,8 +327,10 @@ describe('Schedules API', () => {
     })
 
     it('returns 400 on unknown columnKey', async () => {
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .put('/api/backend/schedules/10/entries')
+        .set('Cookie', [`token=${token}`])
         .send({
           entries: [
             { assetId: 1, values: [{ columnKey: 'foo', valueString: 'x' }] },
@@ -308,16 +344,20 @@ describe('Schedules API', () => {
     it('returns 404 when schedule not found', async () => {
       mockGetScheduleById.mockResolvedValue(null)
 
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .put('/api/backend/schedules/999/entries')
+        .set('Cookie', [`token=${token}`])
         .send({ entries: [] })
 
       expect(res.status).toBe(404)
     })
 
     it('returns 400 for invalid schedule id', async () => {
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .put('/api/backend/schedules/invalid/entries')
+        .set('Cookie', [`token=${token}`])
         .send({ entries: [] })
 
       expect(res.status).toBe(400)
@@ -325,8 +365,10 @@ describe('Schedules API', () => {
     })
 
     it('returns 400 when value item has multiple typed values in one cell', async () => {
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .put('/api/backend/schedules/10/entries')
+        .set('Cookie', [`token=${token}`])
         .send({
           entries: [
             {
@@ -344,8 +386,10 @@ describe('Schedules API', () => {
     })
 
     it('returns 400 when entries contain duplicate assetId', async () => {
+      const token = makeToken({ userId: 1, accountId: 1 })
       const res = await request(app)
         .put('/api/backend/schedules/10/entries')
+        .set('Cookie', [`token=${token}`])
         .send({
           entries: [
             { assetId: 1, sheetId: null, values: [] },
@@ -364,7 +408,10 @@ describe('Schedules API', () => {
       currentTestAccountId = 42
       mockGetDetail.mockResolvedValue(null)
 
-      await request(app).get('/api/backend/schedules/10')
+      const token = makeToken({ userId: 1, accountId: 42 })
+      await request(app)
+        .get('/api/backend/schedules/10')
+        .set('Cookie', [`token=${token}`])
 
       expect(mockGetDetail).toHaveBeenCalledWith(42, 10)
     })

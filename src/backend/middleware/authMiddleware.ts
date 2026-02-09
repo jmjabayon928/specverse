@@ -318,3 +318,15 @@ export const requirePermission = (permissionKey: string): RequestHandler => {
     }
   }
 }
+
+export const requireOwner: RequestHandler = (req: Request, res: Response, next: NextFunction): void => {
+  if (!req.user) {
+    next(new AppError('Missing user in request', 403))
+    return
+  }
+  if (req.user.isOwner !== true) {
+    next(new AppError('Owner access required', 403))
+    return
+  }
+  next()
+}

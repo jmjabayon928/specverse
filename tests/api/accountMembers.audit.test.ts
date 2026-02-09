@@ -7,8 +7,15 @@
  */
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
+
+jest.mock('../../src/backend/middleware/authMiddleware', () => {
+  const actual = jest.requireActual('../../src/backend/middleware/authMiddleware')
+  const { createAuthMiddlewareMock } = jest.requireActual('../helpers/authMiddlewareMock')
+  return createAuthMiddlewareMock({ actual, mode: 'token' })
+})
 
 type AuditLogEntry = {
   TableName?: string | null
@@ -30,41 +37,15 @@ jest.mock('../../src/backend/database/auditQueries', () => ({
   getAuditLogsForRecord: jest.fn(),
 }))
 
-const defaultContext = {
-  accountId: 1,
-  roleId: 1,
-  roleName: 'Admin',
-  permissions: ['ACCOUNT_VIEW', 'ACCOUNT_ROLE_MANAGE', 'ACCOUNT_USER_MANAGE'],
-}
-
-const getAccountContextForUser = jest.fn().mockResolvedValue(defaultContext)
-const getAccountContextForUserAndAccount = jest.fn().mockResolvedValue(null)
-const getDefaultAccountId = jest.fn().mockResolvedValue(1)
-const getActiveAccountId = jest.fn().mockResolvedValue(5)
-const getStoredActiveAccountId = jest.fn().mockResolvedValue(null)
-const setActiveAccountRepo = jest.fn().mockResolvedValue(undefined)
-const clearActiveAccount = jest.fn().mockResolvedValue(undefined)
-
 const checkUserPermission = jest.fn().mockResolvedValue(true)
 
 const listMembersRepo = jest.fn().mockResolvedValue([])
 const getMemberInAccount = jest.fn().mockResolvedValue(null)
 const countActiveAdminsInAccount = jest.fn().mockResolvedValue(2)
+const countActiveOwnersInAccount = jest.fn().mockResolvedValue(1)
 const updateMemberRoleRepo = jest.fn().mockResolvedValue(undefined)
 const updateMemberStatusRepo = jest.fn().mockResolvedValue(undefined)
 
-jest.mock('../../src/backend/database/accountContextQueries', () => ({
-  getAccountContextForUser,
-  getAccountContextForUserAndAccount,
-  getDefaultAccountId,
-  getActiveAccountId,
-}))
-
-jest.mock('../../src/backend/repositories/userActiveAccountRepository', () => ({
-  getActiveAccountId: (...args: unknown[]) => getStoredActiveAccountId(...args),
-  setActiveAccount: (...args: unknown[]) => setActiveAccountRepo(...args),
-  clearActiveAccount: (...args: unknown[]) => clearActiveAccount(...args),
-}))
 
 jest.mock('../../src/backend/database/permissionQueries', () => ({
   checkUserPermission: (...args: unknown[]) => checkUserPermission(...args),
@@ -74,14 +55,26 @@ jest.mock('../../src/backend/repositories/accountMembersRepository', () => ({
   listMembers: (...args: unknown[]) => listMembersRepo(...args),
   getMemberInAccount: (...args: unknown[]) => getMemberInAccount(...args),
   countActiveAdminsInAccount: (...args: unknown[]) => countActiveAdminsInAccount(...args),
+  countActiveOwnersInAccount: (...args: unknown[]) => countActiveOwnersInAccount(...args),
   updateMemberRole: (...args: unknown[]) => updateMemberRoleRepo(...args),
   updateMemberStatus: (...args: unknown[]) => updateMemberStatusRepo(...args),
 }))
 
 import app from '../../src/backend/app'
 
-function makeToken(payload: Record<string, unknown>): string {
-  return jwt.sign(payload, process.env.JWT_SECRET ?? 'secret', { expiresIn: '1h' })
+function makeToken(payload: { userId: number; accountId?: number; roleId?: number; role?: string; permissions?: string[] }): string {
+  return jwt.sign(
+    {
+      userId: payload.userId,
+      accountId: payload.accountId ?? 1,
+      roleId: payload.roleId ?? 1,
+      role: payload.role ?? 'Admin',
+      email: 'admin@example.com',
+      permissions: payload.permissions ?? [PERMISSIONS.ACCOUNT_ROLE_MANAGE, PERMISSIONS.ACCOUNT_USER_MANAGE],
+    },
+    process.env.JWT_SECRET ?? 'secret',
+    { expiresIn: '1h' }
+  )
 }
 
 const sampleMember = {
@@ -99,10 +92,9 @@ const sampleMember = {
 
 beforeEach(() => {
   jest.clearAllMocks()
-  getAccountContextForUser.mockResolvedValue(defaultContext)
-  getStoredActiveAccountId.mockResolvedValue(null)
   checkUserPermission.mockResolvedValue(true)
   countActiveAdminsInAccount.mockResolvedValue(2)
+  countActiveOwnersInAccount.mockResolvedValue(1)
 })
 
 describe('AccountMembers audits', () => {
@@ -113,12 +105,10 @@ describe('AccountMembers audits', () => {
 
     const token = makeToken({
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_ROLE_MANAGE'],
+      permissions: [PERMISSIONS.ACCOUNT_ROLE_MANAGE, PERMISSIONS.ACCOUNT_USER_MANAGE],
     })
 
     const res = await request(app)
@@ -150,12 +140,10 @@ describe('AccountMembers audits', () => {
 
     const token = makeToken({
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
+      permissions: [PERMISSIONS.ACCOUNT_ROLE_MANAGE, PERMISSIONS.ACCOUNT_USER_MANAGE],
     })
 
     const res = await request(app)
@@ -187,12 +175,10 @@ describe('AccountMembers audits', () => {
 
     const token = makeToken({
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
+      permissions: [PERMISSIONS.ACCOUNT_ROLE_MANAGE, PERMISSIONS.ACCOUNT_USER_MANAGE],
     })
 
     const res = await request(app)

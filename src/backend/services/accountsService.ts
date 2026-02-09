@@ -19,6 +19,7 @@ export type AccountDto = {
   accountName: string
   slug: string
   isActive: boolean
+  ownerUserId: number | null
 }
 
 export type ListAccountsResult = {

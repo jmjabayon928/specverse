@@ -28,6 +28,7 @@ import authRoutes from './routes/authRoutes'
 import sessionsRoutes from './routes/sessionsRoutes'
 import accountsRoutes from './routes/accountsRoutes'
 import accountMembersRoutes from './routes/accountMembersRoutes'
+import accountGovernanceRoutes from './routes/accountGovernanceRoutes'
 import invitesRoutes from './routes/invitesRoutes'
 import rolesListRoutes from './routes/rolesListRoutes'
 import notificationRoutes from './routes/notificationRoutes'
@@ -91,6 +92,7 @@ app.use('/api/backend/auth', authRoutes)
 app.use('/api/backend/sessions', sessionsRoutes)
 app.use('/api/backend/accounts', accountsRoutes)
 app.use('/api/backend/account-members', accountMembersRoutes)
+app.use('/api/backend/account-governance', accountGovernanceRoutes)
 app.use('/api/backend/invites', invitesRoutes)
 app.use('/api/backend/roles', rolesListRoutes)
 app.use('/api', labelRoutes)

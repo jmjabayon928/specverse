@@ -1,10 +1,12 @@
 // tests/api/datasheets.filled.test.ts
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
-import type { Request, Response, NextFunction } from 'express'
+import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import app from '../../src/backend/app'
 import { PERMISSIONS } from '../../src/constants/permissions'
+
+process.env.JWT_SECRET ??= 'secret'
 
 // Mock auth so no real DB (permissionQueries) runs. accountId required for list/get-details.
 const mockAuthUser = {
@@ -23,20 +25,11 @@ const mockAuthUser = {
   accountId: 1,
 }
 
-jest.mock('../../src/backend/middleware/authMiddleware', () => ({
-  verifyToken: (req: Request, _res: Response, next: NextFunction) => {
-    const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
-    if (!token) {
-      next(new AppError('Unauthorized - No token', 401))
-      return
-    }
-    req.user = { ...mockAuthUser }
-    next()
-  },
-  requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
-  optionalVerifyToken: (_req: Request, _res: Response, next: NextFunction) => next(),
-  verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
-}))
+jest.mock('../../src/backend/middleware/authMiddleware', () => {
+  const actual = jest.requireActual('../../src/backend/middleware/authMiddleware')
+  const { createAuthMiddlewareMock } = jest.requireActual('../helpers/authMiddlewareMock')
+  return createAuthMiddlewareMock({ actual, mode: 'token' })
+})
 
 jest.mock('../../src/backend/services/sheetAccessService', () => ({
   sheetBelongsToAccount: jest.fn().mockImplementation((sheetId: number, accountId: number) =>
