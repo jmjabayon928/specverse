@@ -14,6 +14,8 @@ declare module "express-serve-static-core" {
       permissions: string[];
       accountId?: number;
       isSuperadmin?: boolean;
+      isOwner?: boolean;
+      ownerUserId?: number | null;
     };
     skipAuth?: boolean; // ← Add this line
   }

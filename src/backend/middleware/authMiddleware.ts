@@ -157,6 +157,8 @@ async function attachAccountContext(req: Request): Promise<void> {
       req.user.roleId = storedCtx.roleId
       req.user.role = storedCtx.roleName
       req.user.permissions = storedCtx.permissions
+      req.user.isOwner = storedCtx.isOwner
+      req.user.ownerUserId = storedCtx.ownerUserId
       return
     }
     await clearActiveAccount(req.user.userId)
@@ -169,6 +171,8 @@ async function attachAccountContext(req: Request): Promise<void> {
     req.user.roleId = ctx.roleId
     req.user.role = ctx.roleName
     req.user.permissions = ctx.permissions
+    req.user.isOwner = ctx.isOwner
+    req.user.ownerUserId = ctx.ownerUserId
     return
   }
 

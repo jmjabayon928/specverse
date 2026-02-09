@@ -64,6 +64,8 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
     permissions: user.permissions ?? [],
     accountId: user.accountId ?? null,
     isSuperadmin: user.isSuperadmin ?? false,
+    isOwner: Boolean(user.isOwner),
+    ownerUserId: user.ownerUserId ?? null,
   })
 }
 

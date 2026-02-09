@@ -1,6 +1,7 @@
 // src/backend/routes/estimationRoutes.ts
 import { Router } from 'express'
-import { verifyToken } from '../middleware/authMiddleware'
+import { verifyToken, requirePermission } from '../middleware/authMiddleware'
+import { PERMISSIONS } from '@/constants/permissions'
 import * as controller from '../controllers/estimationController'
 
 const router = Router()
@@ -51,7 +52,7 @@ router.get('/history', verifyToken, controller.getPastEstimationsHandler)
 router.get('/:id', verifyToken, controller.getEstimationByIdHandler)
 router.post('/', verifyToken, controller.createEstimationHandler)
 router.put('/:id', verifyToken, controller.updateEstimationHandler)
-router.delete('/:id', verifyToken, controller.deleteEstimationHandler)
+router.delete('/:id', verifyToken, requirePermission(PERMISSIONS.ESTIMATION_DELETE), controller.deleteEstimationHandler)
 
 // ======================
 // Filtering
