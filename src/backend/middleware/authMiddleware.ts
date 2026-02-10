@@ -10,6 +10,7 @@ import {
   getDefaultAccountId,
   getActiveAccountId,
 } from '../database/accountContextQueries'
+import { isUserPlatformAdmin } from '../database/platformAdminPort'
 import {
   getActiveAccountId as getStoredActiveAccountId,
   clearActiveAccount,
@@ -58,12 +59,15 @@ function parseCsvEnv(name: string): string[] {
     .filter(Boolean)
 }
 
-function isPlatformSuperadmin(user: { userId: number; email?: string }): boolean {
+async function isPlatformSuperadmin(user: { userId: number; email?: string }): Promise<boolean> {
   const ids = parseCsvEnv('SUPERADMIN_USER_IDS')
   const emails = parseCsvEnv('SUPERADMIN_EMAILS').map(e => e.toLowerCase())
 
   if (ids.includes(String(user.userId))) return true
   if (user.email && emails.includes(user.email.toLowerCase())) return true
+
+  const isDbAdmin = await isUserPlatformAdmin(user.userId)
+  if (isDbAdmin) return true
 
   return false
 }
@@ -97,7 +101,7 @@ async function attachAccountContext(req: Request): Promise<void> {
 
   // Superadmin is backend-only and explicit. For tenant-data endpoints, superadmin
   // can optionally choose an account via header; otherwise we fall back to default account.
-  const superadmin = isPlatformSuperadmin({ userId: req.user.userId, email: req.user.email })
+  const superadmin = await isPlatformSuperadmin({ userId: req.user.userId, email: req.user.email })
   req.user.isSuperadmin = superadmin
 
   const headerAccountId = req.headers['x-specverse-account-id']
