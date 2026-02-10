@@ -54,16 +54,22 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
 
   const user = req.user as CustomJwtPayload
 
+  const isPlatformAdmin = Boolean(user.isSuperadmin)
+  const permissionsCount = Array.isArray(user.permissions) ? user.permissions.length : 0
+
   res.status(200).json({
     userId: user.userId,
     roleId: user.roleId,
     role: user.role,
+    roleName: user.role ?? null,
     name: user.name ?? '',
     email: user.email ?? '',
     profilePic: user.profilePic ?? '',
     permissions: user.permissions ?? [],
+    permissionsCount,
     accountId: user.accountId ?? null,
     isSuperadmin: user.isSuperadmin ?? false,
+    isPlatformAdmin,
     isOwner: Boolean(user.isOwner),
     ownerUserId: user.ownerUserId ?? null,
   })

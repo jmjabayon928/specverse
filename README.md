@@ -568,6 +568,9 @@ SpecVerse implements a fine-grained, permission-driven RBAC system designed for 
 Access control is not hard-coded by role.
 Instead, roles are collections of explicit permissions, enforced consistently across backend APIs and frontend UI.
 
+Note: Roles apply only **within an account**.
+They do not grant platform-level authority or ownership rights.
+
 #### **Roles (Current)**
 
 SpecVerse supports multiple operational roles aligned with real-world engineering organizations:
@@ -641,7 +644,82 @@ This separation ensures:
 - No accidental escalation into account-level authority
 - Clear operational boundaries between support and engineering teams
 
+---
+
+### 🏛 Account Ownership Model (Critical Distinction)
+
+SpecVerse separates **platform governance**, **account ownership**, and **account administration**
+into three intentionally distinct authority layers.
+
+This separation prevents accidental privilege escalation and mirrors best practices used by
+enterprise SaaS platforms.
+
+#### Platform Superadmin (Global Scope)
+
+Platform Superadmins operate **above all accounts**.
+
+They exist solely for:
+- Platform maintenance and recovery
+- Account reactivation
+- Ownership recovery
+- Administrative support operations
+
+Platform Superadmins:
+- ❌ Do not belong to any account
+- ❌ Do not inherit account roles or permissions
+- ❌ Cannot perform engineering, estimation, inventory, or datasheet actions
+- ✅ Can grant or revoke platform admin access
+- ✅ Can recover locked or orphaned accounts
+- ✅ Are fully audit-logged
+
+---
+
+#### Account Owner (Per-Account, Ultimate Authority)
+
+Each account has **exactly one Account Owner**.
+
+The Account Owner represents the **business authority** for that account.
+
+Account Owners:
+- ✅ Are members of the account
+- ✅ Always retain ownership even if role assignments change
+- ✅ Can transfer ownership to another active account member
+- ✅ Can deactivate or delete the account
+- ✅ Can recover or reinstate account admins
+- ❌ Cannot override platform governance
+
+Ownership is **not a role** — it is an invariant property of the account.
+
+---
+
+#### Account Admin (Per-Account, Operational Authority)
+
+Account Admins manage **day-to-day operations** within an account.
+
+Admins:
+- ✅ Manage users, roles, and permissions
+- ✅ Create and approve templates and datasheets
+- ✅ Manage inventory, estimations, and schedules
+- ✅ Access audit logs and reports (when permitted)
+- ❌ Cannot transfer account ownership
+- ❌ Cannot delete or recover the account
+
+Admins are powerful — but **always subordinate to the Account Owner**.
+
+---
+
+This model ensures:
+- Clear escalation paths
+- Zero cross-tenant privilege leakage
+- Safe recovery workflows
+- Predictable authority boundaries
+
 ### Permission Model
+
+Account ownership is evaluated **outside** the permission system.
+
+An Account Owner may hold any role, but ownership checks always take precedence over role-based permissions.
+This guarantees that ownership authority cannot be accidentally revoked through role changes.
 
 Permissions are explicit, composable, and enforceable, covering all major system actions.
 
