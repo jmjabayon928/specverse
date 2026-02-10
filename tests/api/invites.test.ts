@@ -4,6 +4,7 @@
  */
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
+import { assertUnauthenticated, assertForbidden, assertNotFound, assertValidationError } from '../helpers/httpAsserts'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
 
@@ -227,7 +228,7 @@ describe('POST /api/backend/invites', () => {
       .set('Cookie', [`token=${token}`])
       .send({ email: 'x@example.com', roleId: 2 })
 
-    expect(res.status).toBe(403)
+    assertForbidden(res)
     expect(createInviteRepo).not.toHaveBeenCalled()
   })
 
@@ -247,8 +248,7 @@ describe('POST /api/backend/invites', () => {
       .set('Cookie', [`token=${token}`])
       .send({ roleId: 2 })
 
-    expect(res.status).toBe(400)
-    expect(res.body.message).toMatch(/email/i)
+    assertValidationError(res, /email/i)
   })
 
   it('returns 409 when user already member', async () => {
@@ -349,7 +349,7 @@ describe('GET /api/backend/invites', () => {
       .get('/api/backend/invites')
       .set('Cookie', [`token=${token}`])
 
-    expect(res.status).toBe(403)
+    assertForbidden(res)
   })
 })
 
@@ -410,7 +410,7 @@ describe('POST /api/backend/invites/:id/resend', () => {
       .post('/api/backend/invites/999/resend')
       .set('Cookie', [`token=${token}`])
 
-    expect(res.status).toBe(404)
+    assertNotFound(res)
     expect(updateTokenAndIncrementSend).not.toHaveBeenCalled()
   })
 })
@@ -460,7 +460,7 @@ describe('POST /api/backend/invites/:id/revoke', () => {
       .post('/api/backend/invites/999/revoke')
       .set('Cookie', [`token=${token}`])
 
-    expect(res.status).toBe(404)
+    assertNotFound(res)
     expect(setStatusRevoked).not.toHaveBeenCalled()
   })
 })
@@ -485,13 +485,13 @@ describe('GET /api/backend/invites/by-token', () => {
 
     const res = await request(app).get('/api/backend/invites/by-token?token=bad')
 
-    expect(res.status).toBe(404)
+    assertNotFound(res)
   })
 
   it('returns 400 when token missing', async () => {
     const res = await request(app).get('/api/backend/invites/by-token')
 
-    expect(res.status).toBe(400)
+    assertValidationError(res)
   })
 })
 
@@ -558,8 +558,7 @@ describe('POST /api/backend/invites/accept', () => {
       .set('Cookie', [`token=${token}`])
       .send({ token: 'secret-token' })
 
-    expect(res.status).toBe(403)
-    expect(res.body.message).toMatch(/sign in with the email/i)
+    assertForbidden(res, /sign in with the email/i)
     expect(insertAccountMember).not.toHaveBeenCalled()
     expect(setStatusAcceptedIfPending).not.toHaveBeenCalled()
   })
@@ -569,7 +568,7 @@ describe('POST /api/backend/invites/accept', () => {
       .post('/api/backend/invites/accept')
       .send({ token: 'secret-token' })
 
-    expect(res.status).toBe(401)
+    assertUnauthenticated(res)
   })
 
   it('returns 409 when user is already an active member', async () => {
@@ -735,13 +734,13 @@ describe('POST /api/backend/invites/decline', () => {
       .post('/api/backend/invites/decline')
       .send({ token: 'bad' })
 
-    expect(res.status).toBe(404)
+    assertNotFound(res)
   })
 
   it('returns 400 when token missing', async () => {
     const res = await request(app).post('/api/backend/invites/decline').send({})
 
-    expect(res.status).toBe(400)
+    assertValidationError(res)
   })
 
   it('returns 403 when authenticated user email does not match invite email', async () => {
@@ -767,8 +766,7 @@ describe('POST /api/backend/invites/decline', () => {
       .set('Cookie', [`token=${token}`])
       .send({ token: 'decline-token' })
 
-    expect(res.status).toBe(403)
-    expect(res.body.message).toMatch(/sign in with the email address/i)
+    assertForbidden(res, /sign in with the email address/i)
     expect(setStatusDeclined).not.toHaveBeenCalled()
   })
 

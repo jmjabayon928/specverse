@@ -5,6 +5,7 @@
  */
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
+import { assertForbidden, assertNotFound, assertValidationError } from '../helpers/httpAsserts'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
 
@@ -151,7 +152,7 @@ describe('GET /api/backend/account-members', () => {
       .get('/api/backend/account-members')
       .set('Cookie', [`token=${token}`])
 
-    expect(res.status).toBe(403)
+    assertForbidden(res)
   })
 
   it('returns members with isOwner when present', async () => {
@@ -244,7 +245,7 @@ describe('PATCH /api/backend/account-members/:id/role', () => {
       .set('Cookie', [`token=${token}`])
       .send({ roleId: 2 })
 
-    expect(res.status).toBe(404)
+    assertNotFound(res)
     expect(updateMemberRoleRepo).not.toHaveBeenCalled()
   })
 
@@ -267,8 +268,7 @@ describe('PATCH /api/backend/account-members/:id/role', () => {
       .set('Cookie', [`token=${token}`])
       .send({ roleId: 2 })
 
-    expect(res.status).toBe(403)
-    expect(res.body.message).toMatch(/last.*admin|demote/i)
+    assertForbidden(res, /last.*admin|demote/i)
     expect(updateMemberRoleRepo).not.toHaveBeenCalled()
   })
 
@@ -288,7 +288,7 @@ describe('PATCH /api/backend/account-members/:id/role', () => {
       .set('Cookie', [`token=${token}`])
       .send({})
 
-    expect(res.status).toBe(400)
+    assertValidationError(res)
   })
 })
 
@@ -337,7 +337,7 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
       .set('Cookie', [`token=${token}`])
       .send({ isActive: false })
 
-    expect(res.status).toBe(404)
+    assertNotFound(res)
     expect(updateMemberStatusRepo).not.toHaveBeenCalled()
   })
 
@@ -360,8 +360,7 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
       .set('Cookie', [`token=${token}`])
       .send({ isActive: false })
 
-    expect(res.status).toBe(403)
-    expect(res.body.message).toMatch(/last.*admin|deactivate/i)
+    assertForbidden(res, /last.*admin|deactivate/i)
     expect(updateMemberStatusRepo).not.toHaveBeenCalled()
   })
 
@@ -381,7 +380,7 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
       .set('Cookie', [`token=${token}`])
       .send({})
 
-    expect(res.status).toBe(400)
+    assertValidationError(res)
   })
 
   it('returns 403 when deactivating last active Owner', async () => {
@@ -409,8 +408,7 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
       .set('Cookie', [`token=${token}`])
       .send({ isActive: false })
 
-    expect(res.status).toBe(403)
-    expect(res.body.message).toMatch(/last.*owner|deactivate/i)
+    assertForbidden(res, /last.*owner|deactivate/i)
     expect(updateMemberStatusRepo).not.toHaveBeenCalled()
   })
 
@@ -446,8 +444,7 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
       .set('Cookie', [`token=${token}`])
       .send({ isActive: false })
 
-    expect(res.status).toBe(403)
-    expect(res.body.message).toBe('Cannot deactivate the account owner; transfer ownership first.')
+    assertForbidden(res, 'Cannot deactivate the account owner; transfer ownership first.')
     expect(updateMemberStatusRepo).not.toHaveBeenCalled()
   })
 })
