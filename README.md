@@ -278,46 +278,62 @@ Operational visibility is built into the platform, not bolted on.
 The following initiatives extend SpecVerse’s production-ready foundation.
 They are planned next steps — not experimental prototypes.
 
-## 🧱 Labor Costing (Planned)
+### 🧱 Labor Costing (Planned)
 
 A dedicated module for structured labor estimation, aligned with EPC and industrial best practices.
 
-Planned Capabilities
+#### Planned Capabilities
 
-Role-based labor breakdowns
-## (e.g., Welder, Supervisor, Electrician)
+#### 1. Role-Based Labor Modeling
+- Define labor roles such as:
+  - Welder
+  - Supervisor
+  - Electrician
+  - (extensible to other trades)
 
-Labor allocation per:
+#### 2. Labor Allocation Targets
+Labor can be allocated at multiple levels:
+- Estimation package
+- Equipment item
+- Individual task or activity
 
-estimation package
+#### 3. Productivity-Based Standards
+- Support standardized productivity metrics, such as:
+  - Weld-inches per day
+  - Units per hour
+- Enable reusable **Labor Standards** across projects
 
-equipment item
+#### 4. Manual Overrides & Auditability
+- Allow manual adjustments to labor quantities, rates, or hours
+- All overrides are fully tracked with audit logs and change history
 
-or task
+#### 5. Cost Derivation Logic
+Labor cost is calculated using a transparent formula:
 
-Productivity-based standards
-## (e.g., weld-inches/day, units/hour)
+Total Labor Cost = Quantity × Hours × Rate
 
-Manual overrides with full audit trails
 
-Derived cost calculation:
-Quantity × Hours × Rate
+#### 6. Intelligent Labor Forecasting
+- Suggest labor quantities automatically using predefined productivity standards
+- Allow users to accept, modify, or override system-generated forecasts
 
-Smart labor forecasting using reusable Labor Standards
+### Integration Points
 
-Integration With
+The Labor Costing module integrates with:
+- Estimation exports (PDF / Excel)
+- Dashboards and analytics
+- Approval and governance workflows
 
-Estimation exports
+### Outcome
 
-Dashboards and analytics
+SpecVerse evolves from **material-centric estimation** into **labor-aware project costing**, while preserving:
+- Approval control
+- Traceability
+- Full auditability
 
-Approval workflows
+This enables more accurate, defensible, and real-world project estimates suitable for industrial and EPC environments.
 
-**Outcome**
-
-SpecVerse extends from material-centric estimation into labor-aware project costing, while preserving approval control, traceability, and auditability.
-
-## 🔧 Upcoming Enhancements (Short Horizon)
+### 🔧 Upcoming Enhancements (Short Horizon)
 
 **Phase 5.2 — Instrumentation Enhancements**
 - Richer validation rules
@@ -337,32 +353,32 @@ SpecVerse extends from material-centric estimation into labor-aware project cost
 
 ---
 
-## 🧠 AI-Ready Features *(Coming Soon)*
+### 🧠 AI-Ready Features *(Coming Soon)*
 
-### ⚖️ Datasheets
+#### ⚖️ Datasheets
 
 * Detect inconsistencies, missing values, and anomalies
 * Suggest field values based on similar past sheets
 * Generate summaries for managers and QA teams
 
-### 🛆 Inventory
+#### 🛆 Inventory
 
 * Predict restocking needs based on usage history
 * Flag anomalies in consumption trends or update logs
 
-### 📊 Estimations
+#### 📊 Estimations
 
 * Compare estimated vs. actual supplier costs
 * Auto-detect cost drivers or high variance items
 * Suggest cost-saving alternatives or vendors
 
-### 🧑‍💼 AI Assistant *(Planned)*
+#### 🧑‍💼 AI Assistant *(Planned)*
 
 * Natural language search (e.g., “Show pumps with temp > 120°C”)
 * Smart dashboards based on user role and behavior
 * Auto-flag incomplete or high-risk datasheets
 
-### 🧩 Human-in-the-Loop Intelligence
+#### 🧩 Human-in-the-Loop Intelligence
 
 AI-driven insights in SpecVerse are designed to operate in a
 **propose → review → apply** workflow. Automated findings and suggestions
@@ -371,83 +387,66 @@ before changes are applied.
 
 ---
 
-## 🧭 Strategic Roadmap (Long-Term Vision)
+### 🧭 Strategic Roadmap (Long-Term Vision)
 
 The initiatives below are not yet implemented.
 They illustrate the directional intent of the platform and are designed to augment — not replace — engineering judgment.
 
-## 🧠 AI-Assisted Engineering Intelligence (Vision)
+### 🧠 AI-Assisted Engineering Intelligence (Vision)
 
 AI in SpecVerse is positioned as decision support, never as an authority.
 
-Conceptual capabilities
+**Conceptual capabilities**
+- Datasheet completeness and quality indicators
+- Detection of anomalies and inconsistencies
+- Suggested values based on:
+    - historical projects
+    - peer equipment
+- Natural-language queries
+    - (e.g., “show pumps operating above 120 °C”)
+- Risk flags for QA, verification, and management review
 
-Datasheet completeness and quality indicators
-
-Detection of anomalies and inconsistencies
-
-Suggested values based on:
-
-historical projects
-
-peer equipment
-
-Natural-language queries
-## (e.g., “show pumps operating above 120 °C”)
-
-Risk flags for QA, verification, and management review
-
-Principles
+**Principles**
 
 All AI outputs are:
-
-reviewable
-
-auditable
-
-approval-gated
+- reviewable
+- auditable
+- approval-gated
 
 Human engineers remain the final authority.
 
-## 🏭 SpecVerse PlantSync — CAD / EPC Integration (Vision)
+### 🏭 SpecVerse PlantSync — CAD / EPC Integration (Vision)
 
 A strategic integration layer between Autodesk Plant 3D and SpecVerse’s engineering core.
 
-Conceptual capabilities
+**Conceptual capabilities**
 
 Ingest P&ID and Plant 3D databases into a unified SpecVerse model
 
 Track additions, deletions, and modifications via staged sync logs
 
-Enforce:
+**Enforce:**
+- tag uniqueness
+- category constraints
+- cross-table consistency
 
-tag uniqueness
+**Visual dashboards for:**
+- sync coverage
+- errors
+- unrouted or orphaned objects
 
-category constraints
+**Business value**
 
-cross-table consistency
-
-Visual dashboards for:
-
-sync coverage
-
-errors
-
-unrouted or orphaned objects
-
-Business value
-
-Enables Plant-integrated datasheet management
-## (a rare EPC differentiator)
-
-Reduces manual re-entry and accelerates handover
-
-Opens future SaaS and licensing opportunities
+- Enables Plant-integrated datasheet management
+**(a rare EPC differentiator)**
+- Reduces manual re-entry and accelerates handover
+- Opens future SaaS and licensing opportunities
 
 **Positioning**
+
 SpecVerse becomes the system-of-record layer between design tools and downstream engineering, procurement, and operations.
 
-## 🧠 AI Foundation & Continuous Intelligence (Architecture Vision)
+### 🧠 AI Foundation & Continuous Intelligence (Architecture Vision)
 
 SpecVerse is architected to evolve into a telemetry-driven engineering platform.
 
@@ -474,11 +473,11 @@ This approach enables AI to be introduced incrementally and safely, without comp
 
 ---
 
-## 🧪 Testing Strategy & Quality Assurance
+### 🧪 Testing Strategy & Quality Assurance
 
 SpecVerse emphasizes provable correctness over optimistic assumptions, with tests designed to enforce invariants across permissions, tenancy, transactions, and audit behavior. It is developed with a production-grade testing strategy spanning backend, frontend, domain logic, and security boundaries. Tests are organized by layer and responsibility, mirroring the platform’s architecture.
 
-## 🔧 Backend API Tests
+### 🔧 Backend API Tests
 
 **Covers REST endpoints, authorization, and cross-entity rules:**
 - Account & multi-tenant scoping
@@ -714,198 +713,263 @@ This model ensures:
 - Safe recovery workflows
 - Predictable authority boundaries
 
-### Permission Model
+### 🔐 Permission Model
 
-Account ownership is evaluated **outside** the permission system.
+#### Ownership vs Roles
 
-An Account Owner may hold any role, but ownership checks always take precedence over role-based permissions.
-This guarantees that ownership authority cannot be accidentally revoked through role changes.
+Account ownership is evaluated **outside** the role-based permission system.
 
-Permissions are explicit, composable, and enforceable, covering all major system actions.
+- An **Account Owner** may hold any role
+- Ownership checks **always take precedence** over role permissions
+- Ownership authority **cannot be revoked accidentally** through role changes
 
-Examples include:
-
-**Datasheets**
-- DATASHEET_CREATE, DATASHEET_EDIT, DATASHEET_VERIFY, DATASHEET_APPROVE
-- DATASHEET_REVISE, DATASHEET_EXPORT, DATASHEET_DELETE
-
-Notes and attachments handled via dedicated permissions
-
-**Templates**
-- TEMPLATE_CREATE, TEMPLATE_EDIT, TEMPLATE_VERIFY, TEMPLATE_APPROVE
-- TEMPLATE_REVISE, TEMPLATE_EXPORT
-
-**Estimations**
-- ESTIMATION_CREATE, ESTIMATION_EDIT, ESTIMATION_VERIFY, ESTIMATION_APPROVE
-- ESTIMATION_EXPORT
-
-**Inventory**
-- INVENTORY_CREATE, INVENTORY_EDIT, INVENTORY_VIEW
-
-Transactions, maintenance, and exports handled separately
-
-**Facilities & Schedules**
-- SCHEDULES_CREATE, SCHEDULES_EDIT, SCHEDULES_VIEW
-
-**Instrumentation & Ratings**
-
-Instrumentation and loop permissions
-
-Ratings and nameplate permissions (create/edit/view)
-
-Verification
-
-VERIFICATION_CREATE, VERIFICATION_EDIT, VERIFICATION_VIEW
-
-Platform & Governance
-
-Role and permission management
-
-Account settings
-
-Audit log access
-
-Export job visibility and cleanup
-
-Explicit system override permissions
-
-Enforcement
-
-Permissions are enforced end-to-end:
-
-Backend
-
-Token verification + permission guards on every protected route
-
-Account-scoped data isolation
-
-No implicit privilege escalation
-
-Frontend
-
-Route-level gating
-
-Conditional UI rendering
-
-Graceful 403 handling
-
-This architecture allows:
-
-Safe delegation of responsibilities
-
-Clear separation of engineering, QA, estimation, and operations
-
-Future expansion without schema or authorization rewrites
+This guarantees a stable governance model even as roles evolve.
 
 ---
 
-## 📟 Audit, Traceability & System Logs
+#### Permission Design Principles
 
-SpecVerse implements platform-wide audit and change tracking across all core modules — not just datasheets.
-Auditability is treated as a first-class system concern, enforced consistently at API, service, and export layers.
+Permissions are:
+- **Explicit** (no hidden or implicit grants)
+- **Composable** (roles are built from permissions)
+- **Enforceable** (checked at runtime, not assumed)
 
-## 🔍 What Is Audited
+They cover all major system actions and are designed for long-term extensibility.
 
-Datasheets & Templates
+---
 
-Full lifecycle actions: create, edit, verify, approve, reject
+#### Permission Domains
 
-Field-level change logs (before/after values)
+##### 📄 Datasheets
+- `DATASHEET_CREATE`
+- `DATASHEET_EDIT`
+- `DATASHEET_VERIFY`
+- `DATASHEET_APPROVE`
+- `DATASHEET_REVISE`
+- `DATASHEET_EXPORT`
+- `DATASHEET_DELETE`
 
-Revision metadata (revision number, revision date, engineering revision)
+Notes and attachments are handled via **dedicated permissions**, separate from datasheet lifecycle actions.
 
-Export actions (PDF / Excel), including unit system and language
+---
 
-Linked verification records and evidence attachments
+##### 📑 Templates
+- `TEMPLATE_CREATE`
+- `TEMPLATE_EDIT`
+- `TEMPLATE_VERIFY`
+- `TEMPLATE_APPROVE`
+- `TEMPLATE_REVISE`
+- `TEMPLATE_EXPORT`
 
-Canonical attachment add/delete with deduplication guarantees
+---
 
-Estimations
+##### 📊 Estimations
+- `ESTIMATION_CREATE`
+- `ESTIMATION_EDIT`
+- `ESTIMATION_VERIFY`
+- `ESTIMATION_APPROVE`
+- `ESTIMATION_EXPORT`
 
-Estimation creation, updates, and history access
+---
 
-Export jobs (sync and async) with status transitions
+##### 📦 Inventory
+- `INVENTORY_CREATE`
+- `INVENTORY_EDIT`
+- `INVENTORY_VIEW`
 
-Cross-tenant access protection verified by tests
+Inventory transactions, maintenance, and exports are governed by **separate permission sets**.
 
-Inventory
+---
 
-Inventory item lifecycle actions
+##### 🏭 Facilities & Schedules
+- `SCHEDULES_CREATE`
+- `SCHEDULES_EDIT`
+- `SCHEDULES_VIEW`
 
-Stock transactions (in/out/adjustments)
+---
 
-Maintenance logs (repairs, inspections, notes)
+##### 🎛 Instrumentation & Ratings
+- Instrumentation and loop management permissions
+- Ratings and nameplate permissions (create / edit / view)
 
-Global inventory audit and maintenance views
+---
 
-CSV exports with filter-aware audit coverage
+##### ✅ Verification
+- `VERIFICATION_CREATE`
+- `VERIFICATION_EDIT`
+- `VERIFICATION_VIEW`
 
-Schedules & Assets
+---
 
-Equipment schedules and asset records
+##### 🛡 Platform & Governance
+- Role and permission management
+- Account settings management
+- Audit log access
+- Export job visibility and cleanup
+- Explicit system override permissions
 
-Schedule edits, structure changes, and exports
+---
 
-Consistent audit linkage back to owning entities
+#### Enforcement Model
 
-**Accounts, Users & Membership**
-* Account member invites, accept/decline flows
-* Role changes, activation/deactivation, reactivation
-* Self-service and admin-initiated membership changes
-* Anonymous vs authenticated actions handled explicitly
+Permissions are enforced **end-to-end**, with no reliance on UI-only checks.
 
-**Exports & Background Jobs**
-- Export job creation, execution, retry, cancel, expiry
+##### Backend Enforcement
+- Token verification with permission guards on every protected route
+- Strict account-scoped data isolation
+- No implicit privilege escalation
+
+##### Frontend Enforcement
+- Route-level access gating
+- Conditional UI rendering
+- Graceful handling of `403 Forbidden` responses
+
+---
+
+#### Architectural Outcomes
+
+This permission architecture enables:
+- Safe delegation of responsibilities
+- Clear separation between engineering, QA, estimation, and operations
+- Future expansion without schema or authorization rewrites
+
+---
+
+### 📟 Audit, Traceability & System Logs
+
+SpecVerse implements **platform-wide audit and change tracking** across all core modules — not just datasheets.
+
+Auditability is treated as a **first-class system concern**, enforced consistently at:
+- API boundaries
+- Service and transaction layers
+- Export pipelines (PDF / Excel)
+- Background jobs and platform operations
+
+---
+
+#### 🔍 What Is Audited
+
+#### 📄 Datasheets & Templates
+- Full lifecycle actions:
+  - create
+  - edit
+  - verify
+  - approve
+  - reject
+- Field-level change logs (before / after values)
+- Revision metadata:
+  - revision number
+  - revision date
+  - engineering revision
+- Export actions (PDF / Excel), including:
+  - unit system
+  - language selection
+- Linked verification records and evidence attachments
+- Canonical attachment add / delete with deduplication guarantees
+
+---
+
+#### 📊 Estimations
+- Estimation creation, updates, and history access
+- Export jobs (sync and async) with full status transitions
+- Cross-tenant access protection (explicitly test-verified)
+
+---
+
+#### 📦 Inventory
+- Inventory item lifecycle actions
+- Stock transactions:
+  - inbound
+  - outbound
+  - adjustments
+- Maintenance logs:
+  - repairs
+  - inspections
+  - notes
+- Global inventory audit and maintenance views
+- CSV exports with filter-aware audit coverage
+
+---
+
+#### 🏭 Schedules & Assets
+- Equipment schedules and asset records
+- Schedule edits and structural changes
+- Schedule and asset exports
+- Consistent audit linkage back to owning entities
+
+---
+
+#### 👥 Accounts, Users & Membership
+- Account member invites and accept / decline flows
+- Role changes:
+  - assignment
+  - activation / deactivation
+  - reactivation
+- Self-service and admin-initiated membership changes
+- Explicit handling of:
+  - anonymous actions
+  - authenticated actions
+
+---
+
+#### 📤 Exports & Background Jobs
+- Export job lifecycle:
+  - creation
+  - execution
+  - retry
+  - cancellation
+  - expiry
 - Secure download tokens with expiration handling
 - Cleanup jobs and failed export recovery paths
 
-**Platform Governance**
+---
+
+#### 🛡 Platform Governance
 - Platform admin grant and revoke actions
-- Actor-aware audit entries (performedBy)
-- Immutable audit trail for support and ops actions
-- Explicit exclusion of account context for platform actions
+- Actor-aware audit entries (`performedBy`)
+- Immutable audit trail for support and operations
+- Explicit exclusion of account context for platform-level actions
 
-## 🧾 Audit Log Characteristics
+---
 
-Unified audit model across modules (consistent shape and IDs)
+### 🧾 Audit Log Characteristics
 
-Entity-aware linking (audit entries resolve to the correct UI page)
+Audit logs follow a **unified and consistent model** across all modules.
 
-Deduplicated logging (guaranteed single audit per logical action)
+Key characteristics include:
+- Unified audit schema (consistent IDs and shapes)
+- Entity-aware linking (audit entries resolve to the correct UI page)
+- Deduplicated logging:
+  - guaranteed single audit per logical action
+- Cross-tenant safe:
+  - `401` / `404` enforcement
+  - covered by tests
+- Export-embedded:
+  - audit and change logs included in PDF / Excel outputs
+- Human-readable and machine-verifiable
 
-Cross-tenant safe (404/401 enforced and test-covered)
+Audit and change logs are exposed through:
+- Dedicated backend APIs
+- Admin UI audit views
+- Embedded export sections (PDF / Excel)
+- Test-verified schemas and pagination guarantees
 
-Export-embedded (audit + change logs included in PDF/Excel outputs)
+---
 
-Human-readable + machine-verifiable
+### 🧪 Test Coverage & Guarantees
 
-Audit and change logs are exposed via:
+Audit behavior is **explicitly tested**, including:
+- Required audit emission per action
+- Absence of audits when intentionally excluded
+- ID stability and uniqueness
+- Pagination and filtering correctness
+- Cross-account isolation
+- Regression protection:
+  - routing
+  - deduplication
+  - exports
 
-Dedicated backend APIs
-
-Admin UI audit views
-
-Embedded export sections (PDF/Excel)
-
-Test-verified schemas and pagination guarantees
-
-## 🧪 Test Coverage & Guarantees
-
-Audit behavior is explicitly tested, including:
-
-Required audit emission per action
-
-Absence of audits when intentionally excluded
-
-ID stability and uniqueness
-
-Pagination and filtering correctness
-
-Cross-account isolation
-
-Regression protection (routing, dedupe, exports)
-
-This makes audit logging provable, not aspirational.
+This makes audit logging **provable**, not aspirational.
 
 ---
 
@@ -1034,30 +1098,28 @@ This setup ensures consistent, production-quality PDF output across environments
 
 ---
 
-## 📄 Local Setup & Development
+#### 📄 Local Setup & Development
 
-# Clone the repository
+#### Clone the repository
 git clone https://github.com/jmjabayon928/specverse.git
 cd specverse
 
-# Install dependencies
+#### Install dependencies
 npm install
 
-# Start development servers
+#### Start development servers
 npm run dev-backend
 npm run dev
 
-Environment configuration
+**Environment configuration**
 
 SpecVerse uses separate environment files for clarity and safety:
 
-Frontend
+**Frontend**
+- **.env.local — Next.js frontend configuration**
 
-## .env.local — Next.js frontend configuration
-
-Backend
-
-## .env — local development
+**Backend**
+- **.env — local development**
 
 ## .env.production — deployment/runtime configuration
 
@@ -1128,7 +1190,10 @@ All linting, type-checking, and tests must pass before merge
 
 ## 👨‍💼 Author
 
-**Jeff Martin Abayon**
-## 📍 Calgary, Canada
-## 📧 [jmjabayon@gmail.com](mailto:jmjabayon@gmail.com)
-## [LinkedIn Profile](https://www.linkedin.com/in/jeff-martin-abayon-calgary/)
+### **Jeff Martin Abayon**
+
+### 📍 Calgary, Canada
+
+### 📧 [jmjabayon@gmail.com](mailto:jmjabayon@gmail.com)
+
+### [LinkedIn Profile](https://www.linkedin.com/in/jeff-martin-abayon-calgary/)
