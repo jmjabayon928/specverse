@@ -10,6 +10,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../../src/backend/errors/AppError'
 import { errorHandler } from '../../src/backend/middleware/errorHandler'
 import { PERMISSIONS } from '../../src/constants/permissions'
+import { assertUnauthenticated, assertForbidden, assertNotFound, assertValidationError } from '../helpers/httpAsserts'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'secret'
 
@@ -216,7 +217,7 @@ describe('Export Jobs API', () => {
       const res = await request(app)
         .post('/api/backend/exports/jobs')
         .send({ jobType: 'inventory_transactions_csv', params: {} })
-      expect(res.statusCode).toBe(401)
+      assertUnauthenticated(res)
     })
 
     it('returns 403 when authenticated without INVENTORY_VIEW', async () => {
@@ -226,7 +227,7 @@ describe('Export Jobs API', () => {
         .post('/api/backend/exports/jobs')
         .set('Cookie', [cookie])
         .send({ jobType: 'inventory_transactions_csv', params: {} })
-      expect(res.statusCode).toBe(403)
+      assertForbidden(res)
     })
 
     it('creates job and returns 201 with jobId when pre-check passes', async () => {
@@ -267,7 +268,7 @@ describe('Export Jobs API', () => {
     it('returns 401 when unauthenticated', async () => {
       const app = buildTestApp()
       const res = await request(app).get('/api/backend/exports/jobs/123')
-      expect(res.statusCode).toBe(401)
+      assertUnauthenticated(res)
     })
 
     it('returns 200 with status for owner', async () => {
@@ -293,7 +294,7 @@ describe('Export Jobs API', () => {
       const res = await request(app)
         .get('/api/backend/exports/jobs/123')
         .set('Cookie', [cookie])
-      expect(res.statusCode).toBe(403)
+      assertForbidden(res)
     })
 
     it('returns 200 for admin when viewing another user job', async () => {
@@ -314,7 +315,7 @@ describe('Export Jobs API', () => {
       const res = await request(app)
         .get('/api/backend/exports/jobs/999')
         .set('Cookie', [cookie])
-      expect(res.statusCode).toBe(404)
+      assertNotFound(res)
     })
   })
 
@@ -324,7 +325,7 @@ describe('Export Jobs API', () => {
       const res = await request(app).get(
         '/api/backend/exports/jobs/123/download'
       )
-      expect(res.statusCode).toBe(401)
+      assertUnauthenticated(res)
       expect(res.body.message).toMatch(/Unauthorized|Missing/)
     })
 
@@ -337,8 +338,7 @@ describe('Export Jobs API', () => {
       const res = await request(app).get(
         `/api/backend/exports/jobs/999/download?token=${encodeURIComponent(token)}`
       )
-      expect(res.statusCode).toBe(403)
-      expect(res.body.message).toMatch(/Invalid|expired|Permission/)
+      assertForbidden(res, /Invalid|expired|Permission/)
     })
 
     it('returns 403 when token is valid but user is not job owner', async () => {
@@ -351,8 +351,7 @@ describe('Export Jobs API', () => {
       const res = await request(app).get(
         `/api/backend/exports/jobs/123/download?token=${encodeURIComponent(token)}`
       )
-      expect(res.statusCode).toBe(403)
-      expect(res.body.message).toMatch(/Permission/)
+      assertForbidden(res, /Permission/)
     })
 
     it('returns 410 when export expired or file missing', async () => {
@@ -430,7 +429,7 @@ describe('Export Jobs API', () => {
       const res = await request(app)
         .post('/api/backend/exports/jobs/123/cancel')
         .set('Cookie', [cookie])
-      expect(res.statusCode).toBe(403)
+      assertForbidden(res)
       expect(mockCancelExportJob).not.toHaveBeenCalled()
     })
   })
@@ -443,7 +442,7 @@ describe('Export Jobs API', () => {
       const res = await request(app)
         .post('/api/backend/exports/jobs/999/retry')
         .set('Cookie', [cookie])
-      expect(res.statusCode).toBe(404)
+      assertNotFound(res)
       expect(mockUpdateExportJobResetForRetry).not.toHaveBeenCalled()
     })
 
@@ -456,7 +455,7 @@ describe('Export Jobs API', () => {
       const res = await request(app)
         .post('/api/backend/exports/jobs/123/retry')
         .set('Cookie', [cookie])
-      expect(res.statusCode).toBe(403)
+      assertForbidden(res)
       expect(mockUpdateExportJobResetForRetry).not.toHaveBeenCalled()
     })
 
@@ -473,8 +472,7 @@ describe('Export Jobs API', () => {
       const res = await request(app)
         .post('/api/backend/exports/jobs/123/retry')
         .set('Cookie', [cookie])
-      expect(res.statusCode).toBe(400)
-      expect(res.body.message).toMatch(/cannot be retried|only failed/)
+      assertValidationError(res, /cannot be retried|only failed/)
       expect(mockUpdateExportJobResetForRetry).not.toHaveBeenCalled()
     })
 
@@ -487,7 +485,7 @@ describe('Export Jobs API', () => {
       const res = await request(app)
         .post('/api/backend/exports/jobs/123/retry')
         .set('Cookie', [cookie])
-      expect(res.statusCode).toBe(400)
+      assertValidationError(res)
       expect(mockUpdateExportJobResetForRetry).not.toHaveBeenCalled()
     })
 
@@ -532,7 +530,7 @@ describe('Export Jobs API', () => {
     it('returns 401 when unauthenticated', async () => {
       const app = buildTestApp()
       const res = await request(app).post('/api/backend/exports/jobs/cleanup')
-      expect(res.statusCode).toBe(401)
+      assertUnauthenticated(res)
     })
 
     it('returns 403 when not admin', async () => {
@@ -541,7 +539,7 @@ describe('Export Jobs API', () => {
       const res = await request(app)
         .post('/api/backend/exports/jobs/cleanup')
         .set('Cookie', [cookie])
-      expect(res.statusCode).toBe(403)
+      assertForbidden(res)
     })
 
     it('returns 200 with deletedFiles when admin', async () => {
