@@ -2,6 +2,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "@/hooks/useSession";
+import { PERMISSIONS } from "@/constants/permissions";
 
 interface MaintenanceLog {
   maintenanceId: number;
@@ -14,9 +16,19 @@ interface MaintenanceLog {
 }
 
 export default function GlobalMaintenancePage() {
+  const { user, loading } = useSession();
   const [logs, setLogs] = useState<MaintenanceLog[]>([]);
 
   useEffect(() => {
+    if (loading) return;
+    if (!user) return;
+    
+    const userRole = user.role?.toLowerCase() ?? '';
+    const permissions = user.permissions ?? [];
+    const hasPermission = userRole === 'admin' || permissions.includes(PERMISSIONS.INVENTORY_MAINTENANCE_VIEW);
+    
+    if (!hasPermission) return;
+
     fetch("/api/backend/inventory/all/maintenance", {
       credentials: "include",
       headers: { Accept: "application/json" },
@@ -30,7 +42,38 @@ export default function GlobalMaintenancePage() {
       })
       .then((data) => setLogs(Array.isArray(data) ? data : []))
       .catch((err) => console.error("Failed to load maintenance logs:", err));
-  }, []);
+  }, [loading, user]);
+
+  if (loading) {
+    return (
+      <div className="p-4">
+        <h1 className="text-xl font-bold mb-4">All Maintenance Logs</h1>
+        <p className="text-sm text-gray-500">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="p-4">
+        <h1 className="text-xl font-bold mb-4">All Maintenance Logs</h1>
+        <p className="text-sm text-gray-500">No access</p>
+      </div>
+    );
+  }
+
+  const userRole = user.role?.toLowerCase() ?? '';
+  const permissions = user.permissions ?? [];
+  const canViewMaintenance = userRole === 'admin' || permissions.includes(PERMISSIONS.INVENTORY_MAINTENANCE_VIEW);
+
+  if (!canViewMaintenance) {
+    return (
+      <div className="p-4">
+        <h1 className="text-xl font-bold mb-4">All Maintenance Logs</h1>
+        <p className="text-sm text-gray-500">No access</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4">

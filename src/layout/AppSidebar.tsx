@@ -2,7 +2,7 @@
 'use client'
 
 import { ChevronDown } from 'lucide-react'
-import React, { useEffect, useRef, useState, useCallback } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -20,6 +20,8 @@ import {
   ReportsIcon,
   AnalyticsIcon,
 } from '../components/icons/index'
+import { PERMISSIONS } from '@/constants/permissions'
+import styles from './AppSidebar.module.css'
 
 const FEATURE_REVISIONS_ENABLED = false
 const FEATURE_MIRROR_ENABLED = false
@@ -29,6 +31,9 @@ type SubNavItem = {
   path: string
   pro?: boolean
   new?: boolean
+  /** Permission-based: show only if user has this permission or is admin (used when parent is permission-gated) */
+  requiredPermission?: string
+  /** Role-based: only for Administration children */
   roles?: string[]
 }
 
@@ -36,6 +41,9 @@ type NavItem = {
   name: string
   icon: React.ReactNode
   path?: string
+  /** Permission-based: show when user has this permission or is admin */
+  requiredPermission?: string
+  /** Role-based (Administration only): show when user role is in this list */
   roles?: string[]
   subItems?: SubNavItem[]
 }
@@ -44,7 +52,7 @@ const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: 'Dashboard',
-    roles: ['admin', 'manager', 'estimator', 'user', 'supervisor'],
+    requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
     subItems: [
       { name: 'Overview & Stats', path: '/', pro: false }
     ],
@@ -52,7 +60,7 @@ const navItems: NavItem[] = [
   {
     icon: <DataSheetsIcon />,
     name: 'DataSheets',
-    roles: ['admin', 'engineer', 'estimator', 'qa', 'supervisor'],
+    requiredPermission: PERMISSIONS.DATASHEET_VIEW,
     subItems: [
       { name: 'Templates', path: '/datasheets/templates', pro: false },
       { name: 'Filled Forms', path: '/datasheets/filled', pro: false },
@@ -68,7 +76,7 @@ const navItems: NavItem[] = [
   {
     icon: <EstimationIcon />,
     name: 'Project Estimation',
-    roles: ['admin', 'estimator', 'manager', 'supervisor', 'engineer'],
+    requiredPermission: PERMISSIONS.ESTIMATION_VIEW,
     subItems: [
       { name: 'Estimation List', path: '/estimation' },
       { name: 'Estimation Packages', path: '/estimation/packages' },
@@ -79,11 +87,11 @@ const navItems: NavItem[] = [
   {
     icon: <InventoryIcon />,
     name: 'Inventory',
-    roles: ['admin', 'warehouse', 'maintenance', 'supervisor', 'engineer'],
+    requiredPermission: PERMISSIONS.INVENTORY_VIEW,
     subItems: [
       { name: 'Inventory Items', path: '/inventory' },
       { name: 'Transactions', path: '/inventory/transactions' },
-      { name: 'Maintenance', path: '/inventory/maintenance' },
+      { name: 'Maintenance', path: '/inventory/maintenance', requiredPermission: PERMISSIONS.INVENTORY_MAINTENANCE_VIEW },
       { name: 'Audit Logs', path: '/inventory/logs' },
     ],
   },
@@ -107,11 +115,13 @@ const navItems: NavItem[] = [
     icon: <AnalyticsIcon />,
     name: 'Analytics',
     path: '/dashboard/analytics',
+    requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
   },
   {
     icon: <ReportsIcon />,
     name: 'Reports',
     path: '/dashboard/reports',
+    requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
   },
 ]
 
@@ -121,56 +131,73 @@ const AppSidebar: React.FC = () => {
   const pathname = usePathname()
 
   const userRole = user?.role?.toLowerCase() ?? ''
+  const permissions = useMemo(() => user?.permissions ?? [], [user?.permissions])
 
-  const [openSubmenuIndex, setOpenSubmenuIndex] = useState<number | null>(null)
+  const hasPermission = useCallback(
+    (permission: string) => {
+      if (!permission) return false
+      if (userRole === 'admin') return true
+      return permissions.includes(permission)
+    },
+    [userRole, permissions]
+  )
+
+  const [openSubmenuKey, setOpenSubmenuKey] = useState<string | null>(null)
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>({})
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const isActive = useCallback((path: string) => path === pathname, [pathname])
 
   useEffect(() => {
-    let matched = false
+    const filtered = navItems
+      .filter(nav => {
+        if (nav.requiredPermission != null) return hasPermission(nav.requiredPermission)
+        if (nav.roles != null && nav.roles.length > 0) return nav.roles.includes(userRole)
+        return true
+      })
+      .map(nav => {
+        let subItems: SubNavItem[] | undefined
+        if (nav.requiredPermission != null) {
+          subItems = nav.subItems?.filter(
+            s => !s.requiredPermission || hasPermission(s.requiredPermission)
+          )
+        } else {
+          subItems = nav.subItems?.filter(
+            s => !s.roles || s.roles.includes(userRole)
+          )
+        }
+        return { ...nav, subItems }
+      })
+      .filter(nav => (nav.subItems && nav.subItems.length > 0) || nav.path)
 
-    for (let index = 0; index < navItems.length; index++) {
-      const nav = navItems[index]
-
-      if (!nav.subItems) {
-        continue
-      }
-
+    let matchedKey: string | null = null
+    for (const nav of filtered) {
+      if (!nav.subItems) continue
       for (const sub of nav.subItems) {
         if (isActive(sub.path)) {
-          setOpenSubmenuIndex(index)
-          matched = true
+          matchedKey = nav.name
           break
         }
       }
-
-      if (matched) {
-        break
-      }
+      if (matchedKey) break
     }
-
-    if (!matched) {
-      setOpenSubmenuIndex(null)
-    }
-  }, [pathname, isActive])
+    setOpenSubmenuKey(matchedKey)
+  }, [pathname, isActive, hasPermission, userRole])
 
   useEffect(() => {
-    if (openSubmenuIndex !== null) {
-      const key = `main-${openSubmenuIndex}`
-      const ref = subMenuRefs.current[key]
+    if (openSubmenuKey !== null) {
+      const ref = subMenuRefs.current[openSubmenuKey]
       if (ref) {
         setSubMenuHeight(prev => ({
           ...prev,
-          [key]: ref.scrollHeight,
+          [openSubmenuKey]: ref.scrollHeight,
         }))
       }
     }
-  }, [openSubmenuIndex])
+  }, [openSubmenuKey])
 
-  const handleSubmenuToggle = (index: number) => {
-    setOpenSubmenuIndex(prev => (prev === index ? null : index))
+  const handleSubmenuToggle = (key: string) => {
+    setOpenSubmenuKey(prev => (prev === key ? null : key))
   }
 
   // ---- Helpers ----
@@ -179,8 +206,8 @@ const AppSidebar: React.FC = () => {
     isExpanded: boolean
     isHovered: boolean
     isMobileOpen: boolean
-    openSubmenuIndex: number | null
-    handleSubmenuToggle?: (idx: number) => void
+    openSubmenuKey: string | null
+    handleSubmenuToggle?: (key: string) => void
   }
 
   const renderNavPrimary = (
@@ -190,7 +217,7 @@ const AppSidebar: React.FC = () => {
     context: NavPrimaryContext
   ) => {
     if (nav.subItems && nav.subItems.length > 0) {
-      const isOpen = context.openSubmenuIndex === index
+      const isOpen = context.openSubmenuKey === nav.name
 
       const baseClass = 'menu-item group cursor-pointer'
       const activeClass = isOpen ? 'menu-item-active' : 'menu-item-inactive'
@@ -209,7 +236,7 @@ const AppSidebar: React.FC = () => {
       return (
         <button
           type="button"
-          onClick={() => context.handleSubmenuToggle?.(index)}
+          onClick={() => context.handleSubmenuToggle?.(nav.name)}
           className={`${baseClass} ${activeClass} ${justifyClass}`}
         >
           <span className={iconClass}>{nav.icon}</span>
@@ -250,7 +277,7 @@ const AppSidebar: React.FC = () => {
     isExpanded: boolean
     isHovered: boolean
     isMobileOpen: boolean
-    openSubmenuIndex: number | null
+    openSubmenuKey: string | null
     subMenuHeight: Record<string, number>
     subMenuRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>
   }
@@ -269,9 +296,9 @@ const AppSidebar: React.FC = () => {
       return null
     }
 
-    const key = `main-${index}`
+    const key = nav.name
     const rawHeight = context.subMenuHeight[key] ?? 0
-    const isOpen = context.openSubmenuIndex === index
+    const isOpen = context.openSubmenuKey === nav.name
     const heightValue = isOpen ? String(rawHeight) + 'px' : '0px'
 
     const setSubMenuRef = (el: HTMLDivElement | null) => {
@@ -279,17 +306,48 @@ const AppSidebar: React.FC = () => {
     }
 
     return (
-      <div
-        ref={setSubMenuRef}
-        className="submenu-wrapper overflow-hidden transition-all duration-300"
-        style={{ '--submenu-height': heightValue } as React.CSSProperties}
-      >
-        <ul className="mt-2 space-y-1 ml-9">
+      <div className={styles.submenuWrapper}>
+        <div
+          ref={setSubMenuRef}
+          className="submenu-wrapper overflow-hidden transition-all duration-300"
+          style={{ '--submenu-height': heightValue } as React.CSSProperties}
+        >
+          <ul className="mt-2 space-y-1 ml-9">
           {nav.subItems.map(subItem => {
             const active = isActiveFn(subItem.path)
             const itemClass = active
               ? 'menu-dropdown-item menu-dropdown-item-active'
               : 'menu-dropdown-item menu-dropdown-item-inactive'
+            
+            // Determine permission: sub-item's own permission, or inherit from parent
+            const subItemPermission = subItem.requiredPermission ?? nav.requiredPermission
+            const hasSubItemPermission = subItemPermission ? hasPermission(subItemPermission) : true
+            
+            if (!hasSubItemPermission) {
+              return (
+                <li key={subItem.name}>
+                  <span
+                    title="No access"
+                    aria-disabled="true"
+                    className={`${itemClass} opacity-50 cursor-not-allowed`}
+                  >
+                    {subItem.name}
+                    <span className="flex items-center gap-1 ml-auto">
+                      {subItem.new && (
+                        <span className="menu-dropdown-badge menu-dropdown-badge-inactive">
+                          new
+                        </span>
+                      )}
+                      {subItem.pro && (
+                        <span className="menu-dropdown-badge menu-dropdown-badge-inactive">
+                          pro
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                </li>
+              )
+            }
 
             return (
               <li key={subItem.name}>
@@ -311,18 +369,36 @@ const AppSidebar: React.FC = () => {
               </li>
             )
           })}
-        </ul>
+          </ul>
+        </div>
       </div>
     )
   }
 
   const renderMenuItems = () => {
     const filtered = navItems
-      .filter(nav => !nav.roles || nav.roles.includes(userRole))
+      .filter(nav => {
+        if (nav.requiredPermission != null) {
+          return hasPermission(nav.requiredPermission)
+        }
+        if (nav.roles != null && nav.roles.length > 0) {
+          return nav.roles.includes(userRole)
+        }
+        return true
+      })
       .map(nav => {
-        const subItems = nav.subItems?.filter(
-          s => !s.roles || s.roles.includes(userRole)
-        )
+        let subItems: SubNavItem[] | undefined
+        if (nav.requiredPermission != null) {
+          // Permission-gated parent: child inherits parent permission unless child has its own requiredPermission
+          subItems = nav.subItems?.filter(
+            s => !s.requiredPermission || hasPermission(s.requiredPermission)
+          )
+        } else {
+          // Role-based (e.g. Administration): filter by child.roles / userRole
+          subItems = nav.subItems?.filter(
+            s => !s.roles || s.roles.includes(userRole)
+          )
+        }
         return { ...nav, subItems }
       })
       .filter(nav => (nav.subItems && nav.subItems.length > 0) || nav.path)
@@ -334,7 +410,7 @@ const AppSidebar: React.FC = () => {
             isExpanded,
             isHovered,
             isMobileOpen,
-            openSubmenuIndex,
+            openSubmenuKey,
             handleSubmenuToggle,
           }
 
@@ -342,7 +418,7 @@ const AppSidebar: React.FC = () => {
             isExpanded,
             isHovered,
             isMobileOpen,
-            openSubmenuIndex,
+            openSubmenuKey,
             subMenuHeight,
             subMenuRefs,
           }

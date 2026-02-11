@@ -2,6 +2,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "@/hooks/useSession";
+import { PERMISSIONS } from "@/constants/permissions";
 
 interface AuditLog {
   auditLogId: number;
@@ -15,9 +17,19 @@ interface AuditLog {
 }
 
 export default function GlobalAuditLogsPage() {
+  const { user, loading } = useSession();
   const [logs, setLogs] = useState<AuditLog[]>([]);
 
   useEffect(() => {
+    if (loading) return;
+    if (!user) return;
+    
+    const userRole = user.role?.toLowerCase() ?? '';
+    const permissions = user.permissions ?? [];
+    const hasPermission = userRole === 'admin' || permissions.includes(PERMISSIONS.INVENTORY_VIEW);
+    
+    if (!hasPermission) return;
+
     fetch("/api/backend/inventory/all/audit", {
       credentials: "include",
       headers: { Accept: "application/json" },
@@ -31,7 +43,38 @@ export default function GlobalAuditLogsPage() {
       })
       .then((data) => setLogs(Array.isArray(data) ? data : []))
       .catch((err) => console.error("Failed to load audit logs:", err));
-  }, []);
+  }, [loading, user]);
+
+  if (loading) {
+    return (
+      <div className="p-4">
+        <h1 className="text-xl font-bold mb-4">All Audit Logs</h1>
+        <p className="text-sm text-gray-500">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="p-4">
+        <h1 className="text-xl font-bold mb-4">All Audit Logs</h1>
+        <p className="text-sm text-gray-500">No access</p>
+      </div>
+    );
+  }
+
+  const userRole = user.role?.toLowerCase() ?? '';
+  const permissions = user.permissions ?? [];
+  const canViewAudit = userRole === 'admin' || permissions.includes(PERMISSIONS.INVENTORY_VIEW);
+
+  if (!canViewAudit) {
+    return (
+      <div className="p-4">
+        <h1 className="text-xl font-bold mb-4">All Audit Logs</h1>
+        <p className="text-sm text-gray-500">No access</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4">
