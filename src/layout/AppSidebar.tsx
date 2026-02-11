@@ -91,7 +91,7 @@ const navItems: NavItem[] = [
     subItems: [
       { name: 'Inventory Items', path: '/inventory' },
       { name: 'Transactions', path: '/inventory/transactions' },
-      { name: 'Maintenance', path: '/inventory/maintenance' },
+      { name: 'Maintenance', path: '/inventory/maintenance', requiredPermission: PERMISSIONS.INVENTORY_MAINTENANCE_VIEW },
       { name: 'Audit Logs', path: '/inventory/logs' },
     ],
   },
@@ -318,6 +318,36 @@ const AppSidebar: React.FC = () => {
             const itemClass = active
               ? 'menu-dropdown-item menu-dropdown-item-active'
               : 'menu-dropdown-item menu-dropdown-item-inactive'
+            
+            // Determine permission: sub-item's own permission, or inherit from parent
+            const subItemPermission = subItem.requiredPermission ?? nav.requiredPermission
+            const hasSubItemPermission = subItemPermission ? hasPermission(subItemPermission) : true
+            
+            if (!hasSubItemPermission) {
+              return (
+                <li key={subItem.name}>
+                  <span
+                    title="No access"
+                    aria-disabled="true"
+                    className={`${itemClass} opacity-50 cursor-not-allowed`}
+                  >
+                    {subItem.name}
+                    <span className="flex items-center gap-1 ml-auto">
+                      {subItem.new && (
+                        <span className="menu-dropdown-badge menu-dropdown-badge-inactive">
+                          new
+                        </span>
+                      )}
+                      {subItem.pro && (
+                        <span className="menu-dropdown-badge menu-dropdown-badge-inactive">
+                          pro
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                </li>
+              )
+            }
 
             return (
               <li key={subItem.name}>

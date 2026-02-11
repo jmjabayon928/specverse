@@ -30,9 +30,31 @@ export default async function InventoryDetailPage(
 
   const { categories, suppliers, manufacturers } = await fetchReferenceOptions(accountId);
   const resolvedSearchParams = await searchParams;
-  const activeTab = resolvedSearchParams.tab ?? "overview";
+  const INVENTORY_TABS = ["overview", "transactions", "audit", "maintenance"] as const;
+  type InventoryTab = (typeof INVENTORY_TABS)[number];
+  const rawTabParam = resolvedSearchParams.tab ?? "overview";
+  const rawTab: InventoryTab = INVENTORY_TABS.includes(rawTabParam as InventoryTab)
+    ? (rawTabParam as InventoryTab)
+    : "overview";
   const canEditStock = session.permissions?.includes(PERMISSIONS.INVENTORY_TRANSACTION_CREATE) ?? false;
   const canEditMaintenance = session.permissions?.includes(PERMISSIONS.INVENTORY_MAINTENANCE_CREATE) ?? false;
+
+  const canViewInventory = session.permissions?.includes(PERMISSIONS.INVENTORY_VIEW) ?? false;
+  const canViewMaintenance = session.permissions?.includes(PERMISSIONS.INVENTORY_MAINTENANCE_VIEW) ?? false;
+  const canViewOverview = canViewInventory;
+  const canViewTransactions = canViewInventory;
+  const canViewAudit = canViewInventory;
+
+  const tabAllowed: Record<string, boolean> = {
+    overview: canViewOverview,
+    transactions: canViewTransactions,
+    maintenance: canViewMaintenance,
+    audit: canViewAudit,
+  };
+  const firstAllowedTab: InventoryTab = INVENTORY_TABS.find(
+    (t) => tabAllowed[t]
+  ) ?? "overview";
+  const activeTab: InventoryTab = tabAllowed[rawTab] ? rawTab : firstAllowedTab;
 
   return (
     <div className="p-4">
@@ -46,38 +68,53 @@ export default async function InventoryDetailPage(
             href={`/inventory/${itemId}?tab=overview`}
             label="Overview"
             icon={<LayoutDashboard className="w-4 h-4" />}
+            disabled={!canViewOverview}
+            activeTabOverride={activeTab}
           />
           <InventoryTabLink
             href={`/inventory/${itemId}?tab=transactions`}
             label="Transactions"
             icon={<FileText className="w-4 h-4" />}
+            disabled={!canViewTransactions}
+            activeTabOverride={activeTab}
           />
           <InventoryTabLink
             href={`/inventory/${itemId}?tab=maintenance`}
             label="Maintenance"
             icon={<Wrench className="w-4 h-4" />}
+            disabled={!canViewMaintenance}
+            activeTabOverride={activeTab}
           />
           <InventoryTabLink
             href={`/inventory/${itemId}?tab=audit`}
             label="Audit Logs"
             icon={<ClipboardList className="w-4 h-4" />}
+            disabled={!canViewAudit}
+            activeTabOverride={activeTab}
           />
         </div>
 
         <div className="p-4 bg-white rounded-md shadow-sm border">
           {activeTab === "overview" ? (
-            <InventoryDetails
-              item={item} // ✅ Add this line
-              categories={categories}
-              suppliers={suppliers}
-              manufacturers={manufacturers}
-            />
+            canViewOverview ? (
+              <InventoryDetails
+                item={item}
+                categories={categories}
+                suppliers={suppliers}
+                manufacturers={manufacturers}
+              />
+            ) : (
+              <p className="text-sm text-gray-500">No access</p>
+            )
           ) : (
             <InventoryTabContent
               inventoryId={itemId}
               activeTab={activeTab}
               canEditStock={canEditStock}
               canEditMaintenance={canEditMaintenance}
+              canViewTransactions={canViewTransactions}
+              canViewMaintenance={canViewMaintenance}
+              canViewAudit={canViewAudit}
             />
           )}
         </div>
