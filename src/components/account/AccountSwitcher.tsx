@@ -41,7 +41,7 @@ export default function AccountSwitcher() {
     const ac = new AbortController()
     setLoading(true)
     let completed = false
-    fetch('/api/backend/accounts', { credentials: 'include', signal: ac.signal })
+    fetch('/api/backend/accounts/mine', { credentials: 'include', signal: ac.signal })
       .then(async (res) => {
         if (ac.signal.aborted) return
         if (!res.ok) {

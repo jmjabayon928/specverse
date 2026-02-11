@@ -7,6 +7,7 @@ import { createAccount, getAccountById, listAccounts, updateAccount } from '../c
 const router = Router()
 
 router.get('/', verifyToken, requireAdmin, listAccounts)
+router.get('/mine', verifyToken, listAccounts)
 router.get('/:id', verifyToken, requireAdmin, getAccountById)
 router.post('/', verifyToken, requireAdmin, createAccount)
 router.patch('/:id', verifyToken, requireAdmin, updateAccount)

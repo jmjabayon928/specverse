@@ -53,7 +53,7 @@ describe('AccountSwitcher', () => {
     })
     render(<AccountSwitcher />)
     await waitFor(() => {
-      expect(globalThis.fetch).toHaveBeenCalledWith('/api/backend/accounts', expect.objectContaining({ credentials: 'include' }))
+      expect(globalThis.fetch).toHaveBeenCalledWith('/api/backend/accounts/mine', expect.objectContaining({ credentials: 'include' }))
     })
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /switch account/i })).toHaveTextContent('Acme')
