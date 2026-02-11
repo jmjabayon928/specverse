@@ -2,3 +2,7 @@
   overflow: hidden;
   transition: height 300ms ease;
 }
+
+.submenuWrapper :global(.submenu-wrapper) {
+  height: var(--submenu-height);
+}
