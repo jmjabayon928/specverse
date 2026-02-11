@@ -11,6 +11,9 @@ interface Props {
   activeTab: string;
   canEditStock: boolean;
   canEditMaintenance: boolean;
+  canViewTransactions: boolean;
+  canViewMaintenance: boolean;
+  canViewAudit: boolean;
 }
 
 export default function InventoryTabContent({
@@ -18,24 +21,39 @@ export default function InventoryTabContent({
   activeTab,
   canEditStock,
   canEditMaintenance,
+  canViewTransactions,
+  canViewMaintenance,
+  canViewAudit,
 }: Props) {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      {activeTab === "transactions" && (
-        <StockTransactionTable 
-          inventoryId={inventoryId} 
-            canEdit={canEditStock} 
-        />
-      )}
-      {activeTab === "maintenance" && (
-        <MaintenanceLogTable
-          inventoryId={inventoryId}
-          canEdit={canEditMaintenance}
-        />
-      )}
-      {activeTab === "audit" && (
+  if (activeTab === "transactions") {
+    if (!canViewTransactions) {
+      return <p className="text-sm text-gray-500">No access</p>;
+    }
+    return (
+      <Suspense fallback={<div>Loading...</div>}>
+        <StockTransactionTable inventoryId={inventoryId} canEdit={canEditStock} />
+      </Suspense>
+    );
+  }
+  if (activeTab === "maintenance") {
+    if (!canViewMaintenance) {
+      return <p className="text-sm text-gray-500">No access</p>;
+    }
+    return (
+      <Suspense fallback={<div>Loading...</div>}>
+        <MaintenanceLogTable inventoryId={inventoryId} canEdit={canEditMaintenance} />
+      </Suspense>
+    );
+  }
+  if (activeTab === "audit") {
+    if (!canViewAudit) {
+      return <p className="text-sm text-gray-500">No access</p>;
+    }
+    return (
+      <Suspense fallback={<div>Loading...</div>}>
         <AuditLogTable inventoryId={inventoryId} />
-      )}
-    </Suspense>
-  );
+      </Suspense>
+    );
+  }
+  return null;
 }

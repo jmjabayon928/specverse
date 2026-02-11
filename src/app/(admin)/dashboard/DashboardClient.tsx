@@ -3,6 +3,7 @@
 
 import React from "react";
 import type { UserSession } from "@/domain/auth/sessionTypes";
+import { PERMISSIONS } from "@/constants/permissions";
 import { Card, CardContent } from "@/components/ui/card";
 import dynamic from "next/dynamic";
 
@@ -18,12 +19,28 @@ type Props = {
   user: UserSession;
 };
 
+function hasPermission(permissions: string[] | undefined, key: string): boolean {
+  return Array.isArray(permissions) && permissions.includes(key);
+}
+
 export default function DashboardClient({ user }: Props) {
   const role = user.role;
+  const permissions = user.permissions ?? [];
+
+  const showDatasheets = hasPermission(permissions, PERMISSIONS.DATASHEET_VIEW);
+  // Templates: no TEMPLATE* key in constants; canonical key for templates is DATASHEET_VIEW per constants.
+  const showTemplates = hasPermission(permissions, PERMISSIONS.DATASHEET_VIEW);
+  // Pending verifications: DATASHEET_VERIFY is the existing "can verify datasheets" permission.
+  const showVerifications = hasPermission(permissions, PERMISSIONS.DATASHEET_VERIFY);
+  const showActiveUsers = role === "Admin" || role?.toLowerCase() === "admin";
+  const showInventory = hasPermission(permissions, PERMISSIONS.INVENTORY_VIEW);
+  const showEstimation = hasPermission(permissions, PERMISSIONS.ESTIMATION_VIEW);
+
+  const hasAnyWidget = showDatasheets || showTemplates || showVerifications || showActiveUsers || showInventory || showEstimation;
 
   return (
     <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      {(role === "Engineer" || role === "Admin") && (
+      {showDatasheets && (
         <Card>
           <CardContent>
             <h2 className="font-bold text-lg mb-2">Datasheets by Status</h2>
@@ -32,7 +49,7 @@ export default function DashboardClient({ user }: Props) {
         </Card>
       )}
 
-      {(role === "Engineer" || role === "Supervisor" || role === "Admin") && (
+      {showTemplates && (
         <Card>
           <CardContent>
             <h2 className="font-bold text-lg mb-2">Templates Created Over Time</h2>
@@ -41,7 +58,7 @@ export default function DashboardClient({ user }: Props) {
         </Card>
       )}
 
-      {(role === "Supervisor" || role === "Admin") && (
+      {showVerifications && (
         <Card>
           <CardContent>
             <h2 className="font-bold text-lg mb-2">Pending Verifications</h2>
@@ -50,7 +67,7 @@ export default function DashboardClient({ user }: Props) {
         </Card>
       )}
 
-      {role === "Admin" && (
+      {showActiveUsers && (
         <Card>
           <CardContent>
             <h2 className="font-bold text-lg mb-2">Active Users by Role</h2>
@@ -59,7 +76,7 @@ export default function DashboardClient({ user }: Props) {
         </Card>
       )}
 
-      {(role === "Engineer" || role === "Supervisor" || role === "Admin") && (
+      {showInventory && (
         <Card>
           <CardContent>
             <h2 className="font-bold text-lg mb-2">Inventory Stock Levels</h2>
@@ -68,11 +85,19 @@ export default function DashboardClient({ user }: Props) {
         </Card>
       )}
 
-      {(role === "Engineer" || role === "Supervisor" || role === "Admin") && (
+      {showEstimation && (
         <Card>
           <CardContent>
             <h2 className="font-bold text-lg mb-2">Estimation Totals by Project</h2>
             <EstimationTotalsByProject />
+          </CardContent>
+        </Card>
+      )}
+
+      {!hasAnyWidget && (
+        <Card>
+          <CardContent>
+            <p className="text-muted-foreground">No dashboard widgets available for your current permissions.</p>
           </CardContent>
         </Card>
       )}

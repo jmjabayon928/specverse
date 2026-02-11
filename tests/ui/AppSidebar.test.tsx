@@ -3,6 +3,7 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import AppSidebar from '../../src/layout/AppSidebar'
+import { PERMISSIONS } from '../../src/constants/permissions'
 
 jest.mock('next/navigation', () => ({
   usePathname: () => '/',
@@ -30,7 +31,7 @@ describe('AppSidebar role gating', () => {
 
   it('hides Administration and Audit Logs for non-admin', () => {
     useSessionMock.mockReturnValue({
-      user: { role: 'Viewer', permissions: [], userId: 1, roleId: 1 },
+      user: { role: 'Viewer', permissions: [PERMISSIONS.DASHBOARD_VIEW], userId: 1, roleId: 1 },
       loading: false,
     })
 
@@ -67,36 +68,42 @@ describe('AppSidebar role gating', () => {
     expect(list).toBeInTheDocument()
   })
 
-  it('shows Dashboard, Datasheets, Estimation, and Inventory for Supervisor', () => {
+  it('shows Dashboard, Analytics, Reports when user has DASHBOARD_VIEW only', () => {
     useSessionMock.mockReturnValue({
-      user: { role: 'Supervisor', permissions: [], userId: 1, roleId: 1 },
+      user: { role: 'Viewer', permissions: [PERMISSIONS.DASHBOARD_VIEW], userId: 1, roleId: 1 },
       loading: false,
     })
 
     render(<AppSidebar />)
 
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
-    expect(screen.getByText('DataSheets')).toBeInTheDocument()
-    expect(screen.getByText('Project Estimation')).toBeInTheDocument()
-    expect(screen.getByText('Inventory')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /templates/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /filled forms/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /estimation list/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /inventory items/i })).toBeInTheDocument()
+    expect(screen.getByText('Analytics')).toBeInTheDocument()
+    expect(screen.getByText('Reports')).toBeInTheDocument()
+    expect(screen.queryByText('DataSheets')).not.toBeInTheDocument()
+    expect(screen.queryByText('Project Estimation')).not.toBeInTheDocument()
+    expect(screen.queryByText('Inventory')).not.toBeInTheDocument()
   })
 
   it('shows Estimation and Inventory for Engineer', () => {
     useSessionMock.mockReturnValue({
-      user: { role: 'Engineer', permissions: [], userId: 1, roleId: 1 },
+      user: {
+        role: 'Engineer',
+        permissions: [PERMISSIONS.DATASHEET_VIEW, PERMISSIONS.ESTIMATION_VIEW, PERMISSIONS.INVENTORY_VIEW],
+        userId: 1,
+        roleId: 1,
+      },
       loading: false,
     })
 
     render(<AppSidebar />)
 
+    expect(screen.getByText('DataSheets')).toBeInTheDocument()
     expect(screen.getByText('Project Estimation')).toBeInTheDocument()
     expect(screen.getByText('Inventory')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /estimation list/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /inventory items/i })).toBeInTheDocument()
-    expect(screen.getByText('DataSheets')).toBeInTheDocument()
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
+    expect(screen.queryByText('Analytics')).not.toBeInTheDocument()
+    expect(screen.queryByText('Reports')).not.toBeInTheDocument()
   })
 })

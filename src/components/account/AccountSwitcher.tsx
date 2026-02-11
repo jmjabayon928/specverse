@@ -17,7 +17,7 @@ function toastMessageForStatus(status: number, fallback: string): string {
 }
 
 export default function AccountSwitcher() {
-  const { user } = useSession()
+  const { user, refetchSession } = useSession()
   const router = useRouter()
   const [accounts, setAccounts] = useState<AccountItem[]>([])
   const [activeAccountId, setActiveAccountId] = useState<number | null>(null)
@@ -41,7 +41,7 @@ export default function AccountSwitcher() {
     const ac = new AbortController()
     setLoading(true)
     let completed = false
-    fetch('/api/backend/accounts', { credentials: 'include', signal: ac.signal })
+    fetch('/api/backend/accounts/mine', { credentials: 'include', signal: ac.signal })
       .then(async (res) => {
         if (ac.signal.aborted) return
         if (!res.ok) {
@@ -94,12 +94,14 @@ export default function AccountSwitcher() {
           return
         }
         setActiveAccountId(accountId)
+        await refetchSession()
+        // Refresh server-rendered content so the page reflects the new account without a full navigation.
         router.refresh()
       } catch {
         toast.error('Failed to switch account')
       }
     },
-    [activeAccountId, router]
+    [activeAccountId, router, refetchSession]
   )
 
   if (!user) return null

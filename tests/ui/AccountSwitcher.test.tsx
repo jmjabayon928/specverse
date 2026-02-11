@@ -25,6 +25,7 @@ describe('AccountSwitcher', () => {
     useSessionMock.mockReturnValue({
       user: { userId: 1, roleId: 1, role: 'Admin', permissions: [] },
       loading: false,
+      refetchSession: jest.fn().mockResolvedValue(undefined),
     })
     globalThis.fetch = jest.fn()
   })
@@ -52,7 +53,7 @@ describe('AccountSwitcher', () => {
     })
     render(<AccountSwitcher />)
     await waitFor(() => {
-      expect(globalThis.fetch).toHaveBeenCalledWith('/api/backend/accounts', expect.objectContaining({ credentials: 'include' }))
+      expect(globalThis.fetch).toHaveBeenCalledWith('/api/backend/accounts/mine', expect.objectContaining({ credentials: 'include' }))
     })
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /switch account/i })).toHaveTextContent('Acme')
@@ -93,6 +94,12 @@ describe('AccountSwitcher', () => {
   })
 
   it('on account selection calls POST active-account then refresh', async () => {
+    const refetchSessionMock = jest.fn().mockResolvedValue(undefined)
+    useSessionMock.mockReturnValue({
+      user: { userId: 1, roleId: 1, role: 'Admin', permissions: [] },
+      loading: false,
+      refetchSession: refetchSessionMock,
+    })
     const user = userEvent.setup()
     ;(globalThis.fetch as jest.Mock)
       .mockResolvedValueOnce({
@@ -127,6 +134,7 @@ describe('AccountSwitcher', () => {
           body: JSON.stringify({ accountId: 2 }),
         })
       )
+      expect(refetchSessionMock).toHaveBeenCalledTimes(1)
       expect(mockRefresh).toHaveBeenCalled()
     })
   })
