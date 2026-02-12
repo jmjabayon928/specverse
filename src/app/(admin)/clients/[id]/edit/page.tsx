@@ -8,6 +8,11 @@ import SidebarWidget from "@/layout/SidebarWidget";
 import Backdrop from "@/layout/Backdrop";
 
 export default function EditClientPage() {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
+  }
+
   const router = useRouter();
   const params = useParams(); // ✅ Ensure `useParams()` is used correctly
   const id = params?.id as string;
@@ -27,7 +32,7 @@ export default function EditClientPage() {
     async function fetchClient() {
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:5000/api/clients/${id}`);
+        const response = await fetch(`${baseUrl}/api/backend/settings/clients/${id}`);
         if (!response.ok) {
           throw new Error("Failed to fetch client data");
         }
@@ -45,7 +50,7 @@ export default function EditClientPage() {
     }
 
     if (id) fetchClient();
-  }, [id]);
+  }, [id, baseUrl]);
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,7 +65,7 @@ export default function EditClientPage() {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/clients/${id}`, {
+      const response = await fetch(`${baseUrl}/api/backend/settings/clients/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(client),

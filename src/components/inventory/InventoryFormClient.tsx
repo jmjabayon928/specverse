@@ -32,12 +32,17 @@ export default function InventoryFormClient({
   const [formValues, setFormValues] = useState<InventoryFormValues>(initialValues);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
+  }
+
   const handleSubmit = async (values: InventoryFormValues) => {
     try {
       setIsSubmitting(true);
 
       const response = await fetch(
-        `http://localhost:5000/api/backend/inventory/${mode === 'edit' && inventoryId ? inventoryId : ''}`,
+        `${baseUrl}/api/backend/inventory/${mode === 'edit' && inventoryId ? inventoryId : ''}`,
         {
           method: mode === 'edit' ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },

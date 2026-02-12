@@ -5,6 +5,11 @@ import AppSidebar from "@/layout/AppSidebar";
 import AppHeader from "@/layout/AppHeader";
 
 export default function AddClientPage() {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
+  }
+
   const router = useRouter();
   const [formData, setFormData] = useState({
     ClientCode: "",
@@ -48,7 +53,7 @@ export default function AddClientPage() {
     setLoading(true); // Show loading indicator
 
     try {
-      const res = await fetch("http://localhost:5000/api/clients", {
+      const res = await fetch(`${baseUrl}/api/backend/settings/clients`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
