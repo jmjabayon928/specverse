@@ -8,7 +8,10 @@ export function useEstimationData() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
+        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+        if (!baseUrl) {
+          throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
+        }
         const res = await fetch(`${baseUrl}/api/backend/estimation`);
         const json = await res.json();
         setData(Array.isArray(json) ? json : []);

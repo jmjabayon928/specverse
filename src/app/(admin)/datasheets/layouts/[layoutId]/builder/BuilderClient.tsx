@@ -6,7 +6,11 @@ import Image from "next/image";
 import type { LayoutBundle, LayoutBlock, LayoutRegion } from "@/domain/layouts/layoutTypes";
 import styles from "./BuilderClient.module.css";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
+const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+if (!baseUrl) {
+  throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
+}
+const API_BASE = baseUrl;
 
 // ---- modal + error helper --------------------------------------------
 type ModalState = Readonly<{

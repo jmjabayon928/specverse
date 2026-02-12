@@ -57,10 +57,68 @@ const app: Application = express()
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
+// CORS configuration: env-driven origins for VPS stage/prod
+
+const getCorsOrigin = (): string | string[] | boolean | ((origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => void) => {
+  const isProduction = process.env.NODE_ENV === 'production'
+  
+  // Parse CORS_ALLOWED_ORIGINS (comma-separated list)
+  const corsAllowedOrigins = process.env.CORS_ALLOWED_ORIGINS
+  let allowedOrigins: string[] = []
+  
+  if (corsAllowedOrigins) {
+    allowedOrigins = corsAllowedOrigins
+      .split(',')
+      .map(origin => origin.trim())
+      .filter(origin => origin.length > 0)
+  }
+
+  // Fallback to NEXT_PUBLIC_APP_URL (single origin)
+  if (allowedOrigins.length === 0) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+    if (appUrl) {
+      allowedOrigins = [appUrl.trim()]
+    }
+  }
+
+  // Non-production: default to localhost origins if no env set
+  if (allowedOrigins.length === 0 && !isProduction) {
+    allowedOrigins = ['http://localhost:3000', 'http://localhost:3001']
+  }
+
+  // If we have allowed origins, use function to allow undefined origin (server-to-server)
+  if (allowedOrigins.length > 0) {
+    return (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      // Allow requests with no origin (server-to-server / curl)
+      if (!origin) {
+        callback(null, true)
+        return
+      }
+      // Allow if origin is in allowlist
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true)
+        return
+      }
+      // Reject otherwise
+      callback(null, false)
+    }
+  }
+
+  // Production: if no env set, reject all CORS (do not silently allow all)
+  if (isProduction) {
+    return false
+  }
+
+  // Non-production fallback (shouldn't reach here, but safe default)
+  return false
+}
+
 // Security, compression, logging
+const corsOrigin = getCorsOrigin()
+
 app.use(
   cors({
-    origin: 'http://localhost:3000',
+    origin: corsOrigin,
     credentials: true,
   }),
 )
