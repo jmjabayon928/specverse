@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
     return config;
   },
   async rewrites() {
+    // If NEXT_PUBLIC_API_BASE_URL is set (VPS stage/prod), disable rewrites
+    // Frontend will use same-origin requests via nginx gateway
+    const isProduction = process.env.NODE_ENV === 'production'
+    if (isProduction && process.env.NEXT_PUBLIC_API_BASE_URL) {
+      return []
+    }
+
+    // Local dev: use proxy rewrites to backend server
     return [
       // existing backend proxy (kept)
       {

@@ -220,9 +220,8 @@ export const getDownloadUrlHandler: RequestHandler = async (req, res, next) => {
       return
     }
     const token = generateDownloadToken(jobId, req.user.userId)
-    const baseUrl =
-      process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000'
-    const downloadUrl = `${baseUrl}/api/backend/exports/jobs/${jobId}/download?token=${encodeURIComponent(token)}`
+    const origin = `${req.protocol}://${req.get('host')}`
+    const downloadUrl = `${origin}/api/backend/exports/jobs/${jobId}/download?token=${encodeURIComponent(token)}`
     res.status(200).json({ downloadUrl, fileName: resolved.fileName })
   } catch (err) {
     next(err)

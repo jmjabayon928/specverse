@@ -19,6 +19,11 @@ type Client = {
 };
 
 export default function ClientDetailPage() {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
+  }
+
   const params = useParams(); // ✅ Get params object
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const [client, setClient] = useState<Client | null>(null);
@@ -29,7 +34,7 @@ export default function ClientDetailPage() {
   useEffect(() => {
     if (!id) return;
 
-    fetch(`http://localhost:5000/api/clients/${id}`)
+    fetch(`${baseUrl}/api/backend/settings/clients/${id}`)
         .then((response) => response.json())
         .then((data) => {
         if (data.error) {
@@ -43,14 +48,14 @@ export default function ClientDetailPage() {
         console.error("Error fetching client:", error);
         setLoading(false);
         });
-  }, [id]);
+  }, [id, baseUrl]);
 
   // Handle delete action
   const handleDelete = async () => {
     if (!window.confirm("Are you sure you want to delete this client?")) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/clients/${id}`, {
+      const response = await fetch(`${baseUrl}/api/backend/settings/clients/${id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
       });

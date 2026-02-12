@@ -25,7 +25,26 @@ import { logAuditAction } from '../utils/logAuditAction'
 import { AppError } from '../errors/AppError'
 
 const INVITE_EXPIRY_DAYS = 7
-const INVITE_BASE_URL = process.env.INVITE_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+
+/**
+ * Resolve invite base URL with env precedence:
+ * 1. INVITE_BASE_URL
+ * 2. NEXT_PUBLIC_APP_URL
+ * 3. originFromRequest (if provided)
+ * 4. throw error if none available
+ */
+function resolveInviteBaseUrl(originFromRequest?: string): string {
+  if (process.env.INVITE_BASE_URL) {
+    return process.env.INVITE_BASE_URL
+  }
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL
+  }
+  if (originFromRequest) {
+    return originFromRequest
+  }
+  throw new Error('INVITE_BASE_URL or NEXT_PUBLIC_APP_URL is required')
+}
 
 export type InviteDto = {
   inviteId: number
@@ -114,6 +133,7 @@ export async function createOrResendInvite(
   email: string,
   roleId: number,
   auditContext: { route?: string; method?: string; statusCode?: number },
+  originFromRequest?: string,
 ): Promise<CreateInviteResult> {
   const normalizedEmail = email.trim().toLowerCase()
   if (!normalizedEmail) {
@@ -154,7 +174,8 @@ export async function createOrResendInvite(
     const token = generateInviteToken()
     const tokenHash = inviteTokenSha256Hex(token)
     await updateTokenAndIncrementSend(pending.inviteId, tokenHash, expiresAt)
-    const inviteLink = `${INVITE_BASE_URL}/invite/accept?token=${encodeURIComponent(token)}`
+    const inviteBaseUrl = resolveInviteBaseUrl(originFromRequest)
+    const inviteLink = `${inviteBaseUrl}/invite/accept?token=${encodeURIComponent(token)}`
     await devEmailSender.sendInviteEmail({
       to: normalizedEmail,
       inviteAcceptLink: inviteLink,
@@ -194,7 +215,8 @@ export async function createOrResendInvite(
     expiresAt,
     invitedByUserId,
   )
-  const inviteLink = `${INVITE_BASE_URL}/invite/accept?token=${encodeURIComponent(token)}`
+  const inviteBaseUrl = resolveInviteBaseUrl(originFromRequest)
+  const inviteLink = `${inviteBaseUrl}/invite/accept?token=${encodeURIComponent(token)}`
   await devEmailSender.sendInviteEmail({
     to: normalizedEmail,
     inviteAcceptLink: inviteLink,
@@ -240,6 +262,7 @@ export async function resendInvite(
   inviteId: number,
   userId: number,
   auditContext: { route?: string; method?: string; statusCode?: number },
+  originFromRequest?: string,
 ): Promise<InviteDto> {
   const row = await getByIdAndAccount(inviteId, accountId)
   if (!row) {
@@ -258,7 +281,8 @@ export async function resendInvite(
   const expiresAt = new Date()
   expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS)
   await updateTokenAndIncrementSend(inviteId, tokenHash, expiresAt)
-  const inviteLink = `${INVITE_BASE_URL}/invite/accept?token=${encodeURIComponent(token)}`
+  const inviteBaseUrl = resolveInviteBaseUrl(originFromRequest)
+  const inviteLink = `${inviteBaseUrl}/invite/accept?token=${encodeURIComponent(token)}`
   await devEmailSender.sendInviteEmail({
     to: row.email,
     inviteAcceptLink: inviteLink,
@@ -294,7 +318,7 @@ export type DevAcceptLinkResult = {
 /**
  * DEV-only: rotate invite token and return accept URL (no email). Call only when NODE_ENV !== 'production'.
  */
-export async function devAcceptLink(accountId: number, inviteId: number): Promise<DevAcceptLinkResult> {
+export async function devAcceptLink(accountId: number, inviteId: number, originFromRequest?: string): Promise<DevAcceptLinkResult> {
   const row = await getByIdAndAccount(inviteId, accountId)
   if (!row) {
     const err = new Error('Invite not found')
@@ -318,7 +342,8 @@ export async function devAcceptLink(accountId: number, inviteId: number): Promis
   const expiresAt = new Date()
   expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS)
   await updateTokenAndIncrementSend(inviteId, tokenHash, expiresAt)
-  const acceptUrl = `${INVITE_BASE_URL}/invite/accept?token=${encodeURIComponent(token)}`
+  const inviteBaseUrl = resolveInviteBaseUrl(originFromRequest)
+  const acceptUrl = `${inviteBaseUrl}/invite/accept?token=${encodeURIComponent(token)}`
   return { acceptUrl }
 }
 

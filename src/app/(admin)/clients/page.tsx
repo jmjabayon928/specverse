@@ -15,17 +15,22 @@ type Client = {
 };
 
 export default function ClientsPage() {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
+  }
+
   const [clients, setClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>("");
   //const { theme } = useTheme();
   const router = useRouter();
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/clients")
+    fetch(`${baseUrl}/api/backend/settings/clients`)
       .then((response) => response.json())
       .then((data) => setClients(data))
       .catch((error) => console.error("Error fetching clients:", error));
-  }, []);
+  }, [baseUrl]);
 
   const filteredClients = clients.filter((client) =>
     Object.values(client).some(
@@ -39,7 +44,7 @@ export default function ClientsPage() {
     if (!window.confirm("Are you sure you want to delete this client?")) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/clients/${clientId}`, {
+      const response = await fetch(`${baseUrl}/api/backend/settings/clients/${clientId}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
       });

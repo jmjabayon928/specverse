@@ -23,7 +23,10 @@ export default function EstimationDetailPage() {
   const searchParams = useSearchParams();
   const estimationId = Number.parseInt(params.id as string);
   const isEditing = searchParams.get('edit') === 'true';
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
+  }
 
   const [estimation, setEstimation] = useState<Estimation | null>(null);
   const [packages, setPackages] = useState<EstimationPackage[]>([]);
@@ -895,7 +898,10 @@ export default function EstimationDetailPage() {
             <button
               className="text-red-600 hover:text-red-800 font-semibold text-sm"
               onClick={async () => {
-                const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+                const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+                if (!baseUrl) {
+                  throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
+                }
 
                 try {
                   const res = await fetch(
