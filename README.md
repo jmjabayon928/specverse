@@ -1121,7 +1121,7 @@ SpecVerse uses separate environment files for clarity and safety:
 **Backend**
 - **.env — local development**
 
-## .env.production — deployment/runtime configuration
+### .env.production — deployment/runtime configuration
 
 Environment variables cover:
 
@@ -1135,7 +1135,7 @@ Dev-only utilities (disabled in production)
 
 ⚠️ Dev-only utilities are explicitly guarded and cannot run in production.
 
-## 🧪 Demo & Recruiter Reset (Local / Dev Only)
+### 🧪 Demo & Recruiter Reset (Local / Dev Only)
 
 For local demos or recruiter walkthroughs, SpecVerse provides dev-only utilities to:
 
@@ -1156,7 +1156,7 @@ cURL and PowerShell examples
 
 Recommended demo workflow
 
-## 🧪 Testing & Quality Gates
+### 🧪 Testing & Quality Gates
 
 SpecVerse uses a layered testing strategy covering backend, domain logic, and UI.
 
