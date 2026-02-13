@@ -19,6 +19,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -41,11 +43,39 @@ jobs:
         run: npm run build
 
       - name: Guard - V0001 is immutable
+        shell: bash
         run: |
-          git fetch origin main
-          if git diff --name-only origin/main...HEAD | grep -q "^db/migrations/sqlserver/V0001__initial_schema\.sql$"; then
-            echo "ERROR: V0001__initial_schema.sql is immutable. Create a new V0002+ migration instead."
-            exit 1
+          set -euo pipefail
+
+          FILE="db/migrations/sqlserver/V0001__initial_schema.sql"
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+
+            # In rare cases (first push to a new branch), BASE_SHA can be all zeros.
+            if [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+              echo "BASE_SHA is zero (new branch). Falling back to origin/main...HEAD diff."
+              git fetch origin main
+              RANGE="origin/main...HEAD"
+              git diff --name-only $RANGE | grep -q "^${FILE}$" && {
+                echo "ERROR: ${FILE} is immutable. Create a new V0002+ migration instead."
+                exit 1
+              }
+              exit 0
+            fi
+
+            git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -q "^${FILE}$" && {
+              echo "ERROR: ${FILE} is immutable. Create a new V0002+ migration instead."
+              exit 1
+            }
+          else
+            # pull_request: compare PR head against origin/main
+            git fetch origin main
+            git diff --name-only origin/main...HEAD | grep -q "^${FILE}$" && {
+              echo "ERROR: ${FILE} is immutable. Create a new V0002+ migration instead."
+              exit 1
+            }
           fi
 
   deploy-stage:
