@@ -19,6 +19,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -42,8 +44,19 @@ jobs:
 
       - name: Guard - V0001 is immutable
         run: |
-          git fetch origin main
-          if git diff --name-only origin/main...HEAD | grep -q "^db/migrations/sqlserver/V0001__initial_schema\.sql$"; then
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+          fi
+
+          echo "Comparing $BASE_SHA → $HEAD_SHA"
+
+          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -q "^db/migrations/sqlserver/V0001__initial_schema\.sql$"; then
             echo "ERROR: V0001__initial_schema.sql is immutable. Create a new V0002+ migration instead."
             exit 1
           fi
