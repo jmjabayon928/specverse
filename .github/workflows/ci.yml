@@ -40,10 +40,56 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Guard: V0001 is immutable
+      - name: Guard - V0001 is immutable
         run: |
           git fetch origin main
           if git diff --name-only origin/main...HEAD | grep -q "^db/migrations/sqlserver/V0001__initial_schema\.sql$"; then
             echo "ERROR: V0001__initial_schema.sql is immutable. Create a new V0002+ migration instead."
             exit 1
           fi
+
+  deploy-stage:
+    name: Deploy to VPS (staging)
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+
+    steps:
+      - name: SSH deploy (staging)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          command_timeout: 60m
+          script_stop: true
+          script: |
+            set -euo pipefail
+            /home/jeff/apps/deploy/deploy-stage.sh staging
+
+  deploy-prod:
+    name: Deploy to VPS (production)
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+
+    steps:
+      - name: SSH deploy (production)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          command_timeout: 60m
+          script_stop: true
+          script: |
+            set -euo pipefail
+            /home/jeff/apps/deploy/deploy-prod.sh main
