@@ -1168,23 +1168,15 @@ npm run type-check
 npm test -- --runInBand --no-cache
 
 
-The test suite includes:
-
-API tests (auth, datasheets, schedules, inventory, estimations, audits)
-
-Service and domain logic tests
-
-Schema validation tests
-
-Permission and authorization guards
-
-UI tests for critical workflows
-
-CI
-
-CI runs on pushes to main, staging, and release/**
-
-All linting, type-checking, and tests must pass before merge
+**The test suite includes:**
+- API tests (auth, datasheets, schedules, inventory, estimations, audits)
+- Service and domain logic tests
+- Schema validation tests
+- Permission and authorization guards
+- UI tests for critical workflows
+- CI
+- CI runs on pushes to main, staging, and release/**
+- All linting, type-checking, and tests must pass before merge
 
 ---
 
