@@ -1160,12 +1160,11 @@ Recommended demo workflow
 
 SpecVerse uses a layered testing strategy covering backend, domain logic, and UI.
 
-Before opening a PR, run locally:
-
-npm ci
-npm run lint
-npm run type-check
-npm test -- --runInBand --no-cache
+**Before opening a PR, run locally:**
+- npm ci
+- npm run lint
+- npm run type-check
+- npm test -- --runInBand --no-cache
 
 
 **The test suite includes:**
