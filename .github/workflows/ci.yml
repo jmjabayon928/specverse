@@ -40,7 +40,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Guard: V0001 is immutable
+      - name: Guard - V0001 is immutable
         run: |
           git fetch origin main
           if git diff --name-only origin/main...HEAD | grep -q "^db/migrations/sqlserver/V0001__initial_schema\.sql$"; then
