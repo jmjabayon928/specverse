@@ -2,7 +2,6 @@
 
 [![CI (main)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml)
 [![CI (staging)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg?branch=staging)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml?branch=staging)
-[![CI (release/v0.5)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg?branch=release/v0.5)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml?branch=release/v0.5)
 
 ## SpecVerse
 
@@ -1064,17 +1063,30 @@ Type-check + lint enforced
 
 SpecVerse favors provable correctness over optimistic assumptions.
 
-## 🚀 Deployment & Environments
+## 🚀 Deployment & Environments (VPS + Auto-Deploy)
 
-Frontend: Vercel
+SpecVerse is deployed on a VPS with **separate staging and production environments**:
 
-Backend: Render or Azure App Services
+- **Staging:** `https://stage-specverse.jeffabayon.com`
+- **Production:** `https://prod-specverse.jeffabayon.com`
 
-Database: SQL Server (Azure-ready)
+### CI/CD (GitHub Actions → VPS)
+On every push:
 
-Environment isolation: dev / demo / production-ready
+- `staging` branch → runs CI (lint/type-check/tests/build) → **auto-deploys to staging**
+- `main` branch → runs CI → **auto-deploys to production** (gated by repo variable `ENABLE_PROD_DEPLOY=true`)
 
-CI-friendly setup with deterministic builds
+Deploy behavior on the VPS:
+- Creates a new timestamped release folder
+- `npm ci` + `npm run build`
+- Runs **Flyway migrations** (`db/migrations/sqlserver`)
+- Switches the `/current` symlink to the new release
+- Restarts PM2 processes for backend + Next.js
+
+### Data & migrations
+- Schema is managed via Flyway.
+- `V0001__initial_schema.sql` is treated as **immutable** (CI enforces this).
+- All changes must be introduced via `V0002+` migrations.
 
 ## 🖨️ PDF Export (Puppeteer) — Local Dev & CI Notes
 
@@ -1160,12 +1172,11 @@ Recommended demo workflow
 
 SpecVerse uses a layered testing strategy covering backend, domain logic, and UI.
 
-Before opening a PR, run locally:
-
-npm ci
-npm run lint
-npm run type-check
-npm test -- --runInBand --no-cache
+**Before opening a PR, run locally:**
+- npm ci
+- npm run lint
+- npm run type-check
+- npm test -- --runInBand --no-cache
 
 
 **The test suite includes:**
