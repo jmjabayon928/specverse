@@ -548,6 +548,13 @@ export const uploadFilledSheetAttachmentHandler: RequestHandler = async (req, re
       return
     }
 
+    const current = await getFilledSheetDetailsById(sheetId, "eng", "SI", accountId)
+    const status = current?.datasheet?.status
+    if (status === "Approved" || status === "Verified") {
+      next(new AppError(`Sheet is not editable in status ${status}`, 409))
+      return
+    }
+
     const saved = await addSheetAttachment({
       sheetId,
       file,
@@ -622,9 +629,8 @@ export const deleteFilledSheetAttachmentHandler: RequestHandler = async (req, re
       return
     }
 
-    const deletedCanonical = await deleteSheetAttachmentLink(sheetId, attachmentId)
+    const deletedCanonical = await deleteSheetAttachmentLink(sheetId, attachmentId, user.userId)
     if (deletedCanonical) {
-      await bumpRejectedToModifiedDraftFilled(sheetId, user.userId)
       res.status(204).end()
       return
     }

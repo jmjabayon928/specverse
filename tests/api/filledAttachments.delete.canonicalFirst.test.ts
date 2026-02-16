@@ -130,7 +130,7 @@ jest.mock('../../src/backend/services/templateService', () => ({
   addSheetAttachment: jest.fn(),
 }))
 
-const deleteSheetAttachmentLinkMock = jest.fn<Promise<boolean>, [number, number]>()
+const deleteSheetAttachmentLinkMock = jest.fn<Promise<boolean>, [number, number, number?]>()
 const deleteAttachmentByIdMock = jest.fn<
   Promise<void>,
   [sheetId: number, attachmentId: number, userId: number]
@@ -155,7 +155,7 @@ jest.mock('../../src/backend/services/filledSheetService', () => ({
   exportPDF: jest.fn(),
   exportExcel: jest.fn(),
   listSheetAttachments: jest.fn(),
-  deleteSheetAttachmentLink: (...args: [number, number]) => deleteSheetAttachmentLinkMock(...args),
+  deleteSheetAttachmentLink: (...args: [number, number, number?]) => deleteSheetAttachmentLinkMock(...args),
 }))
 jest.mock('../../src/backend/services/sheetAccessService', () => ({
   sheetBelongsToAccount: (sheetId: number, accountId: number) =>
@@ -194,7 +194,7 @@ describe('Filled sheet attachments delete - canonical first with legacy fallback
       .set('Cookie', [authCookie])
 
     expect(res.statusCode).toBe(204)
-    expect(deleteSheetAttachmentLinkMock).toHaveBeenCalledWith(123, 999)
+    expect(deleteSheetAttachmentLinkMock).toHaveBeenCalledWith(123, 999, 1)
     expect(deleteAttachmentByIdMock).not.toHaveBeenCalled()
   })
 
@@ -210,7 +210,7 @@ describe('Filled sheet attachments delete - canonical first with legacy fallback
       .set('Cookie', [authCookie])
 
     expect(res.statusCode).toBe(204)
-    expect(deleteSheetAttachmentLinkMock).toHaveBeenCalledWith(123, 555)
+    expect(deleteSheetAttachmentLinkMock).toHaveBeenCalledWith(123, 555, 1)
     expect(deleteAttachmentByIdMock).toHaveBeenCalledWith(123, 555, 1)
   })
 })

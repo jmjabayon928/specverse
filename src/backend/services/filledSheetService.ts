@@ -1556,6 +1556,23 @@ export async function bumpRejectedToModifiedDraftFilled(
     `)
 }
 
+/** Load filled sheet status; throws 409 if Approved or Verified. Returns status. */
+async function getFilledStatusOrThrowNotEditable(sheetId: number): Promise<string> {
+  const pool = await poolPromise
+  const rs = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<{ Status: string }>(`SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 0`)
+  const row = rs.recordset[0]
+  if (!row) {
+    throw new AppError('Filled sheet not found', 404)
+  }
+  if (row.Status === 'Approved' || row.Status === 'Verified') {
+    throw new AppError(`Sheet is not editable in status ${row.Status}`, 409)
+  }
+  return row.Status
+}
+
 /** Header fields that are read-only on filled sheet edit (values-only mode). */
 const FILLED_HEADER_GUARD_FIELDS: ReadonlyArray<keyof UnifiedSheet> = [
   'sheetName',
@@ -2298,6 +2315,7 @@ export async function doesEquipmentTagExist(tag: string, projectId: number): Pro
 export async function saveAttachmentMeta(
   meta: AttachmentMeta
 ): Promise<AttachmentMeta & { attachmentId: number }> {
+  const status = await getFilledStatusOrThrowNotEditable(meta.sheetId)
   const pool = await poolPromise
   const req = pool.request()
   req.input('SheetID', sql.Int, meta.sheetId)
@@ -2319,6 +2337,9 @@ export async function saveAttachmentMeta(
   `)
 
   const attachmentId = rs.recordset?.[0]?.AttachmentID ?? 0
+  if (status === 'Rejected' && meta.uploadedBy != null) {
+    await bumpRejectedToModifiedDraftFilled(meta.sheetId, meta.uploadedBy)
+  }
   return { ...meta, attachmentId }
 }
 
@@ -2365,6 +2386,7 @@ export async function deleteAttachmentById(
   attachmentId: number,
   userId: number
 ): Promise<void> {
+  await getFilledStatusOrThrowNotEditable(sheetId)
   const pool = await poolPromise
   const req = pool.request()
   req.input('SheetID', sql.Int, sheetId)
@@ -2476,11 +2498,14 @@ export const listSheetAttachments = async (
 
 export const deleteSheetAttachmentLink = async (
   sheetId: number,
-  attachmentId: number
+  attachmentId: number,
+  userId?: number
 ): Promise<boolean> => {
+  const status = await getFilledStatusOrThrowNotEditable(sheetId)
   const pool = await poolPromise
 
-  const rs = await pool.request()
+  const rs = await pool
+    .request()
     .input('SheetID', sql.Int, sheetId)
     .input('AttachmentID', sql.Int, attachmentId)
     .query(`
@@ -2489,6 +2514,9 @@ export const deleteSheetAttachmentLink = async (
     `)
 
   const affected = rs.rowsAffected?.[0] ?? 0
+  if (affected > 0 && status === 'Rejected' && userId != null) {
+    await bumpRejectedToModifiedDraftFilled(sheetId, userId)
+  }
   return affected > 0
 }
 
@@ -2546,6 +2574,7 @@ export async function createNoteForSheet(
   createdBy: number
   createdAt: string
 }> {
+  await getFilledStatusOrThrowNotEditable(sheetId)
   const pool = await poolPromise
   const req = pool.request()
   req.input('SheetID', sql.Int, sheetId)
@@ -2586,6 +2615,7 @@ export async function updateNoteForSheet(
   updatedBy: number
   updatedAt: string
 }> {
+  await getFilledStatusOrThrowNotEditable(sheetId)
   const pool = await poolPromise
   const req = pool.request()
   req.input('SheetID', sql.Int, sheetId)
@@ -2622,6 +2652,7 @@ export async function deleteNoteForSheet(
   noteId: number,
   userId: number
 ): Promise<void> {
+  await getFilledStatusOrThrowNotEditable(sheetId)
   const pool = await poolPromise
   const req = pool.request()
   req.input('SheetID', sql.Int, sheetId)
