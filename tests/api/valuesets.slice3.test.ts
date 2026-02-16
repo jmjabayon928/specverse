@@ -68,6 +68,32 @@ jest.mock('../../src/backend/services/sheetAccessService', () => ({
   ),
 }))
 
+const mockGetFilledSheetDetailsById = jest.fn()
+const mockBumpRejectedToModifiedDraftFilled = jest.fn()
+jest.mock('../../src/backend/services/filledSheetService', () => ({
+  fetchAllFilled: jest.fn(),
+  fetchReferenceOptions: jest.fn(),
+  getFilledSheetDetailsById: (...args: unknown[]) => mockGetFilledSheetDetailsById(...args),
+  createFilledSheet: jest.fn(),
+  updateFilledSheet: jest.fn(),
+  verifyFilledSheet: jest.fn(),
+  approveFilledSheet: jest.fn(),
+  bumpRejectedToModifiedDraftFilled: (...args: unknown[]) => mockBumpRejectedToModifiedDraftFilled(...args),
+  doesEquipmentTagExist: jest.fn(),
+  getFilledSheetTemplateId: jest.fn(),
+  getLatestApprovedTemplateId: jest.fn(),
+  getAttachmentsForSheet: jest.fn(),
+  deleteAttachmentById: jest.fn(),
+  listSheetAttachments: jest.fn(),
+  deleteSheetAttachmentLink: jest.fn(),
+  getNotesForSheet: jest.fn(),
+  createNoteForSheet: jest.fn(),
+  updateNoteForSheet: jest.fn(),
+  deleteNoteForSheet: jest.fn(),
+  exportPDF: jest.fn(),
+  exportExcel: jest.fn(),
+}))
+
 jest.mock('../../src/backend/middleware/authMiddleware', () => ({
   verifyToken: (req: Request, _res: Response, next: NextFunction) => {
     const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
@@ -173,6 +199,7 @@ describe('Phase 2 Slice #3 value-set API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockGetFilledSheetDetailsById.mockResolvedValue({ datasheet: { status: 'Draft' } })
   })
 
   describe('POST valuesets Offered (createOfferedValueSet + prefill)', () => {

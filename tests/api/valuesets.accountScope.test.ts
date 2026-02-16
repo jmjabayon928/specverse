@@ -39,6 +39,32 @@ jest.mock('../../src/backend/services/sheetAccessService', () => ({
   sheetBelongsToAccount: (sheetId: number, accountId: number) => mockSheetBelongsToAccount(sheetId, accountId),
 }))
 
+const mockGetFilledSheetDetailsById = jest.fn()
+const mockBumpRejectedToModifiedDraftFilled = jest.fn()
+jest.mock('../../src/backend/services/filledSheetService', () => ({
+  fetchAllFilled: jest.fn(),
+  fetchReferenceOptions: jest.fn(),
+  getFilledSheetDetailsById: (...args: unknown[]) => mockGetFilledSheetDetailsById(...args),
+  createFilledSheet: jest.fn(),
+  updateFilledSheet: jest.fn(),
+  verifyFilledSheet: jest.fn(),
+  approveFilledSheet: jest.fn(),
+  bumpRejectedToModifiedDraftFilled: (...args: unknown[]) => mockBumpRejectedToModifiedDraftFilled(...args),
+  doesEquipmentTagExist: jest.fn(),
+  getFilledSheetTemplateId: jest.fn(),
+  getLatestApprovedTemplateId: jest.fn(),
+  getAttachmentsForSheet: jest.fn(),
+  deleteAttachmentById: jest.fn(),
+  listSheetAttachments: jest.fn(),
+  deleteSheetAttachmentLink: jest.fn(),
+  getNotesForSheet: jest.fn(),
+  createNoteForSheet: jest.fn(),
+  updateNoteForSheet: jest.fn(),
+  deleteNoteForSheet: jest.fn(),
+  exportPDF: jest.fn(),
+  exportExcel: jest.fn(),
+}))
+
 jest.mock('../../src/backend/services/valueSetService', () => ({
   getValueSetIdSafe: (...args: unknown[]) => mockGetValueSetId(...args),
   listValueSets: (...args: unknown[]) => mockListValueSets(...args),
@@ -63,6 +89,7 @@ describe('ValueSet account scope (Step 1b)', () => {
     mockSheetBelongsToAccount.mockImplementation((sheetId: number, accountId: number) =>
       Promise.resolve(sheetBelongsToAccountImpl(sheetId, accountId))
     )
+    mockGetFilledSheetDetailsById.mockResolvedValue({ datasheet: { status: 'Draft' } })
     mockListValueSets.mockResolvedValue([])
     mockGetValueSetId.mockResolvedValue(null)
     mockGetCompareData.mockResolvedValue({ requirement: [], offered: [], asBuilt: [] })
