@@ -15,6 +15,10 @@ import {
   type StatusTransition,
 } from '../services/valueSetService'
 import { sheetBelongsToAccount } from '../services/sheetAccessService'
+import {
+  getFilledSheetDetailsById,
+  bumpRejectedToModifiedDraftFilled,
+} from '../services/filledSheetService'
 import { mustGetAccountId } from '@/backend/utils/authGuards'
 import { AppError } from '../errors/AppError'
 
@@ -101,6 +105,17 @@ export const postSheetValueSet: RequestHandler = async (req, res, next) => {
       return
     }
 
+    const details = await getFilledSheetDetailsById(sheetId, 'eng', 'SI', accountId)
+    if (details == null) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+    const sheetStatus = details.datasheet?.status
+    if (sheetStatus === 'Approved' || sheetStatus === 'Verified') {
+      next(new AppError(`Sheet is not editable in status ${sheetStatus}`, 409))
+      return
+    }
+
     const body = req.body as { context?: unknown; partyId?: unknown }
     const context = parseContext(body?.context)
     if (context == null) {
@@ -114,17 +129,26 @@ export const postSheetValueSet: RequestHandler = async (req, res, next) => {
 
     if (context === 'Offered' && partyId != null) {
       const valueSetId = await createOfferedValueSet(sheetId, partyId, userId)
+      if (sheetStatus === 'Rejected' && userId != null) {
+        await bumpRejectedToModifiedDraftFilled(sheetId, userId)
+      }
       res.status(201).json({ valueSetId, context, partyId })
       return
     }
 
     if (context === 'AsBuilt') {
       const valueSetId = await createAsBuiltValueSet(sheetId, userId)
+      if (sheetStatus === 'Rejected' && userId != null) {
+        await bumpRejectedToModifiedDraftFilled(sheetId, userId)
+      }
       res.status(201).json({ valueSetId, context, partyId: null })
       return
     }
 
     const valueSetId = await createValueSet(sheetId, context, partyId ?? undefined, userId)
+    if (sheetStatus === 'Rejected' && userId != null) {
+      await bumpRejectedToModifiedDraftFilled(sheetId, userId)
+    }
     res.status(201).json({ valueSetId, context, partyId: partyId ?? null })
   } catch (err) {
     next(err)
@@ -145,6 +169,17 @@ export const patchSheetValueSetVariances: RequestHandler = async (req, res, next
     const belongs = await sheetBelongsToAccount(sheetId, accountId)
     if (!belongs) {
       next(new AppError('Sheet not found', 404))
+      return
+    }
+
+    const details = await getFilledSheetDetailsById(sheetId, 'eng', 'SI', accountId)
+    if (details == null) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+    const sheetStatus = details.datasheet?.status
+    if (sheetStatus === 'Approved' || sheetStatus === 'Verified') {
+      next(new AppError(`Sheet is not editable in status ${sheetStatus}`, 409))
       return
     }
 
@@ -169,6 +204,9 @@ export const patchSheetValueSetVariances: RequestHandler = async (req, res, next
 
     const user = (req as Request & { user?: UserSession }).user
     await patchVariance(sheetId, valueSetId, infoTemplateId, status, user?.userId ?? null)
+    if (sheetStatus === 'Rejected' && user?.userId != null) {
+      await bumpRejectedToModifiedDraftFilled(sheetId, user.userId)
+    }
     res.status(204).send()
   } catch (err) {
     next(err)
@@ -192,6 +230,17 @@ export const postSheetValueSetStatus: RequestHandler = async (req, res, next) =>
       return
     }
 
+    const details = await getFilledSheetDetailsById(sheetId, 'eng', 'SI', accountId)
+    if (details == null) {
+      next(new AppError('Sheet not found', 404))
+      return
+    }
+    const sheetStatus = details.datasheet?.status
+    if (sheetStatus === 'Approved' || sheetStatus === 'Verified') {
+      next(new AppError(`Sheet is not editable in status ${sheetStatus}`, 409))
+      return
+    }
+
     const body = req.body as { status?: unknown }
     const status = typeof body?.status === 'string' && STATUS_TRANSITIONS.includes(body.status as StatusTransition)
       ? (body.status as StatusTransition)
@@ -201,7 +250,11 @@ export const postSheetValueSetStatus: RequestHandler = async (req, res, next) =>
       return
     }
 
+    const user = (req as Request & { user?: UserSession }).user
     await transitionValueSetStatus(sheetId, valueSetId, status)
+    if (sheetStatus === 'Rejected' && user?.userId != null) {
+      await bumpRejectedToModifiedDraftFilled(sheetId, user.userId)
+    }
     res.status(200).json({ valueSetId, status })
   } catch (err) {
     next(err)
