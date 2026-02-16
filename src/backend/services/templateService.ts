@@ -1128,14 +1128,21 @@ export async function addSheetNote(args: {
       ? 'WHERE SheetID=@SheetID AND IsTemplate=1'
       : 'WHERE SheetID=@SheetID'
 
-    const chk = await checkReq.query<{ SheetID: number }>(`
-      SELECT TOP (1) SheetID
+    const chk = await checkReq.query<{ SheetID: number; Status?: string }>(`
+      SELECT TOP (1) SheetID, Status
       FROM dbo.Sheets
       ${where}
     `)
 
     if (chk.recordset.length === 0) {
       throw new Error(ensureTemplate === true ? 'Template not found' : 'Sheet not found')
+    }
+
+    if (ensureTemplate === true) {
+      const status = chk.recordset[0]?.Status
+      if (status === 'Approved' || status === 'Verified') {
+        throw new AppError(`Sheet is not editable in status ${status}`, 409)
+      }
     }
 
     const idxReq = new sql.Request(tx)
@@ -1167,6 +1174,10 @@ export async function addSheetNote(args: {
 
     await tx.commit()
     didCommit = true
+
+    if (ensureTemplate === true && chk.recordset[0]?.Status === 'Rejected' && createdBy != null) {
+      await bumpRejectedToModifiedDraft(pool.request(), sheetId, createdBy)
+    }
 
     return {
       noteId: insRes.recordset[0].NoteID,
@@ -1240,6 +1251,14 @@ export async function updateTemplateNote(
   }
 
   const pool = await poolPromise
+  const statusRs = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<{ Status: string }>(`SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 1`)
+  const statusRow = statusRs.recordset[0]
+  if (statusRow && (statusRow.Status === 'Approved' || statusRow.Status === 'Verified')) {
+    throw new AppError(`Sheet is not editable in status ${statusRow.Status}`, 409)
+  }
 
   await pool.request()
     .input('SheetID', sql.Int, sheetId)
@@ -1258,8 +1277,19 @@ export async function updateTemplateNote(
   await bumpRejectedToModifiedDraft(pool.request(), sheetId, userId)
 }
 
-export async function deleteTemplateNote(sheetId: number, noteId: number): Promise<void> {
+export async function deleteTemplateNote(sheetId: number, noteId: number, userId: number): Promise<void> {
   const pool = await poolPromise
+  const statusRs = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<{ Status: string }>(`SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 1`)
+  const statusRow = statusRs.recordset[0]
+  if (statusRow && (statusRow.Status === 'Approved' || statusRow.Status === 'Verified')) {
+    throw new AppError(`Sheet is not editable in status ${statusRow.Status}`, 409)
+  }
+
+  const status = statusRow?.Status
+
   await pool
     .request()
     .input('SheetID', sql.Int, sheetId)
@@ -1268,6 +1298,10 @@ export async function deleteTemplateNote(sheetId: number, noteId: number): Promi
       DELETE FROM SheetNotes
       WHERE NoteID = @NoteID AND SheetID = @SheetID
     `)
+
+  if (status === 'Rejected') {
+    await bumpRejectedToModifiedDraft(pool.request(), sheetId, userId)
+  }
 }
 
 // ───────────────────────────────────────────
@@ -1322,6 +1356,17 @@ export async function addSheetAttachment(
 
     await assertSheetExists(sheetId, ensureTemplate, tx)
 
+    let sheetStatus: string | undefined
+    if (ensureTemplate === true) {
+      const statusRs = await new sql.Request(tx)
+        .input('SheetID', sql.Int, sheetId)
+        .query<{ Status: string }>(`SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 1`)
+      sheetStatus = statusRs.recordset[0]?.Status
+      if (sheetStatus === 'Approved' || sheetStatus === 'Verified') {
+        throw new AppError(`Sheet is not editable in status ${sheetStatus}`, 409)
+      }
+    }
+
     const aReq = new sql.Request(tx)
       .input('OriginalName', sql.NVarChar(255), originalName)
       .input('StoredName', sql.NVarChar(255), storedName)
@@ -1372,6 +1417,10 @@ export async function addSheetAttachment(
 
     await tx.commit()
     didCommit = true
+
+    if (ensureTemplate === true && sheetStatus === 'Rejected') {
+      await bumpRejectedToModifiedDraft(pool.request(), sheetId, uploadedBy)
+    }
 
     const fileUrl = `/api/backend/files/${encodeURIComponent(storedName)}`
 
@@ -1487,10 +1536,26 @@ export async function listTemplateAttachments(sheetId: number): Promise<SheetAtt
   })
 }
 
-export async function deleteTemplateAttachment(sheetId: number, attachmentId: number): Promise<void> {
+export async function deleteTemplateAttachment(
+  sheetId: number,
+  attachmentId: number,
+  userId: number
+): Promise<void> {
   const pool = await poolPromise
 
-  await pool.request()
+  const statusRs = await pool
+    .request()
+    .input('SheetID', sql.Int, sheetId)
+    .query<{ Status: string }>(`SELECT Status FROM Sheets WHERE SheetID = @SheetID AND IsTemplate = 1`)
+  const statusRow = statusRs.recordset[0]
+  if (statusRow && (statusRow.Status === 'Approved' || statusRow.Status === 'Verified')) {
+    throw new AppError(`Sheet is not editable in status ${statusRow.Status}`, 409)
+  }
+
+  const status = statusRow?.Status
+
+  await pool
+    .request()
     .input('SheetID', sql.Int, sheetId)
     .input('AttachmentID', sql.Int, attachmentId)
     .query(`
@@ -1499,6 +1564,10 @@ export async function deleteTemplateAttachment(sheetId: number, attachmentId: nu
       WHERE sa.SheetID = @SheetID
         AND sa.AttachmentID = @AttachmentID
     `)
+
+  if (status === 'Rejected') {
+    await bumpRejectedToModifiedDraft(pool.request(), sheetId, userId)
+  }
 }
 
 // ───────────────────────────────────────────
