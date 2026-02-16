@@ -958,6 +958,12 @@ export const updateTemplateNoteHandler: RequestHandler = async (req, res, next) 
 
 export const deleteTemplateNoteHandler: RequestHandler = async (req, res, next) => {
   try {
+    const user = asUser(req)
+    if (user?.userId == null) {
+      next(new AppError('Unauthorized', 401))
+      return
+    }
+
     const parsedParams = noteParamsSchema.parse(req.params)
     const sheetId = parseId(parsedParams.id)
     const noteId = parseId(parsedParams.noteId)
@@ -975,7 +981,7 @@ export const deleteTemplateNoteHandler: RequestHandler = async (req, res, next) 
       return
     }
 
-    await deleteTemplateNote(sheetId, noteId)
+    await deleteTemplateNote(sheetId, noteId, user.userId)
     // keep legacy behavior: 200 with a body
     res.status(200).json({ ok: true })
   } catch (err: unknown) {
@@ -1066,6 +1072,12 @@ export const uploadTemplateAttachmentHandler: RequestHandler = async (req, res, 
 
 export const deleteTemplateAttachmentHandler: RequestHandler = async (req, res, next) => {
   try {
+    const user = asUser(req)
+    if (user?.userId == null) {
+      next(new AppError('Unauthorized', 401))
+      return
+    }
+
     const parsedParams = attachmentParamsSchema.parse(req.params)
     const sheetId = parseId(parsedParams.id)
     const attachmentId = parseId(parsedParams.attachmentId)
@@ -1083,7 +1095,7 @@ export const deleteTemplateAttachmentHandler: RequestHandler = async (req, res, 
       return
     }
 
-    await deleteTemplateAttachment(sheetId, attachmentId)
+    await deleteTemplateAttachment(sheetId, attachmentId, user.userId)
     // keep legacy behavior: 200 with a body
     res.status(200).json({ ok: true })
   } catch (err: unknown) {
