@@ -7,6 +7,7 @@ type RatingsBlockSummary = {
   ratingsBlockId: number
   sheetId: number
   blockType: string
+  ratingsBlockTemplateId?: number | null
   lockedAt: string | null
   lockedBy: number | null
   updatedAt: string
@@ -16,6 +17,7 @@ type RatingsBlockRow = {
   ratingsBlockId: number
   sheetId: number
   blockType: string
+  ratingsBlockTemplateId?: number | null
   sourceValueSetId: number | null
   lockedAt: string | null
   lockedBy: number | null
@@ -31,9 +33,28 @@ type RatingsEntryRow = {
   value: string | null
   uom: string | null
   orderIndex: number
+  templateFieldId?: number | null
 }
 
 type EntryInput = { key: string; value: string; uom: string }
+
+type RatingsTemplateRow = {
+  id: number
+  blockType: string
+  standardCode: string
+  description?: string | null
+}
+
+type TemplateFieldRow = {
+  templateFieldId: number
+  fieldKey: string
+  label: string | null
+  dataType: string
+  uom: string | null
+  isRequired: boolean
+  orderIndex: number
+  enumValues?: string[]
+}
 
 type SheetStatus = 'Draft' | 'Rejected' | 'Modified Draft' | 'Verified' | 'Approved'
 
@@ -66,6 +87,10 @@ export default function RatingsBlocksList(props: Readonly<RatingsBlocksListProps
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [expandedBlock, setExpandedBlock] = useState<RatingsBlockRow | null>(null)
   const [expandedEntries, setExpandedEntries] = useState<RatingsEntryRow[]>([])
+  const [expandedTemplateDetail, setExpandedTemplateDetail] = useState<{
+    template: RatingsTemplateRow
+    fields: TemplateFieldRow[]
+  } | null>(null)
   const [expandLoading, setExpandLoading] = useState(false)
   const [expandError, setExpandError] = useState<string | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -107,6 +132,7 @@ export default function RatingsBlocksList(props: Readonly<RatingsBlocksListProps
   const loadBlockDetail = useCallback(async (id: number) => {
     setExpandLoading(true)
     setExpandError(null)
+    setExpandedTemplateDetail(null)
     try {
       const res = await fetch(`/api/backend/ratings/${id}`, { credentials: 'include' })
       if (!res.ok) {
@@ -118,6 +144,14 @@ export default function RatingsBlocksList(props: Readonly<RatingsBlocksListProps
       if (isMountedRef.current) {
         setExpandedBlock(data.block)
         setExpandedEntries(Array.isArray(data.entries) ? data.entries : [])
+        const templateId = data.block.ratingsBlockTemplateId
+        if (templateId != null) {
+          const tRes = await fetch(`/api/backend/ratings/templates/${templateId}`, { credentials: 'include' })
+          if (tRes.ok && isMountedRef.current) {
+            const tData = (await tRes.json()) as { template: RatingsTemplateRow; fields: TemplateFieldRow[] }
+            setExpandedTemplateDetail({ template: tData.template, fields: tData.fields })
+          }
+        }
       }
     } catch {
       if (isMountedRef.current) setExpandError('Failed to load block')
@@ -131,6 +165,7 @@ export default function RatingsBlocksList(props: Readonly<RatingsBlocksListProps
       setExpandedId(null)
       setExpandedBlock(null)
       setExpandedEntries([])
+      setExpandedTemplateDetail(null)
       setExpandError(null)
       setEditingId(null)
     } else {
@@ -140,37 +175,48 @@ export default function RatingsBlocksList(props: Readonly<RatingsBlocksListProps
     }
   }
 
-  const handleCreate = async (blockType: string, notes: string, entries: EntryInput[]) => {
+  const handleCreate = async (
+    blockType: string,
+    notes: string,
+    entries: EntryInput[],
+    templateId?: number,
+    initialValues?: Record<string, string | null>
+  ) => {
     const bt = blockType.trim()
     if (!bt) {
       toast.error('Block type is required')
       return
     }
-    if (entries.length > MAX_ENTRIES) {
-      toast.error(`Maximum ${MAX_ENTRIES} entries allowed`)
-      return
-    }
-    for (const e of entries) {
-      if (!e.key.trim()) {
-        toast.error('Entry key is required')
+    if (templateId == null) {
+      if (entries.length > MAX_ENTRIES) {
+        toast.error(`Maximum ${MAX_ENTRIES} entries allowed`)
         return
+      }
+      for (const e of entries) {
+        if (!e.key.trim()) {
+          toast.error('Entry key is required')
+          return
+        }
       }
     }
     if (submitGuardRef.current || isSubmitting) return
     submitGuardRef.current = true
     setIsSubmitting(true)
     try {
-      const body = {
-        sheetId,
-        blockType: bt,
-        notes: notes.trim() || undefined,
-        entries: entries.map((e, i) => ({
-          key: e.key.trim(),
-          value: e.value.trim() || null,
-          uom: e.uom.trim() || null,
-          orderIndex: i,
-        })),
-      }
+      const body =
+        templateId != null && initialValues != null
+          ? { sheetId, blockType: bt, notes: notes.trim() || undefined, templateId, initialValues }
+          : {
+              sheetId,
+              blockType: bt,
+              notes: notes.trim() || undefined,
+              entries: entries.map((e, i) => ({
+                key: e.key.trim(),
+                value: e.value.trim() || null,
+                uom: e.uom.trim() || null,
+                orderIndex: i,
+              })),
+            }
       const res = await fetch('/api/backend/ratings', {
         method: 'POST',
         credentials: 'include',
@@ -340,7 +386,8 @@ export default function RatingsBlocksList(props: Readonly<RatingsBlocksListProps
 
       {showCreateForm && (
         <CreateBlockForm
-          onSave={(bt, notes, entries) => handleCreate(bt, notes, entries)}
+          sheetId={sheetId}
+          onSave={(bt, notes, entries, templateId, initialValues) => handleCreate(bt, notes, entries ?? [], templateId, initialValues)}
           onCancel={() => setShowCreateForm(false)}
           disabled={isSubmitting}
         />
@@ -430,7 +477,28 @@ export default function RatingsBlocksList(props: Readonly<RatingsBlocksListProps
                     {expandError && <p className="text-xs text-red-600" aria-live="polite">{expandError}</p>}
                     {!expandLoading && !expandError && expandedBlock && expandedId === b.ratingsBlockId && (
                       <>
-                        {editingId === b.ratingsBlockId ? (
+                        {expandedBlock.ratingsBlockTemplateId != null && !expandedTemplateDetail ? (
+                          <p className="text-xs text-gray-500">Loading template…</p>
+                        ) : expandedBlock.ratingsBlockTemplateId != null && expandedTemplateDetail ? (
+                          editingId === b.ratingsBlockId ? (
+                            <TemplatedBlockEditor
+                              block={expandedBlock}
+                              template={expandedTemplateDetail.template}
+                              fields={expandedTemplateDetail.fields}
+                              entries={expandedEntries}
+                              onSave={(bt, notes, entries) => handleUpdate(b.ratingsBlockId, bt, notes, entries)}
+                              onCancel={() => setEditingId(null)}
+                              disabled={isSubmitting}
+                              readOnly={isLocked}
+                            />
+                          ) : (
+                            <TemplatedBlockReadOnlyView
+                              block={expandedBlock}
+                              fields={expandedTemplateDetail.fields}
+                              entries={expandedEntries}
+                            />
+                          )
+                        ) : editingId === b.ratingsBlockId ? (
                           <EditBlockForm
                             block={expandedBlock}
                             entries={expandedEntries}
@@ -454,18 +522,113 @@ export default function RatingsBlocksList(props: Readonly<RatingsBlocksListProps
   )
 }
 
+function SchemaDrivenField({
+  field,
+  value,
+  onChange,
+  disabled,
+}: {
+  field: TemplateFieldRow
+  value: string
+  onChange: (value: string) => void
+  disabled?: boolean
+}) {
+  const label = field.label ?? field.fieldKey
+  const id = `field-${field.fieldKey}`
+  const isNumeric = field.dataType === 'int' || field.dataType === 'decimal'
+  const hasEnum = field.enumValues != null && field.enumValues.length > 0
+  return (
+    <div>
+      <label htmlFor={id} className="text-xs font-medium text-gray-700">
+        {label}
+        {field.isRequired && <span className="text-red-600 ml-0.5">*</span>}
+        {field.uom && <span className="text-gray-500 ml-1">({field.uom})</span>}
+      </label>
+      {hasEnum ? (
+        <select
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          className="block w-full border rounded px-2 py-1 text-sm mt-1"
+        >
+          <option value="">—</option>
+          {field.enumValues!.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+      ) : (
+        <input
+          id={id}
+          type="text"
+          inputMode={isNumeric ? 'decimal' : 'text'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          className="block w-full border rounded px-2 py-1 text-sm mt-1"
+        />
+      )}
+    </div>
+  )
+}
+
 function CreateBlockForm({
+  sheetId,
   onSave,
   onCancel,
   disabled,
 }: {
-  onSave: (blockType: string, notes: string, entries: EntryInput[]) => void
+  sheetId: number
+  onSave: (blockType: string, notes: string, entries?: EntryInput[], templateId?: number, initialValues?: Record<string, string | null>) => void
   onCancel: () => void
   disabled: boolean
 }) {
+  const [templates, setTemplates] = useState<RatingsTemplateRow[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(true)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
+  const [templateDetail, setTemplateDetail] = useState<{ template: RatingsTemplateRow; fields: TemplateFieldRow[] } | null>(null)
+  const [templateDetailLoading, setTemplateDetailLoading] = useState(false)
   const [blockType, setBlockType] = useState('Nameplate')
   const [notes, setNotes] = useState('')
   const [entries, setEntries] = useState<EntryInput[]>([{ key: '', value: '', uom: '' }])
+  const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    setTemplatesLoading(true)
+    fetch('/api/backend/ratings/templates', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: RatingsTemplateRow[]) => {
+        if (!cancelled) setTemplates(Array.isArray(data) ? data : [])
+      })
+      .finally(() => { if (!cancelled) setTemplatesLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (selectedTemplateId == null) {
+      setTemplateDetail(null)
+      setTemplateValues({})
+      return
+    }
+    let cancelled = false
+    setTemplateDetailLoading(true)
+    fetch(`/api/backend/ratings/templates/${selectedTemplateId}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { template: RatingsTemplateRow; fields: TemplateFieldRow[] } | null) => {
+        if (!cancelled && data?.template && data?.fields) {
+          setTemplateDetail({ template: data.template, fields: data.fields })
+          setBlockType(data.template.blockType)
+          setTemplateValues({})
+        } else if (!cancelled) setTemplateDetail(null)
+      })
+      .finally(() => { if (!cancelled) setTemplateDetailLoading(false) })
+    return () => { cancelled = true }
+  }, [selectedTemplateId])
+
+  const updateTemplateValue = (key: string, value: string) => {
+    setTemplateValues((prev) => ({ ...prev, [key]: value }))
+  }
 
   const addRow = () => {
     if (entries.length < MAX_ENTRIES) setEntries((e) => [...e, { key: '', value: '', uom: '' }])
@@ -477,14 +640,44 @@ function CreateBlockForm({
     setEntries((e) => e.map((x, idx) => (idx === i ? { ...x, [field]: val } : x)))
   }
 
+  const handleSave = () => {
+    if (selectedTemplateId != null && templateDetail) {
+      const initialValues: Record<string, string | null> = {}
+      for (const f of templateDetail.fields) {
+        const v = templateValues[f.fieldKey] ?? ''
+        initialValues[f.fieldKey] = v.trim() || null
+      }
+      onSave(blockType, notes, undefined, selectedTemplateId, initialValues)
+    } else {
+      onSave(blockType, notes, entries)
+    }
+  }
+
+  const sortedFields = templateDetail ? [...templateDetail.fields].sort((a, b) => a.orderIndex - b.orderIndex) : []
+
   return (
     <div className="border rounded p-3 bg-gray-50 space-y-3">
+      <div>
+        <label className="text-xs font-medium text-gray-700">Template</label>
+        <select
+          value={selectedTemplateId ?? ''}
+          onChange={(e) => setSelectedTemplateId(e.target.value ? Number(e.target.value) : null)}
+          disabled={templatesLoading || disabled}
+          className="block w-full border rounded px-2 py-1 text-sm mt-1"
+        >
+          <option value="">Freeform (no template)</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.id}>{t.blockType} ({t.standardCode})</option>
+          ))}
+        </select>
+      </div>
       <div>
         <label className="text-xs font-medium text-gray-700">Block type</label>
         <input
           type="text"
           value={blockType}
           onChange={(e) => setBlockType(e.target.value)}
+          disabled={templateDetail != null}
           className="block w-full border rounded px-2 py-1 text-sm mt-1"
           placeholder="e.g. Nameplate"
         />
@@ -498,58 +691,64 @@ function CreateBlockForm({
           rows={2}
         />
       </div>
-      <div>
-        <div className="text-xs font-medium text-gray-700 mb-1">Entries</div>
-        <div className="space-y-1">
-          {entries.map((e, i) => (
-            <div key={i} className="flex gap-2 items-center">
-              <input
-                type="text"
-                value={e.key}
-                onChange={(ev) => updateEntry(i, 'key', ev.target.value)}
-                placeholder="Key"
-                className="flex-1 border rounded px-2 py-1 text-xs"
-              />
-              <input
-                type="text"
-                value={e.value}
-                onChange={(ev) => updateEntry(i, 'value', ev.target.value)}
-                placeholder="Value"
-                className="flex-1 border rounded px-2 py-1 text-xs"
-              />
-              <input
-                type="text"
-                value={e.uom}
-                onChange={(ev) => updateEntry(i, 'uom', ev.target.value)}
-                placeholder="UOM"
-                className="w-20 border rounded px-2 py-1 text-xs"
-              />
-              {entries.length > 1 && (
-                <button type="button" onClick={() => removeRow(i)} className="text-red-600 text-xs">
-                  Remove
-                </button>
-              )}
-            </div>
+      {templateDetailLoading && <p className="text-xs text-gray-500">Loading fields…</p>}
+      {templateDetail && !templateDetailLoading && (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-gray-700">Fields</div>
+          {sortedFields.map((f) => (
+            <SchemaDrivenField
+              key={f.fieldKey}
+              field={f}
+              value={templateValues[f.fieldKey] ?? ''}
+              onChange={(v) => updateTemplateValue(f.fieldKey, v)}
+              disabled={disabled}
+            />
           ))}
         </div>
-        {entries.length < MAX_ENTRIES && (
-          <button type="button" onClick={addRow} className="mt-1 text-xs text-blue-600 hover:underline">
-            Add row
-          </button>
-        )}
-      </div>
+      )}
+      {!templateDetail && !templateDetailLoading && (
+        <div>
+          <div className="text-xs font-medium text-gray-700 mb-1">Entries</div>
+          <div className="space-y-1">
+            {entries.map((e, i) => (
+              <div key={i} className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={e.key}
+                  onChange={(ev) => updateEntry(i, 'key', ev.target.value)}
+                  placeholder="Key"
+                  className="flex-1 border rounded px-2 py-1 text-xs"
+                />
+                <input
+                  type="text"
+                  value={e.value}
+                  onChange={(ev) => updateEntry(i, 'value', ev.target.value)}
+                  placeholder="Value"
+                  className="flex-1 border rounded px-2 py-1 text-xs"
+                />
+                <input
+                  type="text"
+                  value={e.uom}
+                  onChange={(ev) => updateEntry(i, 'uom', ev.target.value)}
+                  placeholder="UOM"
+                  className="w-20 border rounded px-2 py-1 text-xs"
+                />
+                {entries.length > 1 && (
+                  <button type="button" onClick={() => removeRow(i)} className="text-red-600 text-xs">Remove</button>
+                )}
+              </div>
+            ))}
+          </div>
+          {entries.length < MAX_ENTRIES && (
+            <button type="button" onClick={addRow} className="mt-1 text-xs text-blue-600 hover:underline">Add row</button>
+          )}
+        </div>
+      )}
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onSave(blockType, notes, entries)}
-          disabled={disabled}
-          className="px-3 py-1 text-sm rounded border bg-blue-50 hover:bg-blue-100 disabled:opacity-50"
-        >
+        <button type="button" onClick={handleSave} disabled={disabled || templateDetailLoading} className="px-3 py-1 text-sm rounded border bg-blue-50 hover:bg-blue-100 disabled:opacity-50">
           Save
         </button>
-        <button type="button" onClick={onCancel} className="px-3 py-1 text-sm rounded border">
-          Cancel
-        </button>
+        <button type="button" onClick={onCancel} className="px-3 py-1 text-sm rounded border">Cancel</button>
       </div>
     </div>
   )
@@ -658,6 +857,113 @@ function EditBlockForm({
         <button type="button" onClick={onCancel} className="px-3 py-1 text-sm rounded border">
           Cancel
         </button>
+      </div>
+    </div>
+  )
+}
+
+function TemplatedBlockEditor({
+  block,
+  template,
+  fields,
+  entries,
+  onSave,
+  onCancel,
+  disabled,
+  readOnly,
+}: {
+  block: RatingsBlockRow
+  template: RatingsTemplateRow
+  fields: TemplateFieldRow[]
+  entries: RatingsEntryRow[]
+  onSave: (blockType: string, notes: string, entries: EntryInput[]) => void
+  onCancel: () => void
+  disabled: boolean
+  readOnly: boolean
+}) {
+  const [notes, setNotes] = useState(block.notes ?? '')
+  const [valuesByKey, setValuesByKey] = useState<Record<string, string>>(() => {
+    const out: Record<string, string> = {}
+    for (const e of entries) out[e.key] = e.value ?? ''
+    for (const f of fields) if (!(f.fieldKey in out)) out[f.fieldKey] = ''
+    return out
+  })
+  const sortedFields = [...fields].sort((a, b) => a.orderIndex - b.orderIndex)
+
+  const updateValue = (key: string, value: string) => {
+    setValuesByKey((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleSave = () => {
+    const entryInputs: EntryInput[] = sortedFields.map((f) => ({
+      key: f.fieldKey,
+      value: valuesByKey[f.fieldKey] ?? '',
+      uom: f.uom ?? '',
+    }))
+    onSave(template.blockType, notes, entryInputs)
+  }
+
+  return (
+    <div className="border rounded p-3 bg-gray-50 space-y-3">
+      <div>
+        <label className="text-xs font-medium text-gray-700">Block type</label>
+        <p className="text-sm mt-1">{template.blockType}</p>
+      </div>
+      <div>
+        <label className="text-xs font-medium text-gray-700">Notes</label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          disabled={readOnly}
+          className="block w-full border rounded px-2 py-1 text-sm mt-1"
+          rows={2}
+        />
+      </div>
+      <div className="space-y-2">
+        {sortedFields.map((f) => (
+          <SchemaDrivenField
+            key={f.fieldKey}
+            field={f}
+            value={valuesByKey[f.fieldKey] ?? ''}
+            onChange={(v) => updateValue(f.fieldKey, v)}
+            disabled={readOnly || disabled}
+          />
+        ))}
+      </div>
+      {!readOnly && (
+        <div className="flex gap-2">
+          <button type="button" onClick={handleSave} disabled={disabled} className="px-3 py-1 text-sm rounded border bg-blue-50 hover:bg-blue-100 disabled:opacity-50">
+            Save
+          </button>
+          <button type="button" onClick={onCancel} className="px-3 py-1 text-sm rounded border">Cancel</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TemplatedBlockReadOnlyView({
+  block,
+  fields,
+  entries,
+}: {
+  block: RatingsBlockRow
+  fields: TemplateFieldRow[]
+  entries: RatingsEntryRow[]
+}) {
+  const valueByKey = new Map(entries.map((e) => [e.key, e.value ?? '']))
+  const sortedFields = [...fields].sort((a, b) => a.orderIndex - b.orderIndex)
+  return (
+    <div className="border rounded p-3 bg-gray-50 space-y-2">
+      <div><span className="text-xs font-medium text-gray-700">Block type</span><p className="text-sm mt-1">{block.blockType}</p></div>
+      {block.notes && <div><span className="text-xs font-medium text-gray-700">Notes</span><p className="text-sm mt-1">{block.notes}</p></div>}
+      <div className="space-y-1">
+        {sortedFields.map((f) => (
+          <div key={f.fieldKey}>
+            <span className="text-xs font-medium text-gray-700">{f.label ?? f.fieldKey}{f.isRequired && ' *'}{f.uom ? ` (${f.uom})` : ''}</span>
+            <p className="text-sm mt-0.5">{valueByKey.get(f.fieldKey) ?? '—'}</p>
+          </div>
+        ))}
       </div>
     </div>
   )
