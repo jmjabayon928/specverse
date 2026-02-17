@@ -132,7 +132,7 @@ export default function VerificationRecordsList(props: Readonly<VerificationReco
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ verificationTypeId: defaultVerificationTypeId, result: 'Pending' }),
+        body: JSON.stringify({ verificationTypeId: defaultVerificationTypeId }),
       })
 
       if (!createResponse.ok) {

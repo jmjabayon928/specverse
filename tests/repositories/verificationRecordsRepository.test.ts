@@ -81,7 +81,7 @@ describe('verificationRecordsRepository', () => {
   })
 
   describe('attachEvidenceToVerificationRecord account safety', () => {
-    it('should use INSERT...SELECT pattern with AccountID check', async () => {
+    it('should use INSERT...SELECT with join to Attachments and a.AccountID = @AccountID', async () => {
       await attachEvidenceToVerificationRecord(1, 100, 200)
 
       expect(mockInput).toHaveBeenCalledWith('AccountID', 1, 1)
@@ -89,7 +89,8 @@ describe('verificationRecordsRepository', () => {
       expect(queryText).toContain('INSERT INTO VerificationRecordAttachments')
       expect(queryText).toContain('SELECT')
       expect(queryText).toContain('FROM VerificationRecords')
-      expect(queryText).toContain('@AccountID')
+      expect(queryText).toContain('INNER JOIN Attachments')
+      expect(queryText).toMatch(/a\.AccountID\s*=\s*@AccountID/i)
       expect(queryText).toMatch(/vr\.AccountID.*=.*@AccountID/i)
     })
 
@@ -132,11 +133,10 @@ describe('verificationRecordsRepository', () => {
   })
 
   describe('createVerificationRecord', () => {
-    it('should use accountId parameter and insert VerificationTypeID and Result', async () => {
+    it('should insert only AccountID and VerificationTypeID when result is omitted', async () => {
       const input: CreateVerificationRecordDto = {
         accountId: 999,
         verificationTypeId: 1,
-        result: 'Pending',
       }
       mockQuery.mockResolvedValue({
         recordset: [{ verificationRecordId: 100, accountId: 1 }],
@@ -147,8 +147,32 @@ describe('verificationRecordsRepository', () => {
 
       expect(mockInput).toHaveBeenCalledWith('AccountID', 1, 1)
       expect(mockInput).toHaveBeenCalledWith('VerificationTypeID', 1, 1)
-      expect(mockInput).toHaveBeenCalledWith('Result', expect.any(Function), 'Pending')
+      expect(mockInput).not.toHaveBeenCalledWith('Result', expect.anything(), expect.anything())
       expect(mockInput).not.toHaveBeenCalledWith('AccountID', 999, 1)
+      const queryText = mockQuery.mock.calls[0][0]
+      expect(queryText).not.toMatch(/@Result/)
+    })
+
+    it('should insert Status and Result when result is provided', async () => {
+      const input: CreateVerificationRecordDto = {
+        accountId: 999,
+        verificationTypeId: 1,
+        result: 'PASS',
+      }
+      mockQuery.mockResolvedValue({
+        recordset: [{ verificationRecordId: 100, accountId: 1 }],
+        rowsAffected: [1],
+      })
+
+      await createVerificationRecord(1, input)
+
+      expect(mockInput).toHaveBeenCalledWith('AccountID', 1, 1)
+      expect(mockInput).toHaveBeenCalledWith('VerificationTypeID', 1, 1)
+      expect(mockInput).toHaveBeenCalledWith('Result', expect.anything(), 'PASS')
+      expect(mockInput).not.toHaveBeenCalledWith('AccountID', 999, 1)
+      const queryText = mockQuery.mock.calls[0][0]
+      expect(queryText).toContain("N'FINAL'")
+      expect(queryText).toContain('@Result')
     })
   })
 
