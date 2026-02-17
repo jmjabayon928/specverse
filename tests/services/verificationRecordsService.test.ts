@@ -127,7 +127,7 @@ describe('verificationRecordsService', () => {
       mockAttachEvidenceToVerificationRecord.mockResolvedValue(null)
 
       await expect(attachEvidence(1, 100, 200)).rejects.toThrow(AppError)
-      await expect(attachEvidence(1, 100, 200)).rejects.toThrow('Failed to attach evidence')
+      await expect(attachEvidence(1, 100, 200)).rejects.toThrow('Attachment not found or not in account scope')
     })
   })
 

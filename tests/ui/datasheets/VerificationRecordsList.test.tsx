@@ -94,7 +94,7 @@ describe('VerificationRecordsList', () => {
 
       if (url === '/api/backend/verification-records' && options?.method === 'POST') {
         const body = options?.body ? JSON.parse(options.body as string) : {}
-        if (body.verificationTypeId === 1 && body.result === 'Pending') {
+        if (body.verificationTypeId === 1 && !('result' in body)) {
           return Promise.resolve({
             ok: true,
             status: 201,
@@ -192,7 +192,7 @@ describe('VerificationRecordsList', () => {
     fireEvent.click(button)
 
     await waitFor(() => {
-      expect(createBody).toEqual({ verificationTypeId: 1, result: 'Pending' })
+      expect(createBody).toEqual({ verificationTypeId: 1 })
     })
   })
 
@@ -214,7 +214,7 @@ describe('VerificationRecordsList', () => {
 
       if (url === '/api/backend/verification-records' && options?.method === 'POST') {
         const body = options?.body ? JSON.parse(options.body as string) : {}
-        if (body.verificationTypeId === 1 && body.result === 'Pending') {
+        if (body.verificationTypeId === 1 && !('result' in body)) {
           return Promise.resolve({
             ok: false,
             status: 500,
@@ -262,7 +262,7 @@ describe('VerificationRecordsList', () => {
 
       if (url === '/api/backend/verification-records' && options?.method === 'POST') {
         const body = options?.body ? JSON.parse(options.body as string) : {}
-        if (body.verificationTypeId === 1 && body.result === 'Pending') {
+        if (body.verificationTypeId === 1 && !('result' in body)) {
           return Promise.resolve({
             ok: true,
             status: 201,

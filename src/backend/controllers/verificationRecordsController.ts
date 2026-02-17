@@ -45,9 +45,10 @@ const attachBodySchema = z.object({
   attachmentId: z.number().int().positive(),
 })
 
+const resultEnum = z.enum(['PASS', 'FAIL', 'CONDITIONAL'])
 const createBodySchema = z.object({
   verificationTypeId: z.number().int().positive(),
-  result: z.string().min(1),
+  result: resultEnum.optional(),
 })
 
 export const listVerificationRecords: RequestHandler = async (req, res, next) => {
@@ -121,11 +122,8 @@ export const createVerificationRecord: RequestHandler = async (req, res, next) =
       throw new AppError('Invalid request payload', 400)
     }
 
-    const input: CreateVerificationRecordDto = {
-      accountId,
-      verificationTypeId: parsed.data.verificationTypeId,
-      result: parsed.data.result,
-    }
+    const input: CreateVerificationRecordDto = { accountId, verificationTypeId: parsed.data.verificationTypeId }
+    if (parsed.data.result) input.result = parsed.data.result
 
     const record = await create(accountId, input)
     res.status(201).json(record)

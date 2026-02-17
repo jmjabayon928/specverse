@@ -93,7 +93,7 @@ export const attachEvidence = async (
 
   const attachment = await attachEvidenceToVerificationRecord(accountId, verificationRecordId, attachmentId)
   if (!attachment) {
-    throw new AppError('Failed to attach evidence: verification record not found or account mismatch', 404)
+    throw new AppError('Attachment not found or not in account scope', 404)
   }
 
   return attachment
