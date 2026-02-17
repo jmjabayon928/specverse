@@ -386,7 +386,6 @@ export default function RatingsBlocksList(props: Readonly<RatingsBlocksListProps
 
       {showCreateForm && (
         <CreateBlockForm
-          sheetId={sheetId}
           onSave={(bt, notes, entries, templateId, initialValues) => handleCreate(bt, notes, entries ?? [], templateId, initialValues)}
           onCancel={() => setShowCreateForm(false)}
           disabled={isSubmitting}
@@ -573,12 +572,10 @@ function SchemaDrivenField({
 }
 
 function CreateBlockForm({
-  sheetId,
   onSave,
   onCancel,
   disabled,
 }: {
-  sheetId: number
   onSave: (blockType: string, notes: string, entries?: EntryInput[], templateId?: number, initialValues?: Record<string, string | null>) => void
   onCancel: () => void
   disabled: boolean
