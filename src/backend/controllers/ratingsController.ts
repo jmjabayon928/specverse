@@ -2,7 +2,17 @@
 import type { RequestHandler } from 'express'
 import { z } from 'zod'
 import { AppError } from '../errors/AppError'
-import { listForSheet, getById, create, update, remove, lock, unlock } from '../services/ratingsService'
+import {
+  listForSheet,
+  getById,
+  create,
+  update,
+  remove,
+  lock,
+  unlock,
+  listRatingsTemplates,
+  getRatingsTemplateById,
+} from '../services/ratingsService'
 import { mustGetAccountId } from '@/backend/utils/authGuards'
 
 function parseId(raw: string | string[] | undefined): number | null {
@@ -40,6 +50,8 @@ const createBodySchema = z
       .transform(v => (v === '' ? null : v))
       .refine(v => v === undefined || v === null || v.length <= 2000, 'notes too long'),
     sourceValueSetId: z.number().int().positive().nullable().optional(),
+    templateId: z.number().int().positive().optional(),
+    initialValues: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
     entries: z.array(entrySchema).default([]),
   })
   .refine(data => data.entries.length <= MAX_ENTRIES, 'too many entries')
@@ -56,6 +68,39 @@ const updateBodySchema = z
     entries: z.array(entrySchema).optional(),
   })
   .refine(data => !data.entries || data.entries.length <= MAX_ENTRIES, 'too many entries')
+
+export const listRatingsTemplatesHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) {
+      return
+    }
+    const templates = await listRatingsTemplates()
+    res.status(200).json(templates)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const getRatingsTemplateByIdHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) {
+      return
+    }
+    const id = parseId(req.params.id)
+    if (!id) {
+      throw new AppError('Invalid template id', 400)
+    }
+    const result = await getRatingsTemplateById(id)
+    if (!result) {
+      throw new AppError('Ratings template not found', 404)
+    }
+    res.status(200).json({ template: result.template, fields: result.fields })
+  } catch (error) {
+    next(error)
+  }
+}
 
 export const listRatingsBlocksForSheet: RequestHandler = async (req, res, next) => {
   try {

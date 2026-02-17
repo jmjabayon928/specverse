@@ -3,6 +3,8 @@ import { Router } from 'express'
 import { PERMISSIONS } from '@/constants/permissions'
 import { verifyToken, requirePermission } from '@/backend/middleware/authMiddleware'
 import {
+  listRatingsTemplatesHandler,
+  getRatingsTemplateByIdHandler,
   getRatingsBlockById,
   createRatingsBlock,
   updateRatingsBlock,
@@ -12,6 +14,20 @@ import {
 } from '../controllers/ratingsController'
 
 const router = Router()
+
+router.get(
+  '/templates',
+  verifyToken,
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
+  listRatingsTemplatesHandler
+)
+
+router.get(
+  '/templates/:id',
+  verifyToken,
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
+  getRatingsTemplateByIdHandler
+)
 
 router.get(
   '/:id',
