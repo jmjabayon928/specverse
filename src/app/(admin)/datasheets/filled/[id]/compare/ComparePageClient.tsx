@@ -43,6 +43,8 @@ export default function ComparePageClient({
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sheetLocked, setSheetLocked] = useState(false)
+  const [sheetLockReason, setSheetLockReason] = useState<string | null>(null)
 
   const hasEdit = Boolean(
     user && Array.isArray(user.permissions) && user.permissions.includes(PERMISSIONS.DATASHEET_EDIT)
@@ -69,9 +71,22 @@ export default function ComparePageClient({
           }
         )
         if (!res.ok) {
+          if (res.status === 409) {
+            const data = await res.json().catch(() => ({}))
+            const msg =
+              (typeof data?.message === 'string' ? data.message : null) ??
+              (typeof data?.error === 'string' ? data.error : null) ??
+              'This datasheet is not editable in its current status.'
+            setSheetLocked(true)
+            setSheetLockReason(msg)
+            setError(msg)
+            return
+          }
           const data = await res.json().catch(() => ({}))
           throw new Error(data?.error ?? `PATCH failed ${res.status}`)
         }
+        setSheetLocked(false)
+        setSheetLockReason(null)
         router.refresh()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to update variance')
@@ -98,9 +113,22 @@ export default function ComparePageClient({
           }
         )
         if (!res.ok) {
+          if (res.status === 409) {
+            const data = await res.json().catch(() => ({}))
+            const msg =
+              (typeof data?.message === 'string' ? data.message : null) ??
+              (typeof data?.error === 'string' ? data.error : null) ??
+              'This datasheet is not editable in its current status.'
+            setSheetLocked(true)
+            setSheetLockReason(msg)
+            setError(msg)
+            return
+          }
           const data = await res.json().catch(() => ({}))
           throw new Error(data?.error ?? `POST status failed ${res.status}`)
         }
+        setSheetLocked(false)
+        setSheetLockReason(null)
         router.refresh()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to update status')
@@ -152,7 +180,16 @@ export default function ComparePageClient({
         </div>
       )}
 
-      {hasEdit && (
+      {sheetLocked && (
+        <div
+          className="rounded border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          role="status"
+        >
+          {sheetLockReason ?? 'This datasheet is not editable in its current status.'}
+        </div>
+      )}
+
+      {hasEdit && !sheetLocked && (
         <div className="flex flex-wrap items-center gap-4 text-sm">
           {reqValueSet && canEditValueSet(valueSets, reqValueSet.ValueSetID) && (
             <button
@@ -224,7 +261,11 @@ export default function ComparePageClient({
                             partyId={o.partyId}
                             valueSetId={o.valueSetId}
                             infoTemplateId={field.infoTemplateId}
-                            canEdit={hasEdit && canEditValueSet(valueSets, o.valueSetId)}
+                            canEdit={
+                              hasEdit &&
+                              !sheetLocked &&
+                              canEditValueSet(valueSets, o.valueSetId)
+                            }
                             busy={busy}
                             onPatch={patchVariance}
                           />
@@ -244,6 +285,7 @@ export default function ComparePageClient({
                         infoTemplateId={field.infoTemplateId}
                         canEdit={
                           hasEdit &&
+                          !sheetLocked &&
                           asBuiltValueSet != null &&
                           canEditValueSet(valueSets, asBuiltValueSet.ValueSetID)
                         }
