@@ -99,18 +99,24 @@ export const createVerificationRecord = async (
   input: CreateVerificationRecordDto
 ): Promise<VerificationRecordRow> => {
   const pool = await poolPromise
+  const req = pool.request().input('AccountID', sql.Int, accountId).input('VerificationTypeID', sql.Int, input.verificationTypeId)
 
-  const result = await pool
-    .request()
-    .input('AccountID', sql.Int, accountId)
-    .input('VerificationTypeID', sql.Int, input.verificationTypeId)
-    .input('Result', sql.NVarChar, input.result)
-    .query(`
-      INSERT INTO VerificationRecords (AccountID, VerificationTypeID, Result)
+  if (input.result === undefined) {
+    const result = await req.query(`
+      INSERT INTO VerificationRecords (AccountID, VerificationTypeID)
       OUTPUT INSERTED.VerificationRecordID AS verificationRecordId, INSERTED.AccountID AS accountId
-      VALUES (@AccountID, @VerificationTypeID, @Result)
+      VALUES (@AccountID, @VerificationTypeID)
     `)
+    return result.recordset[0] as VerificationRecordRow
+  }
 
+  const result = await req
+    .input('Result', sql.VarChar(20), input.result)
+    .query(`
+      INSERT INTO VerificationRecords (AccountID, VerificationTypeID, Status, Result)
+      OUTPUT INSERTED.VerificationRecordID AS verificationRecordId, INSERTED.AccountID AS accountId
+      VALUES (@AccountID, @VerificationTypeID, N'FINAL', @Result)
+    `)
   return result.recordset[0] as VerificationRecordRow
 }
 
@@ -176,6 +182,7 @@ export const attachEvidenceToVerificationRecord = async (
       OUTPUT INSERTED.VerificationRecordID AS verificationRecordId, INSERTED.AttachmentID AS attachmentId
       SELECT @VerificationRecordID, @AttachmentID
       FROM VerificationRecords vr
+      INNER JOIN Attachments a ON a.AttachmentID = @AttachmentID AND a.AccountID = @AccountID
       WHERE vr.VerificationRecordID = @VerificationRecordID AND vr.AccountID = @AccountID
     `)
 

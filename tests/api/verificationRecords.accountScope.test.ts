@@ -133,7 +133,7 @@ describe('VerificationRecords API account scoping', () => {
   })
 
   describe('createVerificationRecord', () => {
-    it('should create record with verificationTypeId and result', async () => {
+    it('should create record with verificationTypeId only (no result)', async () => {
       mockCreate.mockResolvedValue({ verificationRecordId: 200, accountId: 1 })
 
       currentTestAccountId = 1
@@ -141,15 +141,27 @@ describe('VerificationRecords API account scoping', () => {
       const res = await request(app)
         .post('/api/backend/verification-records')
         .set('Cookie', [`token=${token}`])
-        .send({ verificationTypeId: 1, result: 'Pending' })
+        .send({ verificationTypeId: 1 })
 
       expect(res.status).toBe(201)
       expect(res.body).toEqual({ verificationRecordId: 200, accountId: 1 })
       expect(mockCreate).toHaveBeenCalledWith(1, {
         accountId: 1,
         verificationTypeId: 1,
-        result: 'Pending',
       })
+    })
+
+    it('should reject result: Pending (invalid enum)', async () => {
+      currentTestAccountId = 1
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .post('/api/backend/verification-records')
+        .set('Cookie', [`token=${token}`])
+        .send({ verificationTypeId: 1, result: 'Pending' })
+
+      expect(res.status).toBe(400)
+      expect(res.body?.error).toMatch(/Invalid request payload/i)
+      expect(mockCreate).not.toHaveBeenCalled()
     })
 
     it('should reject invalid payload', async () => {
@@ -183,6 +195,116 @@ describe('VerificationRecords API account scoping', () => {
         { verificationTypeId: 1, code: 'GEN', name: 'General Verification', status: 'Active' },
       ])
       expect(mockListActiveTypes).toHaveBeenCalled()
+    })
+  })
+
+  describe('POST /api/backend/verification-records/:id/attachments', () => {
+    it('should attach evidence and return 200 with attachment row', async () => {
+      mockAttachEvidence.mockResolvedValue({ verificationRecordId: 100, attachmentId: 123 })
+
+      currentTestAccountId = 1
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .post('/api/backend/verification-records/100/attachments')
+        .set('Cookie', [`token=${token}`])
+        .send({ attachmentId: 123 })
+
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual({ verificationRecordId: 100, attachmentId: 123 })
+      expect(mockAttachEvidence).toHaveBeenCalledWith(1, 100, 123)
+    })
+
+    it('should return 404 when attachment is not in account scope', async () => {
+      mockAttachEvidence.mockRejectedValue(new AppError('Attachment not found or not in account scope', 404))
+
+      currentTestAccountId = 1
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .post('/api/backend/verification-records/100/attachments')
+        .set('Cookie', [`token=${token}`])
+        .send({ attachmentId: 999 })
+
+      expect(res.status).toBe(404)
+      expect(res.body?.error).toMatch(/account scope|not found/i)
+      expect(mockAttachEvidence).toHaveBeenCalledWith(1, 100, 999)
+    })
+  })
+
+  describe('GET /api/backend/verification-records/:id/attachments', () => {
+    it('should return 200 and list of attachments', async () => {
+      mockListAttachments.mockResolvedValue([
+        { verificationRecordId: 100, attachmentId: 123 },
+        { verificationRecordId: 100, attachmentId: 456 },
+      ])
+
+      currentTestAccountId = 1
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .get('/api/backend/verification-records/100/attachments')
+        .set('Cookie', [`token=${token}`])
+
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual([
+        { verificationRecordId: 100, attachmentId: 123 },
+        { verificationRecordId: 100, attachmentId: 456 },
+      ])
+      expect(mockListAttachments).toHaveBeenCalledWith(1, 100)
+    })
+  })
+
+  describe('POST /api/backend/verification-records/:id/link', () => {
+    it('should link record to sheet and return 200 with link row', async () => {
+      mockLinkToSheet.mockResolvedValue({ accountId: 1, verificationRecordId: 100, sheetId: 50 })
+
+      currentTestAccountId = 1
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .post('/api/backend/verification-records/100/link')
+        .set('Cookie', [`token=${token}`])
+        .send({ sheetId: 50 })
+
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual({ accountId: 1, verificationRecordId: 100, sheetId: 50 })
+      expect(mockLinkToSheet).toHaveBeenCalledWith(1, 100, 50)
+    })
+  })
+
+  describe('POST /api/backend/verification-records/:id/unlink', () => {
+    it('should unlink record from sheet and return 200 with deleted true', async () => {
+      mockUnlinkFromSheet.mockResolvedValue(true)
+
+      currentTestAccountId = 1
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .post('/api/backend/verification-records/100/unlink')
+        .set('Cookie', [`token=${token}`])
+        .send({ sheetId: 50 })
+
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual({ deleted: true })
+      expect(mockUnlinkFromSheet).toHaveBeenCalledWith(1, 100, 50)
+    })
+  })
+
+  describe('GET /api/backend/datasheets/:sheetId/verification-records', () => {
+    it('should return 200 and list of records for sheet', async () => {
+      mockListForSheet.mockResolvedValue([
+        { verificationRecordId: 100, accountId: 1 },
+        { verificationRecordId: 101, accountId: 1 },
+      ])
+
+      currentTestAccountId = 1
+      const token = makeToken({ userId: 1, accountId: 1 })
+      const res = await request(app)
+        .get('/api/backend/datasheets/50/verification-records')
+        .set('Cookie', [`token=${token}`])
+
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual([
+        { verificationRecordId: 100, accountId: 1 },
+        { verificationRecordId: 101, accountId: 1 },
+      ])
+      expect(mockListForSheet).toHaveBeenCalledWith(1, 50)
     })
   })
 })

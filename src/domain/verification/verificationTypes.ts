@@ -37,7 +37,7 @@ export interface VerificationRecordListItemDto {
 export interface CreateVerificationRecordDto {
   accountId: number              // Required
   verificationTypeId: number     // Required: FK to VerificationRecordTypes
-  result: string                  // Required: verification result (e.g., 'Pending', 'Pass', 'Fail')
+  result?: 'PASS' | 'FAIL' | 'CONDITIONAL'  // Optional: only when Status is FINAL
   issuerPartyId?: number         // Optional
 }
 
