@@ -6,9 +6,13 @@ import {
   createRatingsBlockWithEntries,
   updateRatingsBlockWithEntries,
   deleteRatingsBlock,
+  listRatingsBlockTemplates,
+  getRatingsBlockTemplateById,
   type RatingsBlockSummaryRow,
   type RatingsBlockRow,
   type RatingsEntryRow,
+  type RatingsBlockTemplateRow,
+  type RatingsBlockTemplateFieldRow,
   type CreateRatingsBlockInput,
   type UpdateRatingsBlockInput,
 } from '../repositories/ratingsRepository'
@@ -53,6 +57,16 @@ export type RatingsBlockWithEntries = {
   entries: RatingsEntryRow[]
 }
 
+export const listRatingsTemplates = async (): Promise<RatingsBlockTemplateRow[]> => {
+  return listRatingsBlockTemplates()
+}
+
+export const getRatingsTemplateById = async (
+  id: number
+): Promise<{ template: RatingsBlockTemplateRow; fields: RatingsBlockTemplateFieldRow[] } | null> => {
+  return getRatingsBlockTemplateById(id)
+}
+
 export const listForSheet = async (
   accountId: number,
   sheetId: number
@@ -76,9 +90,14 @@ export const getById = async (
   return { block, entries }
 }
 
+type CreateRatingsBlockRequest = CreateRatingsBlockInput & {
+  templateId?: number
+  initialValues?: Record<string, string | null>
+}
+
 export const create = async (
   accountId: number,
-  input: CreateRatingsBlockInput,
+  input: CreateRatingsBlockRequest,
   auditCtx?: AuditContext
 ): Promise<RatingsBlockRow> => {
   const belongs = await sheetBelongsToAccount(input.sheetId, accountId)
@@ -86,11 +105,107 @@ export const create = async (
     throw new AppError('Sheet not found or does not belong to account', 404)
   }
 
+  let repoInput: CreateRatingsBlockInput
+  if (input.templateId != null) {
+    const templateData = await getRatingsBlockTemplateById(input.templateId)
+    if (!templateData) {
+      throw new AppError('Ratings template not found', 404)
+    }
+    const initialValues = input.initialValues ?? {}
+    const entries = [...templateData.fields]
+      .sort((a, b) => a.orderIndex - b.orderIndex)
+      .map((f) => ({
+        key: f.fieldKey,
+        value: f.fieldKey in initialValues ? initialValues[f.fieldKey] : null,
+        uom: f.uom ?? null,
+        orderIndex: f.orderIndex,
+        templateFieldId: f.templateFieldId,
+      }))
+    repoInput = {
+      sheetId: input.sheetId,
+      blockType: input.blockType,
+      notes: input.notes,
+      sourceValueSetId: input.sourceValueSetId,
+      ratingsBlockTemplateId: input.templateId,
+      entries,
+    }
+  } else {
+    repoInput = {
+      sheetId: input.sheetId,
+      blockType: input.blockType,
+      notes: input.notes,
+      sourceValueSetId: input.sourceValueSetId,
+      entries: input.entries ?? [],
+    }
+  }
+
   const block = await runInTransaction(async (tx) => {
-    return createRatingsBlockWithEntries(tx, input)
+    return createRatingsBlockWithEntries(tx, repoInput)
   })
   logRatingsAudit('create', block.ratingsBlockId, block.sheetId, accountId, auditCtx)
   return block
+}
+
+const INT_REGEX = /^-?\d+$/
+const DECIMAL_REGEX = /^-?\d+(\.\d+)?$/
+
+function normalizeValue(val: string | null | undefined): string | null {
+  if (val === undefined || val === null) return null
+  const s = typeof val === 'string' ? val.trim() : String(val).trim()
+  return s === '' ? null : s
+}
+
+function validateAndNormalizeTemplatedEntries(
+  entries: Array<{ key: string; value: string | null; uom?: string | null; orderIndex?: number | null; templateFieldId?: number | null }>,
+  fields: RatingsBlockTemplateFieldRow[]
+): Array<{ key: string; value: string | null; uom: string | null; orderIndex: number; templateFieldId: number }> {
+  const fieldByKey = new Map(fields.map((f) => [f.fieldKey, f]))
+  const templateKeys = new Set(fields.map((f) => f.fieldKey))
+
+  for (const e of entries) {
+    if (!templateKeys.has(e.key)) {
+      throw new AppError('Invalid ratings payload: unknown entry key', 400)
+    }
+  }
+
+  for (const f of fields) {
+    if (!f.isRequired) continue
+    const entry = entries.find((e) => e.key === f.fieldKey)
+    const val = normalizeValue(entry?.value)
+    if (val === null) {
+      throw new AppError('Invalid ratings payload: required field missing', 400)
+    }
+  }
+
+  for (const e of entries) {
+    const field = fieldByKey.get(e.key)
+    if (!field) continue
+    const val = normalizeValue(e.value)
+    if (val === null && !field.isRequired) continue
+    if (field.dataType === 'int' && val !== null) {
+      if (!INT_REGEX.test(val)) {
+        throw new AppError('Invalid ratings payload: integer value required', 400)
+      }
+    }
+    if (field.dataType === 'decimal' && val !== null) {
+      if (!DECIMAL_REGEX.test(val)) {
+        throw new AppError('Invalid ratings payload: numeric value required', 400)
+      }
+    }
+  }
+
+  return [...fields]
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((f) => {
+      const entry = entries.find((e) => e.key === f.fieldKey)
+      return {
+        key: f.fieldKey,
+        value: normalizeValue(entry?.value) ?? null,
+        uom: f.uom ?? null,
+        orderIndex: f.orderIndex,
+        templateFieldId: f.templateFieldId,
+      }
+    })
 }
 
 export const update = async (
@@ -113,7 +228,31 @@ export const update = async (
     sourceValueSetId: input.sourceValueSetId !== undefined ? input.sourceValueSetId : block.sourceValueSetId,
   }
   if (input.entries !== undefined) {
-    merged.entries = input.entries
+    if (block.ratingsBlockTemplateId != null) {
+      const templateData = await getRatingsBlockTemplateById(block.ratingsBlockTemplateId)
+      if (!templateData) {
+        throw new AppError('Ratings template not found', 404)
+      }
+      const existingEntries = await listRatingsEntriesForBlock(ratingsBlockId)
+      const templateKeys = new Set(templateData.fields.map((f) => f.fieldKey))
+      const canonicalByKey = new Map<string, string | null>()
+      for (const f of templateData.fields) {
+        const existing = existingEntries.find((e) => e.key === f.fieldKey)
+        canonicalByKey.set(f.fieldKey, normalizeValue(existing?.value ?? null))
+      }
+      for (const e of input.entries) {
+        if (templateKeys.has(e.key)) {
+          canonicalByKey.set(e.key, normalizeValue(e.value))
+        }
+      }
+      const canonicalEntries = templateData.fields.map((f) => ({
+        key: f.fieldKey,
+        value: canonicalByKey.get(f.fieldKey) ?? null,
+      }))
+      merged.entries = validateAndNormalizeTemplatedEntries(canonicalEntries, templateData.fields)
+    } else {
+      merged.entries = input.entries
+    }
   }
 
   const updated = await runInTransaction(async (tx) => {

@@ -46,6 +46,8 @@ const mockUpdate = jest.fn()
 const mockRemove = jest.fn()
 const mockLock = jest.fn()
 const mockUnlock = jest.fn()
+const mockListRatingsTemplates = jest.fn()
+const mockGetRatingsTemplateById = jest.fn()
 
 jest.mock('../../src/backend/services/ratingsService', () => ({
   listForSheet: (...args: unknown[]) => mockListForSheet(...args),
@@ -55,6 +57,8 @@ jest.mock('../../src/backend/services/ratingsService', () => ({
   remove: (...args: unknown[]) => mockRemove(...args),
   lock: (...args: unknown[]) => mockLock(...args),
   unlock: (...args: unknown[]) => mockUnlock(...args),
+  listRatingsTemplates: (...args: unknown[]) => mockListRatingsTemplates(...args),
+  getRatingsTemplateById: (...args: unknown[]) => mockGetRatingsTemplateById(...args),
 }))
 
 describe('Ratings API', () => {
@@ -271,6 +275,45 @@ describe('Ratings API', () => {
       expect(res.body?.error).toMatch(/Invalid ratings payload/i)
       expect(mockCreate).not.toHaveBeenCalled()
     })
+
+    it('accepts templateId and initialValues and returns 201', async () => {
+      const created = {
+        ratingsBlockId: 30,
+        sheetId: 5,
+        blockType: 'Motor Nameplate',
+        ratingsBlockTemplateId: 1,
+        sourceValueSetId: null,
+        lockedAt: null,
+        lockedBy: null,
+        notes: null,
+        createdAt: new Date('2025-01-01'),
+        updatedAt: new Date('2025-01-01'),
+      }
+      mockCreate.mockResolvedValue(created)
+
+      const res = await request(app)
+        .post('/api/backend/ratings')
+        .set('Cookie', [authCookie])
+        .send({
+          sheetId: 5,
+          blockType: 'Motor Nameplate',
+          templateId: 1,
+          initialValues: { mfr: 'Acme', model: 'X1' },
+        })
+
+      expect(res.status).toBe(201)
+      expect(res.body.ratingsBlockId).toBe(30)
+      expect(mockCreate).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          sheetId: 5,
+          blockType: 'Motor Nameplate',
+          templateId: 1,
+          initialValues: { mfr: 'Acme', model: 'X1' },
+        }),
+        expect.objectContaining({ userId: 1 })
+      )
+    })
   })
 
   describe('PATCH /api/backend/ratings/:id', () => {
@@ -335,6 +378,64 @@ describe('Ratings API', () => {
       expect(res.status).toBe(400)
       expect(res.body?.error).toMatch(/Invalid ratings payload/i)
       expect(mockUpdate).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 when templated block has unknown entry key', async () => {
+      mockUpdate.mockRejectedValue(new AppError('Invalid ratings payload: unknown entry key', 400))
+
+      const res = await request(app)
+        .patch('/api/backend/ratings/10')
+        .set('Cookie', [authCookie])
+        .send({ entries: [{ key: 'unknownKey', value: 'x' }] })
+
+      expect(res.status).toBe(400)
+      expect(res.body?.error).toMatch(/unknown entry key|Invalid ratings payload/i)
+    })
+
+    it('returns 400 when templated block is missing required field', async () => {
+      mockUpdate.mockRejectedValue(new AppError('Invalid ratings payload: required field missing', 400))
+
+      const res = await request(app)
+        .patch('/api/backend/ratings/10')
+        .set('Cookie', [authCookie])
+        .send({ entries: [] })
+
+      expect(res.status).toBe(400)
+      expect(res.body?.error).toMatch(/required field missing|Invalid ratings payload/i)
+    })
+
+    it('accepts partial PATCH for templated block and returns full entry set (merge contract)', async () => {
+      mockUpdate.mockResolvedValue({
+        block: {
+          ratingsBlockId: 10,
+          sheetId: 5,
+          blockType: 'Motor Nameplate',
+          ratingsBlockTemplateId: 1,
+          sourceValueSetId: null,
+          lockedAt: null,
+          lockedBy: null,
+          notes: null,
+          createdAt: new Date('2025-01-01'),
+          updatedAt: new Date('2025-01-02'),
+        },
+        entries: [
+          { entryId: 1, ratingsBlockId: 10, key: 'mfr', value: 'Acme', uom: null, orderIndex: 0, templateFieldId: 1 },
+          { entryId: 2, ratingsBlockId: 10, key: 'model', value: 'X1', uom: null, orderIndex: 1, templateFieldId: 2 },
+        ],
+      })
+
+      const res = await request(app)
+        .patch('/api/backend/ratings/10')
+        .set('Cookie', [authCookie])
+        .send({ entries: [{ key: 'mfr', value: 'Acme' }] })
+
+      expect(res.status).toBe(200)
+      expect(mockUpdate).toHaveBeenCalledWith(1, 10, expect.objectContaining({ entries: expect.any(Array) }), expect.any(Object))
+      expect(res.body.entries).toBeDefined()
+      expect(Array.isArray(res.body.entries)).toBe(true)
+      const keys = res.body.entries.map((e: { key: string }) => e.key)
+      expect(keys).toContain('mfr')
+      expect(keys).toContain('model')
     })
   })
 
@@ -471,6 +572,64 @@ describe('Ratings API', () => {
       expect(res.status).toBe(403)
       expect(res.body?.error).toMatch(/admin|superadmin/i)
       expect(mockUnlock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('GET /api/backend/ratings/templates', () => {
+    it('returns 200 and array with at least NEMA_MG1 and ASME_VIII templates', async () => {
+      mockListRatingsTemplates.mockResolvedValue([
+        { id: 1, accountId: null, blockType: 'Motor Nameplate', standardCode: 'NEMA_MG1', standardRef: null, description: null, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+        { id: 2, accountId: null, blockType: 'Pressure Vessel Nameplate', standardCode: 'ASME_VIII', standardRef: null, description: null, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+      ])
+
+      const res = await request(app)
+        .get('/api/backend/ratings/templates')
+        .set('Cookie', [authCookie])
+
+      expect(res.status).toBe(200)
+      expect(Array.isArray(res.body)).toBe(true)
+      const standardCodes = res.body.map((t: { standardCode?: string }) => t.standardCode)
+      expect(standardCodes.some((c: string) => c && c.includes('NEMA_MG1'))).toBe(true)
+      expect(standardCodes.some((c: string) => c && c.includes('ASME_VIII'))).toBe(true)
+    })
+  })
+
+  describe('GET /api/backend/ratings/templates/:id', () => {
+    it('returns 200 with template id and fields ordered by orderIndex, including expected keys (e.g. mfr)', async () => {
+      mockListRatingsTemplates.mockResolvedValue([
+        { id: 100, accountId: null, blockType: 'Motor Nameplate', standardCode: 'NEMA_MG1', standardRef: null, description: null, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+        { id: 101, accountId: null, blockType: 'Pressure Vessel Nameplate', standardCode: 'ASME_VIII', standardRef: null, description: null, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+      ])
+      const listRes = await request(app)
+        .get('/api/backend/ratings/templates')
+        .set('Cookie', [authCookie])
+      expect(listRes.status).toBe(200)
+      const nemaTemplate = listRes.body.find((t: { standardCode?: string }) => t.standardCode === 'NEMA_MG1')
+      expect(nemaTemplate).toBeDefined()
+      const templateId = nemaTemplate.id
+
+      mockGetRatingsTemplateById.mockResolvedValue({
+        template: { id: templateId, accountId: null, blockType: 'Motor Nameplate', standardCode: 'NEMA_MG1', standardRef: null, description: null, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+        fields: [
+          { templateFieldId: 1, ratingsBlockTemplateId: templateId, fieldKey: 'mfr', label: 'Manufacturer', dataType: 'string', uom: null, isRequired: true, orderIndex: 0 },
+          { templateFieldId: 2, ratingsBlockTemplateId: templateId, fieldKey: 'model', label: 'Model', dataType: 'string', uom: null, isRequired: false, orderIndex: 1 },
+        ],
+      })
+
+      const res = await request(app)
+        .get(`/api/backend/ratings/templates/${templateId}`)
+        .set('Cookie', [authCookie])
+
+      expect(res.status).toBe(200)
+      expect(res.body.template).toBeDefined()
+      expect(res.body.template.id).toBe(templateId)
+      expect(res.body.fields).toBeDefined()
+      expect(Array.isArray(res.body.fields)).toBe(true)
+      for (let i = 1; i < res.body.fields.length; i++) {
+        expect(res.body.fields[i].orderIndex).toBeGreaterThanOrEqual(res.body.fields[i - 1].orderIndex)
+      }
+      const fieldKeys = res.body.fields.map((f: { fieldKey?: string }) => f.fieldKey)
+      expect(fieldKeys).toContain('mfr')
     })
   })
 })
