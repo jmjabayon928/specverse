@@ -23,6 +23,9 @@ export type ScheduleHeader = {
   scope: string | null
   clientId: number | null
   projectId: number | null
+  facilityId: number | null
+  spaceId: number | null
+  systemId: number | null
   createdAt: Date
   createdBy: number | null
   updatedAt: Date
@@ -83,11 +86,17 @@ export type CreateScheduleBody = {
   subtypeId: number
   clientId?: number | null
   projectId?: number | null
+  facilityId?: number | null
+  spaceId?: number | null
+  systemId?: number | null
 }
 
 export type PatchScheduleBody = {
   name?: string
   scope?: string | null
+  facilityId?: number | null
+  spaceId?: number | null
+  systemId?: number | null
 }
 
 export type ColumnPayloadItem = {

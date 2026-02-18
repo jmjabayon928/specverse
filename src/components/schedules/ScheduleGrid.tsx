@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 export type ColumnDef = {
   scheduleColumnId: number
@@ -18,12 +18,24 @@ export type GridEntry = {
   values: Record<string, string | number | boolean | null>
 }
 
+export type SheetOption = {
+  sheetId: number
+  sheetName: string
+  status: string
+  disciplineName?: string | null
+  subtypeName?: string | null
+}
+
+const SHEET_OPTIONS_DEBOUNCE_MS = 300
+const SHEET_OPTIONS_LIMIT = 20
+
 type Props = {
   columns: ColumnDef[]
   entries: GridEntry[]
   onChangeEntries: (entries: GridEntry[]) => void
   onSaveEntries: (entries: GridEntry[]) => Promise<void>
   onOpenAssetPicker: (onSelect: (assetId: number, assetTag: string) => void) => void
+  fetchSheetOptions: (q: string, limit: number) => Promise<{ items: SheetOption[]; total: number }>
   disabled?: boolean
 }
 
@@ -56,10 +68,18 @@ export default function ScheduleGrid({
   onChangeEntries,
   onSaveEntries,
   onOpenAssetPicker,
+  fetchSheetOptions,
   disabled,
 }: Props) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pickerOpenForIndex, setPickerOpenForIndex] = useState<number | null>(null)
+  const [manualModeForIndex, setManualModeForIndex] = useState<Set<number>>(new Set())
+  const [sheetLabelByIndex, setSheetLabelByIndex] = useState<Record<number, string>>({})
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SheetOption[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const addRow = useCallback(() => {
     onOpenAssetPicker((assetId: number, assetTag: string) => {
@@ -94,6 +114,87 @@ export default function ScheduleGrid({
 
   const removeRow = (index: number) => {
     onChangeEntries(entries.filter((_, i) => i !== index))
+    setPickerOpenForIndex(prev => {
+      if (prev === null) return null
+      if (prev === index) return null
+      return prev > index ? prev - 1 : prev
+    })
+    setManualModeForIndex(prev => {
+      const next = new Set<number>()
+      prev.forEach(i => {
+        if (i < index) next.add(i)
+        if (i > index) next.add(i - 1)
+      })
+      return next
+    })
+    setSheetLabelByIndex(prev => {
+      const next: Record<number, string> = {}
+      Object.entries(prev).forEach(([k, v]) => {
+        const i = Number(k)
+        if (i < index) next[i] = v
+        if (i > index) next[i - 1] = v
+      })
+      return next
+    })
+  }
+
+  const runSheetSearch = useCallback(
+    async (q: string) => {
+      if (!q.trim()) {
+        setSearchResults([])
+        return
+      }
+      setSearchLoading(true)
+      try {
+        const data = await fetchSheetOptions(q.trim(), SHEET_OPTIONS_LIMIT)
+        setSearchResults(data.items ?? [])
+      } catch {
+        setSearchResults([])
+      } finally {
+        setSearchLoading(false)
+      }
+    },
+    [fetchSheetOptions]
+  )
+
+  useEffect(() => {
+    if (pickerOpenForIndex === null) return
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      runSheetSearch(searchQuery)
+      debounceRef.current = null
+    }, SHEET_OPTIONS_DEBOUNCE_MS)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [searchQuery, pickerOpenForIndex, runSheetSearch])
+
+  const openPicker = (entryIndex: number) => {
+    setPickerOpenForIndex(entryIndex)
+    setSearchQuery('')
+    setSearchResults([])
+  }
+
+  const closePicker = () => {
+    setPickerOpenForIndex(null)
+    setSearchQuery('')
+    setSearchResults([])
+  }
+
+  const selectSheetOption = (entryIndex: number, option: SheetOption) => {
+    updateEntry(entryIndex, { sheetId: option.sheetId })
+    setSheetLabelByIndex(prev => ({ ...prev, [entryIndex]: option.sheetName }))
+    closePicker()
+  }
+
+  const toggleManualMode = (entryIndex: number) => {
+    setManualModeForIndex(prev => {
+      const next = new Set(prev)
+      if (next.has(entryIndex)) next.delete(entryIndex)
+      else next.add(entryIndex)
+      return next
+    })
+    if (pickerOpenForIndex === entryIndex) closePicker()
   }
 
   const handleSave = async () => {
@@ -159,18 +260,100 @@ export default function ScheduleGrid({
                   <td className="border px-2 py-1">
                     {entry.assetTag ?? `Asset ${entry.assetId}`}
                   </td>
-                  <td className="border px-2 py-1">
-                    <input
-                      type="text"
-                      value={entry.sheetId ?? ''}
-                      onChange={e => {
-                        const v = e.target.value.trim()
-                        updateEntry(entryIndex, { sheetId: v === '' ? null : Number(v) })
-                      }}
-                      className="w-20 border rounded px-1"
-                      placeholder="—"
-                      disabled={disabled}
-                    />
+                  <td className="border px-2 py-1 align-top">
+                    {pickerOpenForIndex === entryIndex ? (
+                      <div className="relative min-w-[200px]">
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={e => setSearchQuery(e.target.value)}
+                          placeholder="Search datasheets…"
+                          className="w-full border rounded px-1 py-0.5 text-sm"
+                          disabled={disabled}
+                          autoFocus
+                          aria-label="Search datasheets to link"
+                        />
+                        {searchLoading && <span className="text-xs text-gray-500 ml-1">Searching…</span>}
+                        {searchResults.length > 0 && (
+                          <ul
+                            className="absolute z-10 mt-1 w-full max-h-48 overflow-auto border rounded bg-white shadow list-none p-0 text-sm"
+                            role="listbox"
+                          >
+                            {searchResults.map(item => (
+                              <li
+                                key={item.sheetId}
+                                role="option"
+                                aria-selected={entry.sheetId === item.sheetId}
+                                className="px-2 py-1 cursor-pointer hover:bg-gray-100 border-b border-gray-100 last:border-0"
+                                onClick={() => selectSheetOption(entryIndex, item)}
+                              >
+                                <span className="font-medium">{item.sheetName}</span>
+                                <span className="text-gray-500 ml-1">
+                                  #{item.sheetId}
+                                  {item.status ? ` · ${item.status}` : ''}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="flex gap-1 mt-1">
+                          <button
+                            type="button"
+                            onClick={closePicker}
+                            className="text-xs text-gray-600 hover:underline"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : manualModeForIndex.has(entryIndex) ? (
+                      <div className="flex flex-col gap-1">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={entry.sheetId ?? ''}
+                          onChange={e => {
+                            const v = e.target.value.trim()
+                            updateEntry(entryIndex, { sheetId: v === '' ? null : Number(v) })
+                          }}
+                          className="w-20 border rounded px-1"
+                          placeholder="Sheet ID"
+                          disabled={disabled}
+                          aria-label="Sheet ID (manual entry)"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggleManualMode(entryIndex)}
+                          className="text-xs text-left text-gray-600 hover:underline"
+                        >
+                          Use picker
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {entry.sheetId != null ? (
+                          <span className="text-sm">
+                            {sheetLabelByIndex[entryIndex] ?? `#${entry.sheetId}`}
+                          </span>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => openPicker(entryIndex)}
+                          disabled={disabled}
+                          className="rounded border px-1.5 py-0.5 text-xs"
+                        >
+                          {entry.sheetId != null ? 'Change' : 'Link datasheet'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleManualMode(entryIndex)}
+                          disabled={disabled}
+                          className="text-xs text-gray-600 hover:underline"
+                        >
+                          Manual entry
+                        </button>
+                      </div>
+                    )}
                   </td>
                   {columns.map(col => (
                     <td key={col.scheduleColumnId} className="border px-2 py-1">

@@ -5,6 +5,14 @@ import { sheetBelongsToAccount } from './sheetAccessService'
 import { assetBelongsToAccount } from '../repositories/assetsRepository'
 import {
   listSchedules,
+  countSchedules,
+  searchSheetOptions as repoSearchSheetOptions,
+  searchFacilityOptions as repoSearchFacilityOptions,
+  searchSpaceOptions as repoSearchSpaceOptions,
+  searchSystemOptions as repoSearchSystemOptions,
+  facilityBelongsToAccount,
+  spaceBelongsToAccountAndFacility,
+  systemBelongsToAccountAndFacility,
   getScheduleDetail,
   getScheduleById,
   getScheduleColumns,
@@ -13,6 +21,10 @@ import {
   replaceScheduleColumns as repoReplaceColumns,
   replaceScheduleEntries as repoReplaceEntries,
   type SchedulesListFilters,
+  type SheetOptionRow,
+  type FacilityOptionRow,
+  type SpaceOptionRow,
+  type SystemOptionRow,
   type ColumnInput,
   type EntryInput,
 } from '../repositories/schedulesRepository'
@@ -25,9 +37,47 @@ import type {
 
 export async function list(
   accountId: number,
-  filters: SchedulesListFilters
+  filters: SchedulesListFilters,
+  pagination?: { page: number; limit: number }
 ): Promise<ScheduleHeader[]> {
-  return listSchedules(accountId, filters)
+  const page = pagination?.page ?? 1
+  const limit = pagination?.limit ?? 25
+  return listSchedules(accountId, filters, page, limit)
+}
+
+export async function count(
+  accountId: number,
+  filters: SchedulesListFilters
+): Promise<number> {
+  return countSchedules(accountId, filters)
+}
+
+export async function searchSheetOptions(
+  accountId: number,
+  params: { q: string; limit: number }
+): Promise<SheetOptionRow[]> {
+  return repoSearchSheetOptions(accountId, params.q, params.limit)
+}
+
+export async function searchFacilityOptions(
+  accountId: number,
+  params: { q: string; limit: number }
+): Promise<FacilityOptionRow[]> {
+  return repoSearchFacilityOptions(accountId, params.q, params.limit)
+}
+
+export async function searchSpaceOptions(
+  accountId: number,
+  params: { facilityId: number; q: string; limit: number }
+): Promise<SpaceOptionRow[]> {
+  return repoSearchSpaceOptions(accountId, params.facilityId, params.q, params.limit)
+}
+
+export async function searchSystemOptions(
+  accountId: number,
+  params: { facilityId: number; q: string; limit: number }
+): Promise<SystemOptionRow[]> {
+  return repoSearchSystemOptions(accountId, params.facilityId, params.q, params.limit)
 }
 
 export async function getDetail(
@@ -42,17 +92,52 @@ export async function createSchedule(
   body: CreateScheduleBody,
   userId: number
 ): Promise<ScheduleHeader> {
-  const scope = body.scope ?? null
   const clientId = body.clientId ?? null
   const projectId = body.projectId ?? null
+  const facilityId = body.facilityId ?? null
+  const spaceId = body.spaceId ?? null
+  const systemId = body.systemId ?? null
+
+  // Validation: if spaceId or systemId provided, facilityId must also be provided
+  if ((spaceId != null || systemId != null) && facilityId == null) {
+    throw new AppError('FacilityID is required when SpaceID or SystemID is provided', 400)
+  }
+
+  // Validate facility belongs to account
+  if (facilityId != null) {
+    const belongs = await facilityBelongsToAccount(facilityId, accountId)
+    if (!belongs) {
+      throw new AppError('Facility not found or does not belong to account', 404)
+    }
+  }
+
+  // Validate space belongs to account and facility
+  if (spaceId != null && facilityId != null) {
+    const belongs = await spaceBelongsToAccountAndFacility(spaceId, accountId, facilityId)
+    if (!belongs) {
+      throw new AppError('Space not found or does not belong to facility', 404)
+    }
+  }
+
+  // Validate system belongs to account and facility
+  if (systemId != null && facilityId != null) {
+    const belongs = await systemBelongsToAccountAndFacility(systemId, accountId, facilityId)
+    if (!belongs) {
+      throw new AppError('System not found or does not belong to facility', 404)
+    }
+  }
+
   return repoCreateSchedule({
     accountId,
     disciplineId: body.disciplineId,
     subtypeId: body.subtypeId,
     name: body.name,
-    scope,
+    ...(body.scope !== undefined && { scope: body.scope }),
     clientId,
     projectId,
+    ...(body.facilityId !== undefined && { facilityId }),
+    ...(body.spaceId !== undefined && { spaceId }),
+    ...(body.systemId !== undefined && { systemId }),
     createdBy: userId,
     updatedBy: userId,
   })
@@ -68,11 +153,49 @@ export async function patchSchedule(
   if (!schedule) {
     throw new AppError('Schedule not found', 404)
   }
+
+  // Determine facilityId: use provided value, or existing schedule value, or null
+  const facilityId = body.facilityId !== undefined ? body.facilityId : schedule.facilityId
+  const spaceId = body.spaceId !== undefined ? body.spaceId : null
+  const systemId = body.systemId !== undefined ? body.systemId : null
+
+  // Validation: if spaceId or systemId provided, facilityId must also be provided
+  if ((spaceId != null || systemId != null) && facilityId == null) {
+    throw new AppError('FacilityID is required when SpaceID or SystemID is provided', 400)
+  }
+
+  // Validate facility belongs to account (if provided)
+  if (body.facilityId !== undefined && body.facilityId != null) {
+    const belongs = await facilityBelongsToAccount(body.facilityId, accountId)
+    if (!belongs) {
+      throw new AppError('Facility not found or does not belong to account', 404)
+    }
+  }
+
+  // Validate space belongs to account and facility (if provided)
+  if (body.spaceId !== undefined && body.spaceId != null && facilityId != null) {
+    const belongs = await spaceBelongsToAccountAndFacility(body.spaceId, accountId, facilityId)
+    if (!belongs) {
+      throw new AppError('Space not found or does not belong to facility', 404)
+    }
+  }
+
+  // Validate system belongs to account and facility (if provided)
+  if (body.systemId !== undefined && body.systemId != null && facilityId != null) {
+    const belongs = await systemBelongsToAccountAndFacility(body.systemId, accountId, facilityId)
+    if (!belongs) {
+      throw new AppError('System not found or does not belong to facility', 404)
+    }
+  }
+
   await repoUpdateSchedule(
     accountId,
     scheduleId,
     body.name,
     body.scope,
+    body.facilityId,
+    body.spaceId,
+    body.systemId,
     userId
   )
 }
