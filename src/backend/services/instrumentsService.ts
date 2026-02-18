@@ -10,10 +10,12 @@ import {
   linkToSheet,
   unlinkFromSheet,
   linkExists,
+  listActiveTagRulesByAccount,
   type InstrumentRow,
   type InstrumentLinkedToSheetRow,
   type CreateInstrumentInput,
   type UpdateInstrumentInput,
+  type InstrumentTagRuleRow,
 } from '../repositories/instrumentsRepository'
 
 /**
@@ -24,6 +26,103 @@ export function normalizeTag(input: string): string {
   s = s.replace(/\s+/g, ' ').trim()
   s = s.replace(/\s*-\s*/g, '-').replace(/\s*\/\s*/g, '/')
   return s.toUpperCase()
+}
+
+function validateTagAgainstRule(tag: string, tagNorm: string, rule: InstrumentTagRuleRow): void {
+  // Prefix validation
+  if (rule.prefix) {
+    const prefixUpper = rule.prefix.toUpperCase()
+    if (!tagNorm.startsWith(prefixUpper)) {
+      throw new AppError(`Instrument tag must start with "${rule.prefix}"`, 400)
+    }
+
+    // Separator validation (if prefix exists)
+    if (rule.separator) {
+      const expectedStart = prefixUpper + rule.separator
+      if (!tagNorm.startsWith(expectedStart)) {
+        throw new AppError(`Instrument tag must start with "${rule.prefix}${rule.separator}"`, 400)
+      }
+    }
+  }
+
+  // AllowedAreaCodes validation
+  if (rule.allowedAreaCodes) {
+    const areaCodes = rule.allowedAreaCodes
+      .split(',')
+      .map((code: string) => code.trim().toUpperCase())
+      .filter((code: string) => code.length > 0)
+    if (areaCodes.length > 0) {
+      let matched = false
+      for (const areaCode of areaCodes) {
+        const expectedPrefix = rule.separator
+          ? areaCode + rule.separator
+          : areaCode
+        if (tagNorm.startsWith(expectedPrefix)) {
+          matched = true
+          break
+        }
+      }
+      if (!matched) {
+        const codesList = areaCodes.join(', ')
+        throw new AppError(
+          `Instrument tag must start with one of: ${codesList}${rule.separator ? rule.separator : ''}`,
+          400
+        )
+      }
+    }
+  }
+
+  // MinNumberDigits / MaxNumberDigits validation
+  if (rule.minNumberDigits !== null || rule.maxNumberDigits !== null) {
+    const digitMatch = tagNorm.match(/\d+$/)
+    if (!digitMatch) {
+      throw new AppError('Instrument tag must end with digits', 400)
+    }
+    const digitCount = digitMatch[0].length
+    if (rule.minNumberDigits !== null && digitCount < rule.minNumberDigits) {
+      throw new AppError(
+        `Instrument tag must have at least ${rule.minNumberDigits} trailing digits`,
+        400
+      )
+    }
+    if (rule.maxNumberDigits !== null && digitCount > rule.maxNumberDigits) {
+      throw new AppError(
+        `Instrument tag must have at most ${rule.maxNumberDigits} trailing digits`,
+        400
+      )
+    }
+  }
+
+  // RegexPattern validation
+  if (rule.regexPattern) {
+    let regex: RegExp
+    try {
+      regex = new RegExp(rule.regexPattern)
+    } catch {
+      throw new AppError('Instrument tag rules are misconfigured', 500)
+    }
+    if (!regex.test(tagNorm)) {
+      throw new AppError('Instrument tag does not match required format', 400)
+    }
+  }
+}
+
+async function validateInstrumentTag(
+  accountId: number,
+  tag: string,
+  tagNorm: string
+): Promise<void> {
+  const rules = await listActiveTagRulesByAccount(accountId)
+  if (rules.length === 0) {
+    return // No rules = no validation
+  }
+  if (rules.length > 1) {
+    throw new AppError(
+      'Multiple active instrument tag rules found. Please keep only one active rule per account.',
+      400
+    )
+  }
+  validateTagAgainstRule(tag, tagNorm, rules[0])
 }
 
 export type { InstrumentRow, InstrumentLinkedToSheetRow }
@@ -51,6 +150,7 @@ export async function createInstrument(
     throw new AppError('Instrument tag is required', 400)
   }
   const instrumentTagNorm = normalizeTag(tag)
+  await validateInstrumentTag(accountId, tag, instrumentTagNorm)
   const createInput: CreateInstrumentInput = {
     instrumentTag: tag,
     instrumentTagNorm,
@@ -77,6 +177,9 @@ export async function updateInstrument(
   }
   const instrumentTag = input.instrumentTag !== undefined ? input.instrumentTag.trim() : existing.instrumentTag
   const instrumentTagNorm = instrumentTag ? normalizeTag(instrumentTag) : (existing.instrumentTagNorm ?? '')
+  if (input.instrumentTag !== undefined) {
+    await validateInstrumentTag(accountId, instrumentTag, instrumentTagNorm)
+  }
   const updateInput: UpdateInstrumentInput = {
     instrumentTag,
     instrumentTagNorm,
@@ -100,11 +203,13 @@ export async function listInstrumentsLinkedToSheet(
   accountId: number,
   sheetId: number
 ): Promise<InstrumentLinkedToSheetRow[]> {
+  const rows = await listLinkedToSheet(accountId, sheetId)
+  if (rows.length > 0) return rows
   const belongs = await sheetBelongsToAccount(sheetId, accountId)
   if (!belongs) {
     throw new AppError('Sheet not found or does not belong to account', 404)
   }
-  return listLinkedToSheet(accountId, sheetId)
+  return []
 }
 
 export async function linkInstrumentToSheet(
