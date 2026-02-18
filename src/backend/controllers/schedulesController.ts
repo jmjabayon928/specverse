@@ -32,25 +32,108 @@ const columnKeySchema = z
     { message: 'columnKey must contain letters/numbers and normalize to 1-64 chars' }
   )
 
+/** Reusable: optional string from query -> number | undefined, valid positive integer when present. */
+const optionalQueryIntSchema = z
+  .union([z.string(), z.undefined()])
+  .optional()
+  .transform(s => (s != null && s !== '' ? Number(s) : undefined))
+  .refine(v => v === undefined || (Number.isInteger(v) && v >= 1), {
+    message: 'must be a positive integer',
+  })
+
 const listQuerySchema = z.object({
-  clientId: z.string().optional().transform(s => (s ? Number(s) : undefined)),
-  projectId: z.string().optional().transform(s => (s ? Number(s) : undefined)),
-  disciplineId: z.string().optional().transform(s => (s ? Number(s) : undefined)),
-  subtypeId: z.string().optional().transform(s => (s ? Number(s) : undefined)),
+  clientId: optionalQueryIntSchema,
+  projectId: optionalQueryIntSchema,
+  disciplineId: optionalQueryIntSchema,
+  subtypeId: optionalQueryIntSchema,
+  page: z.string().optional().transform(s => (s != null && s !== '' ? Number(s) : undefined)),
+  limit: z.string().optional().transform(s => (s != null && s !== '' ? Number(s) : undefined)),
 })
+
+const countQuerySchema = z.object({
+  clientId: optionalQueryIntSchema,
+  projectId: optionalQueryIntSchema,
+  disciplineId: optionalQueryIntSchema,
+  subtypeId: optionalQueryIntSchema,
+})
+
+const sheetOptionsQuerySchema = z.object({
+  q: z
+    .string()
+    .optional()
+    .transform(s => (s != null ? s.trim() : undefined)),
+  limit: z
+    .union([z.string(), z.undefined()])
+    .optional()
+    .transform(s => (s != null && s !== '' ? Number(s) : undefined)),
+})
+
+const facilityOptionsQuerySchema = z.object({
+  q: z
+    .string()
+    .optional()
+    .transform(s => (s != null ? s.trim() : undefined)),
+  limit: z
+    .union([z.string(), z.undefined()])
+    .optional()
+    .transform(s => (s != null && s !== '' ? Number(s) : undefined)),
+})
+
+const spaceOptionsQuerySchema = z.object({
+  facilityId: z
+    .union([z.string(), z.undefined()])
+    .transform(s => (s != null && s !== '' ? Number(s) : undefined))
+    .refine(v => v !== undefined && Number.isInteger(v) && v >= 1, {
+      message: 'facilityId must be a positive integer',
+    }),
+  q: z
+    .string()
+    .optional()
+    .transform(s => (s != null ? s.trim() : undefined)),
+  limit: z
+    .union([z.string(), z.undefined()])
+    .optional()
+    .transform(s => (s != null && s !== '' ? Number(s) : undefined)),
+})
+
+const systemOptionsQuerySchema = z.object({
+  facilityId: z
+    .union([z.string(), z.undefined()])
+    .transform(s => (s != null && s !== '' ? Number(s) : undefined))
+    .refine(v => v !== undefined && Number.isInteger(v) && v >= 1, {
+      message: 'facilityId must be a positive integer',
+    }),
+  q: z
+    .string()
+    .optional()
+    .transform(s => (s != null ? s.trim() : undefined)),
+  limit: z
+    .union([z.string(), z.undefined()])
+    .optional()
+    .transform(s => (s != null && s !== '' ? Number(s) : undefined)),
+})
+
+const createScopeSchema = z.enum(['System', 'Facility', 'Project']).optional()
+const patchScopeSchema = z.enum(['System', 'Facility', 'Project']).nullable().optional()
 
 const createBodySchema = z.object({
   name: z.string().trim().min(1, 'name required'),
-  scope: z.union([z.string(), z.null()]).optional(),
+  scope: createScopeSchema,
   disciplineId: z.number().int().positive(),
   subtypeId: z.number().int().positive(),
   clientId: z.number().int().positive().nullable().optional(),
   projectId: z.number().int().positive().nullable().optional(),
+  facilityId: z.number().int().positive().nullable().optional(),
+  spaceId: z.number().int().positive().nullable().optional(),
+  systemId: z.number().int().positive().nullable().optional(),
 })
 
 const patchBodySchema = z.object({
   name: z.string().trim().min(1).optional(),
-  scope: z.union([z.string(), z.null()]).optional(),
+  scope: patchScopeSchema,
+  facilityId: z.number().int().positive().nullable().optional(),
+  spaceId: z.number().int().positive().nullable().optional(),
+  systemId: z.number().int().positive().nullable().optional(),
 })
 
 const enumOptionsJsonSchema = z
@@ -133,8 +216,194 @@ export const listSchedules: RequestHandler = async (req, res, next) => {
       disciplineId: parsed.data.disciplineId,
       subtypeId: parsed.data.subtypeId,
     }
-    const list = await schedulesService.list(accountId, filters)
+    const page = parsed.data.page ?? 1
+    const limit = parsed.data.limit ?? 25
+    if (
+      !Number.isInteger(page) ||
+      page < 1 ||
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    ) {
+      throw new AppError('Invalid page/limit', 400)
+    }
+    const list = await schedulesService.list(accountId, filters, { page, limit })
     res.status(200).json(list)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const searchSheetOptions: RequestHandler = async (req, res, next) => {
+  try {
+    const accountId = mustGetAccountId(req, next)
+    if (accountId == null) return
+
+    const parsed = sheetOptionsQuerySchema.safeParse(req.query)
+    if (!parsed.success) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    const q = parsed.data.q
+    if (q == null || q === '' || q.length < 2) {
+      res.status(200).json({ items: [], total: 0 })
+      return
+    }
+    if (q.length > 60) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    const limitRaw = parsed.data.limit ?? 20
+    if (!Number.isInteger(limitRaw) || limitRaw < 1 || limitRaw > 50) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    const limit = limitRaw
+    const items = await schedulesService.searchSheetOptions(accountId, { q, limit })
+    const mapped = items.map(row => ({
+      sheetId: row.sheetId,
+      sheetName: row.sheetName,
+      status: row.status,
+      disciplineName: row.disciplineName ?? null,
+      subtypeName: row.subtypeName ?? null,
+    }))
+    res.status(200).json({ items: mapped, total: mapped.length })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const searchFacilityOptions: RequestHandler = async (req, res, next) => {
+  try {
+    const accountId = mustGetAccountId(req, next)
+    if (accountId == null) return
+
+    const parsed = facilityOptionsQuerySchema.safeParse(req.query)
+    if (!parsed.success) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    const q = parsed.data.q
+    if (q == null || q === '' || q.length < 2) {
+      res.status(200).json({ items: [], total: 0 })
+      return
+    }
+    if (q.length > 60) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    const limitRaw = parsed.data.limit ?? 20
+    if (!Number.isInteger(limitRaw) || limitRaw < 1 || limitRaw > 50) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    const limit = limitRaw
+    const items = await schedulesService.searchFacilityOptions(accountId, { q, limit })
+    const mapped = items.map(row => ({
+      facilityId: row.facilityId,
+      facilityName: row.facilityName,
+    }))
+    res.status(200).json({ items: mapped, total: mapped.length })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const searchSpaceOptions: RequestHandler = async (req, res, next) => {
+  try {
+    const accountId = mustGetAccountId(req, next)
+    if (accountId == null) return
+
+    const parsed = spaceOptionsQuerySchema.safeParse(req.query)
+    if (!parsed.success) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    if (parsed.data.facilityId == null) {
+      throw new AppError('facilityId is required', 400)
+    }
+    const q = parsed.data.q
+    if (q == null || q === '' || q.length < 2) {
+      res.status(200).json({ items: [], total: 0 })
+      return
+    }
+    if (q.length > 60) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    const limitRaw = parsed.data.limit ?? 20
+    if (!Number.isInteger(limitRaw) || limitRaw < 1 || limitRaw > 50) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    const limit = limitRaw
+    const items = await schedulesService.searchSpaceOptions(accountId, {
+      facilityId: parsed.data.facilityId,
+      q,
+      limit,
+    })
+    const mapped = items.map(row => ({
+      spaceId: row.spaceId,
+      spaceName: row.spaceName,
+    }))
+    res.status(200).json({ items: mapped, total: mapped.length })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const searchSystemOptions: RequestHandler = async (req, res, next) => {
+  try {
+    const accountId = mustGetAccountId(req, next)
+    if (accountId == null) return
+
+    const parsed = systemOptionsQuerySchema.safeParse(req.query)
+    if (!parsed.success) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    if (parsed.data.facilityId == null) {
+      throw new AppError('facilityId is required', 400)
+    }
+    const q = parsed.data.q
+    if (q == null || q === '' || q.length < 2) {
+      res.status(200).json({ items: [], total: 0 })
+      return
+    }
+    if (q.length > 60) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    const limitRaw = parsed.data.limit ?? 20
+    if (!Number.isInteger(limitRaw) || limitRaw < 1 || limitRaw > 50) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    const limit = limitRaw
+    const items = await schedulesService.searchSystemOptions(accountId, {
+      facilityId: parsed.data.facilityId,
+      q,
+      limit,
+    })
+    const mapped = items.map(row => ({
+      systemId: row.systemId,
+      systemName: row.systemName,
+    }))
+    res.status(200).json({ items: mapped, total: mapped.length })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const countSchedules: RequestHandler = async (req, res, next) => {
+  try {
+    const accountId = mustGetAccountId(req, next)
+    if (accountId == null) return
+
+    if ('page' in req.query || 'limit' in req.query) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+
+    const parsed = countQuerySchema.safeParse(req.query)
+    if (!parsed.success) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+    const filters = {
+      clientId: parsed.data.clientId,
+      projectId: parsed.data.projectId,
+      disciplineId: parsed.data.disciplineId,
+      subtypeId: parsed.data.subtypeId,
+    }
+    const total = await schedulesService.count(accountId, filters)
+    res.status(200).json({ total })
   } catch (error) {
     next(error)
   }
@@ -153,7 +422,13 @@ export const createSchedule: RequestHandler = async (req, res, next) => {
     if (userId == null || !Number.isFinite(userId)) {
       throw new AppError('Unauthorized', 401)
     }
-    const schedule = await schedulesService.createSchedule(accountId, parsed.data, userId)
+    const createPayload = { ...parsed.data }
+    if (parsed.data.scope !== undefined) {
+      createPayload.scope = parsed.data.scope
+    } else {
+      delete createPayload.scope
+    }
+    const schedule = await schedulesService.createSchedule(accountId, createPayload, userId)
     res.status(201).json(schedule)
   } catch (error) {
     next(error)

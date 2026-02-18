@@ -22,7 +22,7 @@ export default function ScheduleDetailPage() {
 
   if (loading) {
     return (
-      <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
+      <SecurePage requiredPermission={PERMISSIONS.SCHEDULES_VIEW}>
         <div className="p-6">Loading…</div>
       </SecurePage>
     )
@@ -30,14 +30,14 @@ export default function ScheduleDetailPage() {
 
   if (!Number.isFinite(scheduleId) || scheduleId <= 0) {
     return (
-      <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
+      <SecurePage requiredPermission={PERMISSIONS.SCHEDULES_VIEW}>
         <div className="p-6 text-red-600">Invalid schedule ID</div>
       </SecurePage>
     )
   }
 
   return (
-    <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
+    <SecurePage requiredPermission={PERMISSIONS.SCHEDULES_VIEW}>
       <div className="p-6 space-y-4">
         <div className="flex items-center gap-2">
           <Link href="/schedules" className="text-blue-600 underline">

@@ -168,13 +168,42 @@ export function createAuthMiddlewareMock(args: {
     next()
   }
 
-  const requirePermissionFactory = (_permissionKey: string): RequestHandler => {
+  const requirePermissionFactory = (permissionKey: string): RequestHandler => {
     if (mode === 'passthrough') {
       return passthrough
     }
-    // token mode: just pass through, don't set default user
-    return (_req, _res, next) => {
-      next()
+    // token mode: run same logic as real requirePermission but use permissionQueries (mocked in tests)
+    return async (req, res, next) => {
+      try {
+        if (!req.user) {
+          next(new AppError('Missing user in request', 403))
+          return
+        }
+        const roleName =
+          typeof req.user.role === 'string' ? (req.user.role ?? '').trim().toLowerCase() : ''
+        const isAccountAdmin = req.user.roleId === 1 || roleName === 'admin'
+        if (isAccountAdmin) {
+          next()
+          return
+        }
+        if (!req.user.accountId) {
+          next(new AppError('Missing account context', 403))
+          return
+        }
+        const { checkUserPermission } = require('../../src/backend/database/permissionQueries')
+        const hasPermission = await checkUserPermission(
+          req.user.userId,
+          req.user.accountId,
+          permissionKey
+        )
+        if (!hasPermission) {
+          next(new AppError('Permission denied', 403))
+          return
+        }
+        next()
+      } catch (error) {
+        next(error)
+      }
     }
   }
 

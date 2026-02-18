@@ -14,18 +14,76 @@ export type SchedulesListFilters = {
   projectId?: number
   disciplineId?: number
   subtypeId?: number
+  facilityId?: number
+  spaceId?: number
+  systemId?: number
 }
 
 export async function listSchedules(
   accountId: number,
-  filters: SchedulesListFilters
+  filters: SchedulesListFilters,
+  page: number = 1,
+  limit: number = 25
 ): Promise<ScheduleHeader[]> {
   const pool = await poolPromise
+  const offset = (page - 1) * limit
   let query = `
     SELECT ScheduleID AS scheduleId, AccountID AS accountId, DisciplineID AS disciplineId,
            SubtypeID AS subtypeId, Name AS name, Scope AS scope, ClientID AS clientId,
-           ProjectID AS projectId, CreatedAt AS createdAt, CreatedBy AS createdBy,
+           ProjectID AS projectId, FacilityID AS facilityId, SpaceID AS spaceId,
+           SystemID AS systemId, CreatedAt AS createdAt, CreatedBy AS createdBy,
            UpdatedAt AS updatedAt, UpdatedBy AS updatedBy
+    FROM dbo.Schedules
+    WHERE AccountID = @AccountID
+  `
+  const request = pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('Offset', sql.Int, offset)
+    .input('Limit', sql.Int, limit)
+
+  if (filters.clientId != null) {
+    query += ' AND ClientID = @ClientID'
+    request.input('ClientID', sql.Int, filters.clientId)
+  }
+  if (filters.projectId != null) {
+    query += ' AND ProjectID = @ProjectID'
+    request.input('ProjectID', sql.Int, filters.projectId)
+  }
+  if (filters.disciplineId != null) {
+    query += ' AND DisciplineID = @DisciplineID'
+    request.input('DisciplineID', sql.Int, filters.disciplineId)
+  }
+  if (filters.subtypeId != null) {
+    query += ' AND SubtypeID = @SubtypeID'
+    request.input('SubtypeID', sql.Int, filters.subtypeId)
+  }
+  if (filters.facilityId != null) {
+    query += ' AND FacilityID = @FacilityID'
+    request.input('FacilityID', sql.Int, filters.facilityId)
+  }
+  if (filters.spaceId != null) {
+    query += ' AND SpaceID = @SpaceID'
+    request.input('SpaceID', sql.Int, filters.spaceId)
+  }
+  if (filters.systemId != null) {
+    query += ' AND SystemID = @SystemID'
+    request.input('SystemID', sql.Int, filters.systemId)
+  }
+
+  query += ' ORDER BY Name, ScheduleID OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY'
+
+  const result = await request.query(query)
+  return (result.recordset ?? []) as ScheduleHeader[]
+}
+
+export async function countSchedules(
+  accountId: number,
+  filters: SchedulesListFilters
+): Promise<number> {
+  const pool = await poolPromise
+  let query = `
+    SELECT COUNT(*) AS total
     FROM dbo.Schedules
     WHERE AccountID = @AccountID
   `
@@ -47,11 +105,222 @@ export async function listSchedules(
     query += ' AND SubtypeID = @SubtypeID'
     request.input('SubtypeID', sql.Int, filters.subtypeId)
   }
+  if (filters.facilityId != null) {
+    query += ' AND FacilityID = @FacilityID'
+    request.input('FacilityID', sql.Int, filters.facilityId)
+  }
+  if (filters.spaceId != null) {
+    query += ' AND SpaceID = @SpaceID'
+    request.input('SpaceID', sql.Int, filters.spaceId)
+  }
+  if (filters.systemId != null) {
+    query += ' AND SystemID = @SystemID'
+    request.input('SystemID', sql.Int, filters.systemId)
+  }
 
-  query += ' ORDER BY Name, ScheduleID'
+  const result = await request.query<{ total: number }>(query)
+  const row = result.recordset?.[0]
+  return row?.total != null ? Number(row.total) : 0
+}
 
-  const result = await request.query(query)
-  return (result.recordset ?? []) as ScheduleHeader[]
+export type SheetOptionRow = {
+  sheetId: number
+  sheetName: string
+  status: string
+  disciplineName: string | null
+  subtypeName: string | null
+}
+
+/** Escape LIKE special chars so @Like can be used with ESCAPE '\\'. */
+function escapeLike(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+    .replace(/\[/g, '\\[')
+}
+
+export async function searchSheetOptions(
+  accountId: number,
+  q: string,
+  limit: number
+): Promise<SheetOptionRow[]> {
+  const pool = await poolPromise
+  const escaped = escapeLike(q)
+  const likePattern = `%${escaped}%`
+  const includeDesc = q.length >= 3
+  const descPredicate = includeDesc ? ' OR s.SheetDesc LIKE @Like ESCAPE \'\\\' ' : ''
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('Limit', sql.Int, limit)
+    .input('Like', sql.NVarChar(400), likePattern)
+    .query<SheetOptionRow>(`
+    SELECT TOP (@Limit)
+      s.SheetID AS sheetId,
+      s.SheetName AS sheetName,
+      s.Status AS status,
+      d.Name AS disciplineName,
+      st.Name AS subtypeName
+    FROM dbo.Sheets s
+    LEFT JOIN dbo.Disciplines d ON d.DisciplineID = s.DisciplineID
+    LEFT JOIN dbo.DatasheetSubtypes st ON st.SubtypeID = s.SubtypeID
+    WHERE s.AccountID = @AccountID
+      AND s.IsTemplate = 0
+      AND (s.SheetName LIKE @Like ESCAPE '\\'${descPredicate})
+    ORDER BY s.SheetName ASC, s.SheetID ASC
+  `)
+  return (result.recordset ?? []) as SheetOptionRow[]
+}
+
+export type FacilityOptionRow = {
+  facilityId: number
+  facilityName: string
+}
+
+export type SpaceOptionRow = {
+  spaceId: number
+  spaceName: string
+}
+
+export type SystemOptionRow = {
+  systemId: number
+  systemName: string
+}
+
+export async function searchFacilityOptions(
+  accountId: number,
+  q: string,
+  limit: number
+): Promise<FacilityOptionRow[]> {
+  const pool = await poolPromise
+  const escaped = escapeLike(q)
+  const likePattern = `%${escaped}%`
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('Limit', sql.Int, limit)
+    .input('Like', sql.NVarChar(400), likePattern)
+    .query<FacilityOptionRow>(`
+    SELECT TOP (@Limit)
+      FacilityID AS facilityId,
+      FacilityName AS facilityName
+    FROM dbo.Facilities
+    WHERE AccountID = @AccountID
+      AND Status = 'Active'
+      AND FacilityName LIKE @Like ESCAPE '\\'
+    ORDER BY FacilityName ASC, FacilityID ASC
+  `)
+  return (result.recordset ?? []) as FacilityOptionRow[]
+}
+
+export async function searchSpaceOptions(
+  accountId: number,
+  facilityId: number,
+  q: string,
+  limit: number
+): Promise<SpaceOptionRow[]> {
+  const pool = await poolPromise
+  const escaped = escapeLike(q)
+  const likePattern = `%${escaped}%`
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('FacilityID', sql.Int, facilityId)
+    .input('Limit', sql.Int, limit)
+    .input('Like', sql.NVarChar(400), likePattern)
+    .query<SpaceOptionRow>(`
+    SELECT TOP (@Limit)
+      SpaceID AS spaceId,
+      SpaceName AS spaceName
+    FROM dbo.FacilitySpaces
+    WHERE AccountID = @AccountID
+      AND FacilityID = @FacilityID
+      AND Status = 'Active'
+      AND SpaceName LIKE @Like ESCAPE '\\'
+    ORDER BY SpaceName ASC, SpaceID ASC
+  `)
+  return (result.recordset ?? []) as SpaceOptionRow[]
+}
+
+export async function searchSystemOptions(
+  accountId: number,
+  facilityId: number,
+  q: string,
+  limit: number
+): Promise<SystemOptionRow[]> {
+  const pool = await poolPromise
+  const escaped = escapeLike(q)
+  const likePattern = `%${escaped}%`
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('FacilityID', sql.Int, facilityId)
+    .input('Limit', sql.Int, limit)
+    .input('Like', sql.NVarChar(400), likePattern)
+    .query<SystemOptionRow>(`
+    SELECT TOP (@Limit)
+      SystemID AS systemId,
+      SystemName AS systemName
+    FROM dbo.FacilitySystems
+    WHERE AccountID = @AccountID
+      AND FacilityID = @FacilityID
+      AND Status = 'Active'
+      AND SystemName LIKE @Like ESCAPE '\\'
+    ORDER BY SystemName ASC, SystemID ASC
+  `)
+  return (result.recordset ?? []) as SystemOptionRow[]
+}
+
+export async function facilityBelongsToAccount(
+  facilityId: number,
+  accountId: number
+): Promise<boolean> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('FacilityID', sql.Int, facilityId)
+    .input('AccountID', sql.Int, accountId)
+    .query<{ Ex: number }>(`
+      SELECT 1 AS Ex FROM dbo.Facilities WHERE FacilityID = @FacilityID AND AccountID = @AccountID
+    `)
+  return (result.recordset?.length ?? 0) > 0
+}
+
+export async function spaceBelongsToAccountAndFacility(
+  spaceId: number,
+  accountId: number,
+  facilityId: number
+): Promise<boolean> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('SpaceID', sql.Int, spaceId)
+    .input('AccountID', sql.Int, accountId)
+    .input('FacilityID', sql.Int, facilityId)
+    .query<{ Ex: number }>(`
+      SELECT 1 AS Ex FROM dbo.FacilitySpaces
+      WHERE SpaceID = @SpaceID AND AccountID = @AccountID AND FacilityID = @FacilityID
+    `)
+  return (result.recordset?.length ?? 0) > 0
+}
+
+export async function systemBelongsToAccountAndFacility(
+  systemId: number,
+  accountId: number,
+  facilityId: number
+): Promise<boolean> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('SystemID', sql.Int, systemId)
+    .input('AccountID', sql.Int, accountId)
+    .input('FacilityID', sql.Int, facilityId)
+    .query<{ Ex: number }>(`
+      SELECT 1 AS Ex FROM dbo.FacilitySystems
+      WHERE SystemID = @SystemID AND AccountID = @AccountID AND FacilityID = @FacilityID
+    `)
+  return (result.recordset?.length ?? 0) > 0
 }
 
 export async function getScheduleById(
@@ -66,7 +335,8 @@ export async function getScheduleById(
     .query(`
       SELECT ScheduleID AS scheduleId, AccountID AS accountId, DisciplineID AS disciplineId,
              SubtypeID AS subtypeId, Name AS name, Scope AS scope, ClientID AS clientId,
-             ProjectID AS projectId, CreatedAt AS createdAt, CreatedBy AS createdBy,
+             ProjectID AS projectId, FacilityID AS facilityId, SpaceID AS spaceId,
+             SystemID AS systemId, CreatedAt AS createdAt, CreatedBy AS createdBy,
              UpdatedAt AS updatedAt, UpdatedBy AS updatedBy
       FROM dbo.Schedules
       WHERE ScheduleID = @ScheduleID AND AccountID = @AccountID
@@ -162,35 +432,75 @@ export type CreateScheduleInput = {
   disciplineId: number
   subtypeId: number
   name: string
-  scope: string | null
+  scope?: string | null
   clientId: number | null
   projectId: number | null
+  facilityId?: number | null
+  spaceId?: number | null
+  systemId?: number | null
   createdBy: number
   updatedBy: number
 }
 
 export async function createSchedule(input: CreateScheduleInput): Promise<ScheduleHeader> {
   const pool = await poolPromise
-  const result = await pool
+  const includeScope = input.scope !== undefined
+  const includeFacility = input.facilityId !== undefined
+  const includeSpace = input.spaceId !== undefined
+  const includeSystem = input.systemId !== undefined
+  const request = pool
     .request()
     .input('AccountID', sql.Int, input.accountId)
     .input('DisciplineID', sql.Int, input.disciplineId)
     .input('SubtypeID', sql.Int, input.subtypeId)
     .input('Name', sql.NVarChar(500), input.name)
-    .input('Scope', sql.NVarChar(sql.MAX), input.scope)
     .input('ClientID', sql.Int, input.clientId)
     .input('ProjectID', sql.Int, input.projectId)
     .input('CreatedBy', sql.Int, input.createdBy)
     .input('UpdatedBy', sql.Int, input.updatedBy)
-    .query(`
-      INSERT INTO dbo.Schedules (AccountID, DisciplineID, SubtypeID, Name, Scope, ClientID, ProjectID, CreatedBy, UpdatedBy)
-      OUTPUT INSERTED.ScheduleID AS scheduleId, INSERTED.AccountID AS accountId,
-             INSERTED.DisciplineID AS disciplineId, INSERTED.SubtypeID AS subtypeId,
-             INSERTED.Name AS name, INSERTED.Scope AS scope, INSERTED.ClientID AS clientId,
-             INSERTED.ProjectID AS projectId, INSERTED.CreatedAt AS createdAt,
-             INSERTED.CreatedBy AS createdBy, INSERTED.UpdatedAt AS updatedAt, INSERTED.UpdatedBy AS updatedBy
-      VALUES (@AccountID, @DisciplineID, @SubtypeID, @Name, @Scope, @ClientID, @ProjectID, @CreatedBy, @UpdatedBy)
-    `)
+  if (includeScope) {
+    request.input('Scope', sql.NVarChar(sql.MAX), input.scope)
+  }
+  if (includeFacility) {
+    request.input('FacilityID', sql.Int, input.facilityId)
+  }
+  if (includeSpace) {
+    request.input('SpaceID', sql.Int, input.spaceId)
+  }
+  if (includeSystem) {
+    request.input('SystemID', sql.Int, input.systemId)
+  }
+  const colParts = ['AccountID', 'DisciplineID', 'SubtypeID', 'Name', 'ClientID', 'ProjectID', 'CreatedBy', 'UpdatedBy']
+  const valParts = ['@AccountID', '@DisciplineID', '@SubtypeID', '@Name', '@ClientID', '@ProjectID', '@CreatedBy', '@UpdatedBy']
+  if (includeScope) {
+    colParts.push('Scope')
+    valParts.push('@Scope')
+  }
+  if (includeFacility) {
+    colParts.push('FacilityID')
+    valParts.push('@FacilityID')
+  }
+  if (includeSpace) {
+    colParts.push('SpaceID')
+    valParts.push('@SpaceID')
+  }
+  if (includeSystem) {
+    colParts.push('SystemID')
+    valParts.push('@SystemID')
+  }
+  const columns = colParts.join(', ')
+  const values = valParts.join(', ')
+  const result = await request.query(`
+    INSERT INTO dbo.Schedules (${columns})
+    OUTPUT INSERTED.ScheduleID AS scheduleId, INSERTED.AccountID AS accountId,
+           INSERTED.DisciplineID AS disciplineId, INSERTED.SubtypeID AS subtypeId,
+           INSERTED.Name AS name, INSERTED.Scope AS scope, INSERTED.ClientID AS clientId,
+           INSERTED.ProjectID AS projectId, INSERTED.FacilityID AS facilityId,
+           INSERTED.SpaceID AS spaceId, INSERTED.SystemID AS systemId,
+           INSERTED.CreatedAt AS createdAt, INSERTED.CreatedBy AS createdBy,
+           INSERTED.UpdatedAt AS updatedAt, INSERTED.UpdatedBy AS updatedBy
+    VALUES (${values})
+  `)
   return result.recordset[0] as ScheduleHeader
 }
 
@@ -199,10 +509,19 @@ export async function updateSchedule(
   scheduleId: number,
   name: string | undefined,
   scope: string | null | undefined,
+  facilityId: number | null | undefined,
+  spaceId: number | null | undefined,
+  systemId: number | null | undefined,
   updatedBy: number
 ): Promise<boolean> {
   const pool = await poolPromise
-  if (name === undefined && scope === undefined) {
+  if (
+    name === undefined &&
+    scope === undefined &&
+    facilityId === undefined &&
+    spaceId === undefined &&
+    systemId === undefined
+  ) {
     return true
   }
   let query = 'UPDATE dbo.Schedules SET UpdatedBy = @UpdatedBy, UpdatedAt = GETDATE()'
@@ -218,6 +537,18 @@ export async function updateSchedule(
   if (scope !== undefined) {
     query += ', Scope = @Scope'
     request.input('Scope', sql.NVarChar(sql.MAX), scope)
+  }
+  if (facilityId !== undefined) {
+    query += ', FacilityID = @FacilityID'
+    request.input('FacilityID', sql.Int, facilityId)
+  }
+  if (spaceId !== undefined) {
+    query += ', SpaceID = @SpaceID'
+    request.input('SpaceID', sql.Int, spaceId)
+  }
+  if (systemId !== undefined) {
+    query += ', SystemID = @SystemID'
+    request.input('SystemID', sql.Int, systemId)
   }
   query += ' WHERE ScheduleID = @ScheduleID AND AccountID = @AccountID'
   const result = await request.query(query)
