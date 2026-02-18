@@ -10,14 +10,14 @@ export default function SchedulesPage() {
 
   if (loading) {
     return (
-      <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
+      <SecurePage requiredPermission={PERMISSIONS.SCHEDULES_VIEW}>
         <div className="p-6">Loading…</div>
       </SecurePage>
     )
   }
 
   return (
-    <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
+    <SecurePage requiredPermission={PERMISSIONS.SCHEDULES_VIEW}>
       <div className="p-6 space-y-4">
         <h1 className="text-2xl font-bold">Equipment Schedules</h1>
         <SchedulesList />
