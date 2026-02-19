@@ -17,6 +17,16 @@ import {
   type UpdateInstrumentInput,
   type InstrumentTagRuleRow,
 } from '../repositories/instrumentsRepository'
+import {
+  getSnapshot,
+  enqueueSnapshotRebuild,
+  listSheetIdsLinkedToInstrument,
+} from '../repositories/sheetInstrumentSnapshotsRepository'
+import {
+  parseAndValidateSnapshot,
+  SHEET_INSTRUMENT_SNAPSHOT_VERSION,
+} from './sheetInstrumentSnapshotsService'
+import { kickSheetInstrumentSnapshotWorker } from '../workers/sheetInstrumentSnapshotWorker'
 
 /**
  * Lightweight tag normalization: trim, uppercase, collapse whitespace, remove spaces around '-' and '/'.
@@ -196,6 +206,13 @@ export async function updateInstrument(
   if (!updated) {
     throw new AppError('Instrument not found', 404)
   }
+  const sheetIds = await listSheetIdsLinkedToInstrument(accountId, instrumentId)
+  for (const sid of sheetIds) {
+    enqueueSnapshotRebuild(accountId, sid, 'instrument_update').catch(() => {})
+  }
+  if (sheetIds.length > 0) {
+    kickSheetInstrumentSnapshotWorker()
+  }
   return updated
 }
 
@@ -203,8 +220,25 @@ export async function listInstrumentsLinkedToSheet(
   accountId: number,
   sheetId: number
 ): Promise<InstrumentLinkedToSheetRow[]> {
+  let snapshot: Awaited<ReturnType<typeof getSnapshot>> = null
+  try {
+    snapshot = await getSnapshot(accountId, sheetId)
+  } catch {
+    // Snapshot DB error: treat as non-fatal, fall back to live query
+  }
+  const hadSnapshotRow = snapshot != null
+  if (snapshot != null && snapshot.buildVersion === SHEET_INSTRUMENT_SNAPSHOT_VERSION) {
+    const parsed = parseAndValidateSnapshot(snapshot.payloadJson, snapshot.buildVersion)
+    if (parsed != null) return parsed
+  }
+
   const rows = await listLinkedToSheet(accountId, sheetId)
-  if (rows.length > 0) return rows
+  if (rows.length > 0) {
+    const reason = hadSnapshotRow ? 'stale' : 'miss'
+    enqueueSnapshotRebuild(accountId, sheetId, reason).catch(() => {})
+    kickSheetInstrumentSnapshotWorker()
+    return rows
+  }
   const belongs = await sheetBelongsToAccount(sheetId, accountId)
   if (!belongs) {
     throw new AppError('Sheet not found or does not belong to account', 404)
@@ -232,6 +266,8 @@ export async function linkInstrumentToSheet(
     throw new AppError('Instrument is already linked to this datasheet', 409)
   }
   await linkToSheet(accountId, instrumentId, sheetId, linkRole, createdBy)
+  enqueueSnapshotRebuild(accountId, sheetId, 'link').catch(() => {})
+  kickSheetInstrumentSnapshotWorker()
 }
 
 export async function unlinkInstrumentFromSheet(
@@ -252,4 +288,6 @@ export async function unlinkInstrumentFromSheet(
   if (!removed) {
     throw new AppError('Link not found or already removed', 404)
   }
+  enqueueSnapshotRebuild(accountId, sheetId, 'unlink').catch(() => {})
+  kickSheetInstrumentSnapshotWorker()
 }
