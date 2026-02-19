@@ -17,6 +17,7 @@ const nextConfig: NextConfig = {
 
     return config;
   },
+  productionBrowserSourceMaps: true,
   async rewrites() {
     // If NEXT_PUBLIC_API_BASE_URL is set (VPS stage/prod), disable rewrites
     // Frontend will use same-origin requests via nginx gateway
