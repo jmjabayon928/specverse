@@ -52,10 +52,8 @@ const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: 'Dashboard',
+    path: '/dashboard',
     requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
-    subItems: [
-      { name: 'Overview & Stats', path: '/', pro: false }
-    ],
   },
   {
     icon: <DataSheetsIcon />,

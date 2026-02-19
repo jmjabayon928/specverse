@@ -42,8 +42,12 @@ export default function DashboardClient({ user }: Props) {
 
   return (
     <div className="p-4">
-      <PageContextBanner module="dashboards" />
-      <DemoExperienceCards />
+      <div className="bg-gradient-to-br from-gray-50 via-white to-blue-50/40 dark:from-gray-900 dark:via-gray-900 dark:to-blue-950/30 rounded-2xl mb-6">
+        <PageContextBanner module="dashboards" />
+      </div>
+      <div className="py-12 bg-gradient-to-b from-transparent via-gray-50/40 to-transparent dark:via-gray-900/30">
+        <DemoExperienceCards />
+      </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {showDatasheets && (
         <Card>

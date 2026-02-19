@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import Link from "next/link";
 import type { DemoAudience } from "@/config/demoGuide";
 import { demoGuide } from "@/config/demoGuide";
-import { Card, CardContent } from "@/components/ui/card";
 
 export default function DemoExperienceCards() {
   const [audience, setAudience] = useState<DemoAudience>(demoGuide.defaultAudience);
@@ -36,14 +35,18 @@ export default function DemoExperienceCards() {
           const secondaryLinks = card.links.filter((l) => l.kind !== "primary");
 
           return (
-            <Card key={card.id}>
-              <CardContent className="pt-6">
+            <div
+              key={card.id}
+              className="relative rounded-2xl border border-gray-200 bg-white shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ease-out dark:border-gray-700 dark:bg-gray-900 before:absolute before:inset-0 before:rounded-2xl before:bg-gradient-to-br before:from-white/60 before:to-transparent dark:before:from-white/10 before:pointer-events-none motion-reduce:transition-none motion-reduce:hover:transform-none"
+            >
+              <div className="px-6 pb-6 pt-6 relative z-10">
                 <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-xs font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
                   {card.icon}
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                   {copy.title}
                 </h3>
+                <div className="mt-3 h-1 w-12 rounded bg-blue-600/80" />
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                   {copy.oneLiner}
                 </p>
@@ -75,8 +78,8 @@ export default function DemoExperienceCards() {
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           );
         })}
       </div>
