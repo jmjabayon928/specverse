@@ -5,6 +5,8 @@ import React from "react";
 import type { UserSession } from "@/domain/auth/sessionTypes";
 import { PERMISSIONS } from "@/constants/permissions";
 import { Card, CardContent } from "@/components/ui/card";
+import PageContextBanner from "@/components/demo/PageContextBanner";
+import DemoExperienceCards from "@/components/demo/DemoExperienceCards";
 import dynamic from "next/dynamic";
 
 // Specific chart components
@@ -39,7 +41,10 @@ export default function DashboardClient({ user }: Props) {
   const hasAnyWidget = showDatasheets || showTemplates || showVerifications || showActiveUsers || showInventory || showEstimation;
 
   return (
-    <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    <div className="p-4">
+      <PageContextBanner module="dashboards" />
+      <DemoExperienceCards />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {showDatasheets && (
         <Card>
           <CardContent>
@@ -101,6 +106,7 @@ export default function DashboardClient({ user }: Props) {
           </CardContent>
         </Card>
       )}
+      </div>
     </div>
   );
 }

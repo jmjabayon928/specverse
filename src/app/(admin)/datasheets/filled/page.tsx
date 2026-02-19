@@ -10,6 +10,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { format } from 'date-fns';
 import SecurePage from '@/components/security/SecurePage';
+import PageContextBanner from '@/components/demo/PageContextBanner';
 import { PERMISSIONS } from '@/constants/permissions';
 import { useSession } from "@/hooks/useSession";
 import FilledSheetActions from '@/components/datasheets/filled/FilledSheetActions';
@@ -170,6 +171,7 @@ export default function FilledSheetListPage() {
 
   return (
     <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
+      <PageContextBanner module="datasheets" />
       {loading ? (
         <p className="text-center text-gray-500 py-4">Loading filled sheets...</p>
       ) : (

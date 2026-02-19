@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import PageContextBanner from "@/components/demo/PageContextBanner";
 import dynamic from "next/dynamic";
 import EstimationTable from "@/components/estimation/EstimationTable";
 
@@ -81,6 +82,7 @@ export default function EstimationDashboardPage() {
 
   return (
     <div className="space-y-6">
+        <PageContextBanner module="estimations" />
         <h1 className="text-2xl font-bold">Project Estimation Dashboard</h1>
 
         {/* Filter / Search / Create */}

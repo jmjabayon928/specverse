@@ -3,6 +3,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import SecurePage from '@/components/security/SecurePage'
+import PageContextBanner from '@/components/demo/PageContextBanner'
 import { PERMISSIONS } from '@/constants/permissions'
 
 type VerificationRecordRow = {
@@ -167,6 +168,7 @@ export default function VerificationRecordsPage() {
 
   return (
     <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
+      <PageContextBanner module="verification" />
       <div className='p-6 space-y-4'>
         <h1 className='text-2xl font-bold'>Verification Records</h1>
 
