@@ -22,7 +22,7 @@
       "@/*": ["./src/*"]
     },
 
-    "types": ["node", "jest"],
+    "types": ["node"],
     "typeRoots": ["./node_modules/@types", "./src/types"],
     "plugins": [{ "name": "next" }],
 
@@ -30,11 +30,9 @@
   },
   "include": [
     "src/**/*",
-    "tests/**/*",
-    "jest.setup.ts",
     "next-env.d.ts",
     ".next/types/**/*.ts",
     "src/types"
   ],
-  "exclude": ["node_modules", "dist", ".next", "coverage"]
+  "exclude": ["node_modules", "dist", ".next", "coverage", "tests", "**/*.test.ts", "**/*.test.tsx", "**/__tests__/**"]
 }
