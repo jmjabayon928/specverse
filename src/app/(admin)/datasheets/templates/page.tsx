@@ -9,6 +9,7 @@ import { format } from 'date-fns'
 import 'react-datepicker/dist/react-datepicker.css'
 
 import SecurePage from '@/components/security/SecurePage'
+import PageContextBanner from '@/components/demo/PageContextBanner'
 import { PERMISSIONS } from '@/constants/permissions'
 import { useSession } from '@/hooks/useSession'
 import TemplateActions from '@/components/datasheets/templates/TemplateActions'
@@ -384,6 +385,7 @@ const TemplateListPage = () => {
 
   return (
     <SecurePage requiredPermission={PERMISSIONS.DATASHEET_VIEW}>
+      <PageContextBanner module="datasheets" />
       {loading ? (
         <p className='text-center text-gray-500 py-4'>
           Loading templates...

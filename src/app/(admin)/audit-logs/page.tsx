@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import SecurePage from "@/components/security/SecurePage";
+import PageContextBanner from "@/components/demo/PageContextBanner";
 import { getAuditEntityLink } from "@/utils/auditEntityLink";
 
 type AuditLogDTO = {
@@ -165,6 +166,7 @@ export default function AuditLogsPage() {
 
   return (
     <SecurePage requiredRole="Admin">
+      <PageContextBanner module="auditLogs" />
       <div className="p-6 space-y-4">
         <h1 className="text-2xl font-bold">Audit Logs</h1>
 

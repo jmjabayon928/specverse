@@ -3,6 +3,7 @@
 import { useSession } from '@/hooks/useSession'
 import { PERMISSIONS } from '@/constants/permissions'
 import SecurePage from '@/components/security/SecurePage'
+import PageContextBanner from '@/components/demo/PageContextBanner'
 import SchedulesList from '@/components/schedules/SchedulesList'
 
 export default function SchedulesPage() {
@@ -18,6 +19,7 @@ export default function SchedulesPage() {
 
   return (
     <SecurePage requiredPermission={PERMISSIONS.SCHEDULES_VIEW}>
+      <PageContextBanner module="schedules" />
       <div className="p-6 space-y-4">
         <h1 className="text-2xl font-bold">Equipment Schedules</h1>
         <SchedulesList />
