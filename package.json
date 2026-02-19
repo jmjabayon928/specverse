@@ -5,10 +5,11 @@
   "scripts": {
     "dev": "concurrently --names BE,FE --prefix-colors auto --kill-others-on-fail \"npm run backend\" \"next dev\"",
     "build": "next build",
-    "build:ci": "npm run lint && npm run type-check && npm test -- --runInBand --no-cache && npm run build",
+    "build:ci": "npm run lint && npm run type-check && npm run type-check:tests && npm test -- --runInBand --no-cache && npm run build",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
+    "type-check:tests": "tsc -p tsconfig.test.json --noEmit",
     "backend": "tsx src/backend/server.ts",
     "test": "cross-env NODE_ENV=test jest --detectOpenHandles --forceExit",
     "test:watch": "cross-env NODE_ENV=test jest --watch"
