@@ -1,5 +1,35 @@
 // src/backend/repositories/instrumentsRepository.ts
 import { poolPromise, sql } from '../config/db'
+import { AppError } from '../errors/AppError'
+
+function toFiniteInt(value: unknown): number | null {
+  if (typeof value === 'number') {
+    if (Number.isFinite(value) && Number.isInteger(value)) return value
+    return null
+  }
+  if (typeof value === 'string') {
+    const num = Number(value)
+    if (Number.isFinite(num) && Number.isInteger(num)) return num
+    return null
+  }
+  return null
+}
+
+function getSqlErrorNumber(err: unknown): number | null {
+  if (err === null || err === undefined) return null
+  const errObj = err as {
+    number?: unknown
+    code?: unknown
+    originalError?: { info?: { number?: unknown } }
+  }
+  const n = toFiniteInt(errObj.number)
+  if (n !== null) return n
+  const c = toFiniteInt(errObj.code)
+  if (c !== null) return c
+  const orig = toFiniteInt(errObj.originalError?.info?.number)
+  if (orig !== null) return orig
+  return null
+}
 
 /**
  * Same rules as InstrumentTagNorm storage: trim, uppercase, collapse whitespace, remove spaces around '-' and '/'.
@@ -62,6 +92,22 @@ export type UpdateInstrumentInput = {
   status?: string | null
   notes?: string | null
   updatedBy?: number | null
+}
+
+export type InstrumentTagRuleRow = {
+  ruleId: number
+  accountId: number
+  prefix: string | null
+  separator: string | null
+  minNumberDigits: number | null
+  maxNumberDigits: number | null
+  allowedAreaCodes: string | null
+  regexPattern: string | null
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+  createdBy: number | null
+  updatedBy: number | null
 }
 
 export async function listByAccount(
@@ -130,29 +176,37 @@ export async function getById(accountId: number, instrumentId: number): Promise<
 
 export async function create(accountId: number, input: CreateInstrumentInput): Promise<InstrumentRow> {
   const pool = await poolPromise
-  const result = await pool
-    .request()
-    .input('AccountID', sql.Int, accountId)
-    .input('InstrumentTag', sql.NVarChar(255), input.instrumentTag)
-    .input('InstrumentTagNorm', sql.NVarChar(255), input.instrumentTagNorm || null)
-    .input('InstrumentType', sql.NVarChar(100), input.instrumentType ?? null)
-    .input('Service', sql.NVarChar(255), input.service ?? null)
-    .input('System', sql.NVarChar(255), input.system ?? null)
-    .input('Area', sql.NVarChar(255), input.area ?? null)
-    .input('Location', sql.NVarChar(255), input.location ?? null)
-    .input('Status', sql.NVarChar(50), input.status ?? null)
-    .input('Notes', sql.NVarChar(sql.MAX), input.notes ?? null)
-    .input('CreatedBy', sql.Int, input.createdBy ?? null)
-    .query(`
-      INSERT INTO dbo.Instruments (AccountID, InstrumentTag, InstrumentTagNorm, InstrumentType, Service, System, Area, Location, Status, Notes, CreatedBy, UpdatedBy)
-      OUTPUT INSERTED.InstrumentID AS instrumentId, INSERTED.AccountID AS accountId, INSERTED.InstrumentTag AS instrumentTag,
-             INSERTED.InstrumentTagNorm AS instrumentTagNorm, INSERTED.InstrumentType AS instrumentType,
-             INSERTED.Service AS service, INSERTED.System AS [system], INSERTED.Area AS area, INSERTED.Location AS location,
-             INSERTED.Status AS status, INSERTED.Notes AS notes, INSERTED.CreatedAt AS createdAt, INSERTED.UpdatedAt AS updatedAt,
-             INSERTED.CreatedBy AS createdBy, INSERTED.UpdatedBy AS updatedBy
-      VALUES (@AccountID, @InstrumentTag, @InstrumentTagNorm, @InstrumentType, @Service, @System, @Area, @Location, @Status, @Notes, @CreatedBy, @CreatedBy)
-    `)
-  return result.recordset[0] as InstrumentRow
+  try {
+    const result = await pool
+      .request()
+      .input('AccountID', sql.Int, accountId)
+      .input('InstrumentTag', sql.NVarChar(255), input.instrumentTag)
+      .input('InstrumentTagNorm', sql.NVarChar(255), input.instrumentTagNorm || null)
+      .input('InstrumentType', sql.NVarChar(100), input.instrumentType ?? null)
+      .input('Service', sql.NVarChar(255), input.service ?? null)
+      .input('System', sql.NVarChar(255), input.system ?? null)
+      .input('Area', sql.NVarChar(255), input.area ?? null)
+      .input('Location', sql.NVarChar(255), input.location ?? null)
+      .input('Status', sql.NVarChar(50), input.status ?? null)
+      .input('Notes', sql.NVarChar(sql.MAX), input.notes ?? null)
+      .input('CreatedBy', sql.Int, input.createdBy ?? null)
+      .query(`
+        INSERT INTO dbo.Instruments (AccountID, InstrumentTag, InstrumentTagNorm, InstrumentType, Service, System, Area, Location, Status, Notes, CreatedBy, UpdatedBy)
+        OUTPUT INSERTED.InstrumentID AS instrumentId, INSERTED.AccountID AS accountId, INSERTED.InstrumentTag AS instrumentTag,
+               INSERTED.InstrumentTagNorm AS instrumentTagNorm, INSERTED.InstrumentType AS instrumentType,
+               INSERTED.Service AS service, INSERTED.System AS [system], INSERTED.Area AS area, INSERTED.Location AS location,
+               INSERTED.Status AS status, INSERTED.Notes AS notes, INSERTED.CreatedAt AS createdAt, INSERTED.UpdatedAt AS updatedAt,
+               INSERTED.CreatedBy AS createdBy, INSERTED.UpdatedBy AS updatedBy
+        VALUES (@AccountID, @InstrumentTag, @InstrumentTagNorm, @InstrumentType, @Service, @System, @Area, @Location, @Status, @Notes, @CreatedBy, @CreatedBy)
+      `)
+    return result.recordset[0] as InstrumentRow
+  } catch (error: unknown) {
+    const errNum = getSqlErrorNumber(error)
+    if (errNum === 2601 || errNum === 2627) {
+      throw new AppError('Instrument tag already exists.', 409)
+    }
+    throw error
+  }
 }
 
 export async function update(
@@ -174,89 +228,97 @@ export async function update(
   const status = input.status !== undefined ? input.status : existing.status
   const notes = input.notes !== undefined ? input.notes : existing.notes
 
-  await pool
-    .request()
-    .input('InstrumentID', sql.Int, instrumentId)
-    .input('AccountID', sql.Int, accountId)
-    .input('InstrumentTag', sql.NVarChar(255), instrumentTag)
-    .input('InstrumentTagNorm', sql.NVarChar(255), instrumentTagNorm)
-    .input('InstrumentType', sql.NVarChar(100), instrumentType)
-    .input('Service', sql.NVarChar(255), service)
-    .input('System', sql.NVarChar(255), system)
-    .input('Area', sql.NVarChar(255), area)
-    .input('Location', sql.NVarChar(255), location)
-    .input('Status', sql.NVarChar(50), status)
-    .input('Notes', sql.NVarChar(sql.MAX), notes)
-    .input('UpdatedBy', sql.Int, input.updatedBy ?? null)
-    .query(`
-      UPDATE dbo.Instruments
-      SET InstrumentTag = @InstrumentTag, InstrumentTagNorm = @InstrumentTagNorm,
-          InstrumentType = @InstrumentType, Service = @Service, System = @System,
-          Area = @Area, Location = @Location, Status = @Status, Notes = @Notes,
-          UpdatedAt = SYSUTCDATETIME(), UpdatedBy = @UpdatedBy
-      WHERE InstrumentID = @InstrumentID AND AccountID = @AccountID
-    `)
-  return getById(accountId, instrumentId)
+  try {
+    await pool
+      .request()
+      .input('InstrumentID', sql.Int, instrumentId)
+      .input('AccountID', sql.Int, accountId)
+      .input('InstrumentTag', sql.NVarChar(255), instrumentTag)
+      .input('InstrumentTagNorm', sql.NVarChar(255), instrumentTagNorm)
+      .input('InstrumentType', sql.NVarChar(100), instrumentType)
+      .input('Service', sql.NVarChar(255), service)
+      .input('System', sql.NVarChar(255), system)
+      .input('Area', sql.NVarChar(255), area)
+      .input('Location', sql.NVarChar(255), location)
+      .input('Status', sql.NVarChar(50), status)
+      .input('Notes', sql.NVarChar(sql.MAX), notes)
+      .input('UpdatedBy', sql.Int, input.updatedBy ?? null)
+      .query(`
+        UPDATE dbo.Instruments
+        SET InstrumentTag = @InstrumentTag, InstrumentTagNorm = @InstrumentTagNorm,
+            InstrumentType = @InstrumentType, Service = @Service, System = @System,
+            Area = @Area, Location = @Location, Status = @Status, Notes = @Notes,
+            UpdatedAt = SYSUTCDATETIME(), UpdatedBy = @UpdatedBy
+        WHERE InstrumentID = @InstrumentID AND AccountID = @AccountID
+      `)
+    return getById(accountId, instrumentId)
+  } catch (error: unknown) {
+    const errNum = getSqlErrorNumber(error)
+    if (errNum === 2601 || errNum === 2627) {
+      throw new AppError('Instrument tag already exists.', 409)
+    }
+    throw error
+  }
 }
 
 export async function listLinkedToSheet(
   accountId: number,
   sheetId: number
 ): Promise<InstrumentLinkedToSheetRow[]> {
+  const debug = process.env.DEBUG_INSTRUMENTS === '1'
   const pool = await poolPromise
+  const startMs = Date.now()
   const result = await pool
     .request()
     .input('AccountID', sql.Int, accountId)
     .input('SheetID', sql.Int, sheetId)
     .query(`
-      SELECT i.InstrumentID AS instrumentId, i.InstrumentTag AS instrumentTag, i.InstrumentTagNorm AS instrumentTagNorm,
-             i.InstrumentType AS instrumentType, idl.LinkRole AS linkRole
-      FROM dbo.InstrumentDatasheetLinks idl
-      INNER JOIN dbo.Instruments i ON i.InstrumentID = idl.InstrumentID AND i.AccountID = idl.AccountID
-      INNER JOIN dbo.Sheets s ON s.SheetID = idl.SheetID AND s.AccountID = idl.AccountID
-      WHERE idl.AccountID = @AccountID AND idl.SheetID = @SheetID
+      WITH Linked AS (
+        SELECT idl.AccountID, idl.InstrumentID, idl.LinkRole
+        FROM dbo.InstrumentDatasheetLinks idl
+        INNER JOIN dbo.Sheets s
+          ON s.SheetID = idl.SheetID AND s.AccountID = idl.AccountID
+        WHERE idl.AccountID = @AccountID AND idl.SheetID = @SheetID
+      ),
+      LoopAgg AS (
+        SELECT
+          ilm.AccountID,
+          ilm.InstrumentID,
+          STRING_AGG(il.LoopTag, ',') WITHIN GROUP (ORDER BY il.LoopTag) AS loopTagsCsv
+        FROM dbo.InstrumentLoopMembers ilm
+        INNER JOIN dbo.InstrumentLoops il
+          ON il.AccountID = ilm.AccountID AND il.LoopID = ilm.LoopID
+        INNER JOIN Linked l
+          ON l.AccountID = ilm.AccountID AND l.InstrumentID = ilm.InstrumentID
+        GROUP BY ilm.AccountID, ilm.InstrumentID
+      )
+      SELECT
+        i.InstrumentID AS instrumentId,
+        i.InstrumentTag AS instrumentTag,
+        i.InstrumentTagNorm AS instrumentTagNorm,
+        i.InstrumentType AS instrumentType,
+        l.LinkRole AS linkRole,
+        la.loopTagsCsv AS loopTagsCsv
+      FROM Linked l
+      INNER JOIN dbo.Instruments i
+        ON i.AccountID = l.AccountID AND i.InstrumentID = l.InstrumentID
+      LEFT JOIN LoopAgg la
+        ON la.AccountID = l.AccountID AND la.InstrumentID = l.InstrumentID
       ORDER BY i.InstrumentTagNorm, i.InstrumentID
     `)
-  const rows = result.recordset as (InstrumentLinkedToSheetRow & { loopTags?: string })[]
-  const instrumentIds = [...new Set(rows.map((r) => r.instrumentId))]
-  const loopTagsByInstrument = await getLoopTagsForInstrumentsBatch(accountId, instrumentIds)
+  const elapsedMs = Date.now() - startMs
+  if (debug) {
+    console.log(`[listLinkedToSheet] accountId=${accountId} sheetId=${sheetId} ms=${elapsedMs} rows=${(result.recordset ?? []).length}`)
+  }
+  const rows = (result.recordset ?? []) as { instrumentId: number; instrumentTag: string; instrumentTagNorm: string | null; instrumentType: string | null; linkRole: string | null; loopTagsCsv: string | null }[]
   return rows.map((r) => ({
     instrumentId: r.instrumentId,
     instrumentTag: r.instrumentTag,
     instrumentTagNorm: r.instrumentTagNorm,
     instrumentType: r.instrumentType,
     linkRole: r.linkRole,
-    loopTags: loopTagsByInstrument.get(r.instrumentId) ?? [],
+    loopTags: (r.loopTagsCsv ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   }))
-}
-
-async function getLoopTagsForInstrumentsBatch(
-  accountId: number,
-  instrumentIds: number[]
-): Promise<Map<number, string[]>> {
-  const map = new Map<number, string[]>()
-  if (instrumentIds.length === 0) return map
-  const pool = await poolPromise
-  const idsParam = instrumentIds.join(',')
-  const result = await pool
-    .request()
-    .input('AccountID', sql.Int, accountId)
-    .input('InstrumentIds', sql.NVarChar(2000), idsParam)
-    .query(`
-      SELECT ilm.InstrumentID AS instrumentId, il.LoopTag AS loopTag
-      FROM dbo.InstrumentLoopMembers ilm
-      INNER JOIN dbo.InstrumentLoops il ON il.LoopID = ilm.LoopID
-      WHERE ilm.AccountID = @AccountID AND il.AccountID = @AccountID
-        AND ilm.InstrumentID IN (SELECT CAST(value AS INT) FROM STRING_SPLIT(@InstrumentIds, ',') WHERE value <> '')
-      ORDER BY ilm.InstrumentID, il.LoopTag
-    `)
-  const records = (result.recordset ?? []) as { instrumentId: number; loopTag: string }[]
-  for (const row of records) {
-    const list = map.get(row.instrumentId) ?? []
-    list.push(row.loopTag)
-    map.set(row.instrumentId, list)
-  }
-  return map
 }
 
 export async function linkToSheet(
@@ -330,4 +392,24 @@ export async function linkExists(
       WHERE AccountID = @AccountID AND InstrumentID = @InstrumentID AND SheetID = @SheetID
     `)
   return (result.recordset?.length ?? 0) > 0
+}
+
+export async function listActiveTagRulesByAccount(
+  accountId: number
+): Promise<InstrumentTagRuleRow[]> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .query(`
+      SELECT RuleID AS ruleId, AccountID AS accountId, Prefix AS prefix, Separator AS separator,
+             MinNumberDigits AS minNumberDigits, MaxNumberDigits AS maxNumberDigits,
+             AllowedAreaCodes AS allowedAreaCodes, RegexPattern AS regexPattern,
+             IsActive AS isActive, CreatedAt AS createdAt, UpdatedAt AS updatedAt,
+             CreatedBy AS createdBy, UpdatedBy AS updatedBy
+      FROM dbo.InstrumentTagRules
+      WHERE AccountID = @AccountID AND IsActive = 1
+      ORDER BY RuleID DESC
+    `)
+  return result.recordset as InstrumentTagRuleRow[]
 }
