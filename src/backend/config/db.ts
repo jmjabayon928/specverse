@@ -41,6 +41,8 @@ const dbConfig: sql.config = {
   password: process.env.DB_PASSWORD ?? '',
   server: process.env.DB_SERVER ?? '',
   database: process.env.DB_DATABASE ?? '',
+  connectionTimeout: 30000,
+  requestTimeout: 30000,
   options: {
     encrypt: true,
     enableArithAbort: true,
@@ -57,6 +59,10 @@ const wait = (ms: number): Promise<void> =>
     setTimeout(resolve, ms)
   })
 
+function shouldLogInstrumentsDebug(): boolean {
+  return process.env.DEBUG_INSTRUMENTS === '1'
+}
+
 const connectWithRetry = async (
   config: sql.config,
   attemptsLeft: number,
@@ -65,6 +71,16 @@ const connectWithRetry = async (
     const connectionPool = await new sql.ConnectionPool(config).connect()
     if (process.env.NODE_ENV !== 'test') {
       console.log('✅ Connected to SQL Server')
+      if (shouldLogInstrumentsDebug()) {
+        const effectiveConnectionTimeout = config.connectionTimeout ?? '(default)'
+        const effectiveRequestTimeout = config.requestTimeout ?? '(default)'
+        const effectivePoolMax = config.pool?.max ?? '(default)'
+        console.log(
+          `[db.ts] Pool config: encrypt=${config.options?.encrypt} trustServerCertificate=${config.options?.trustServerCertificate} ` +
+          `connectionTimeout=${effectiveConnectionTimeout} requestTimeout=${effectiveRequestTimeout} ` +
+          `pool.max=${effectivePoolMax}`
+        )
+      }
     }
     return connectionPool
   } catch (error) {
