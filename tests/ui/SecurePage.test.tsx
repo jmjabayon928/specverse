@@ -6,8 +6,11 @@ import SecurePage from '../../src/components/security/SecurePage'
 import { PERMISSIONS } from '../../src/constants/permissions'
 
 const mockPush = jest.fn()
+const mockReplace = jest.fn()
+
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  usePathname: () => '/dashboard',
 }))
 
 jest.mock('../../src/hooks/useSession', () => ({
@@ -37,7 +40,7 @@ describe('SecurePage gating', () => {
       </SecurePage>
     )
 
-    expect(mockPush).toHaveBeenCalledWith('/unauthorized')
+    expect(mockReplace).toHaveBeenCalledWith('/unauthorized')
     expect(screen.getByText('Protected content')).toBeInTheDocument()
   })
 
@@ -48,7 +51,7 @@ describe('SecurePage gating', () => {
       </SecurePage>
     )
 
-    expect(mockPush).not.toHaveBeenCalled()
+    expect(mockReplace).not.toHaveBeenCalled()
     expect(screen.getByText('Protected content')).toBeInTheDocument()
   })
 
@@ -64,7 +67,7 @@ describe('SecurePage gating', () => {
       </SecurePage>
     )
 
-    expect(mockPush).toHaveBeenCalledWith('/unauthorized')
+    expect(mockReplace).toHaveBeenCalledWith('/unauthorized')
     expect(screen.getByText('Admin content')).toBeInTheDocument()
   })
 
@@ -80,7 +83,7 @@ describe('SecurePage gating', () => {
       </SecurePage>
     )
 
-    expect(mockPush).not.toHaveBeenCalled()
+    expect(mockReplace).not.toHaveBeenCalled()
     expect(screen.getByText('Admin content')).toBeInTheDocument()
   })
 })
