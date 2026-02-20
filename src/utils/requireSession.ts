@@ -8,8 +8,8 @@ type SessionInfo = {
   permissions: string[]
 }
 
-// cache - avoids repeated API calls client-side
-let cachedSession: SessionInfo | null = null
+// No module-level cache to prevent stale unauth state after login
+// Each call fetches fresh to avoid flicker
 let cachedSessionPromise: Promise<SessionInfo> | null = null
 
 const createSessionError = (message: string, status = 401): AppError => {
@@ -67,15 +67,12 @@ const fetchSessionOnce = async (): Promise<SessionInfo> => {
 /**
  * requireSession()
  * ----------------
- * - Fetches session only once per page lifecycle.
- * - Future calls return cachedSession instantly.
+ * - Fetches session fresh each time (no persistent cache to avoid stale unauth).
+ * - Deduplicates concurrent calls within same render cycle.
  * - Errors wrapped using AppError.
  */
 export async function requireSession(): Promise<SessionInfo> {
-  if (cachedSession) {
-    return cachedSession
-  }
-
+  // If there's already a pending fetch, reuse it to deduplicate concurrent calls
   if (cachedSessionPromise) {
     return cachedSessionPromise
   }
@@ -84,7 +81,6 @@ export async function requireSession(): Promise<SessionInfo> {
 
   try {
     const session = await cachedSessionPromise
-    cachedSession = session
     return session
   } finally {
     cachedSessionPromise = null        // ensures retry if it fails once

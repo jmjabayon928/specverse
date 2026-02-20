@@ -17,16 +17,20 @@ export async function requireAuth(): Promise<UserSession> {
   }
 
   try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/backend/auth/session`,
-      {
-        method: 'GET',
-        headers: {
-          Cookie: `token=${token}`,
-        },
-        cache: 'no-store',
-      }
-    )
+    // In local dev, NEXT_PUBLIC_API_BASE_URL may be unset (uses Next.js rewrites)
+    // In stage/prod, it's set to the frontend domain
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
+    const sessionUrl = baseUrl
+      ? `${baseUrl}/api/backend/auth/session`
+      : '/api/backend/auth/session'
+
+    const res = await fetch(sessionUrl, {
+      method: 'GET',
+      headers: {
+        Cookie: `token=${token}`,
+      },
+      cache: 'no-store',
+    })
 
     if (!res.ok) {
       redirect('/login')
@@ -61,16 +65,20 @@ export default async function getUserSession(): Promise<UserSession | null> {
   }
 
   try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/backend/auth/session`,
-      {
-        method: 'GET',
-        headers: {
-          Cookie: `token=${token}`,
-        },
-        cache: 'no-store',
-      }
-    )
+    // In local dev, NEXT_PUBLIC_API_BASE_URL may be unset (uses Next.js rewrites)
+    // In stage/prod, it's set to the frontend domain
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
+    const sessionUrl = baseUrl
+      ? `${baseUrl}/api/backend/auth/session`
+      : '/api/backend/auth/session'
+
+    const res = await fetch(sessionUrl, {
+      method: 'GET',
+      headers: {
+        Cookie: `token=${token}`,
+      },
+      cache: 'no-store',
+    })
 
     if (!res.ok) {
       return null

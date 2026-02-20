@@ -1,7 +1,7 @@
 // src/app/login/page.tsx
 'use client'
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Checkbox from "@/components/form/input/Checkbox";
 import Input from "@/components/form/input/InputField";
@@ -9,9 +9,12 @@ import Label from "@/components/form/Label";
 import Button from "@/components/ui/button/Button";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
 import Link from "next/link";
+import { useSession } from "@/hooks/useSession";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { user, loading, refetchSession } = useSession();
+  const hasRedirectedRef = useRef(false);
 
   const [mounted, setMounted] = useState(false);
   const [email, setEmail] = useState("");
@@ -22,15 +25,18 @@ export default function LoginPage() {
 
   useEffect(() => {
     setMounted(true);
-    // ✅ Redirect logged-in users away from login page
-    const checkSession = async () => {
-      const res = await fetch("/api/backend/auth/session", {
-        credentials: "include",
-      });
-      if (res.ok) router.push("/dashboard");
-    };
-    checkSession();
-  }, [router]);
+  }, []);
+
+  // Redirect already-authenticated users away from login page
+  useEffect(() => {
+    if (loading) return;
+    if (hasRedirectedRef.current) return;
+    
+    if (user) {
+      hasRedirectedRef.current = true;
+      router.replace("/dashboard");
+    }
+  }, [loading, user, router]);
 
   if (!mounted) return null;
 
@@ -52,7 +58,14 @@ export default function LoginPage() {
         return;
       }
 
-      router.replace("/dashboard");
+      // Refetch session to ensure state is synchronized before redirecting
+      const isAuthenticated = await refetchSession();
+      
+      if (isAuthenticated) {
+        router.replace("/dashboard");
+      } else {
+        setError("Login successful but session verification failed. Please try again.");
+      }
     } catch (err) {
       console.error("Login error:", err);
       setError("Something went wrong. Please try again.");

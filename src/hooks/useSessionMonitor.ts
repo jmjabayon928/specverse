@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 
 type SessionMonitorOptions = {
   timeoutMinutes?: number
@@ -15,6 +15,7 @@ export function useSessionMonitor(
   } = options
 
   const router = useRouter()
+  const pathname = usePathname()
 
   const [showWarning, setShowWarning] = useState(false)
   const [countdown, setCountdown] = useState(warningDuration)
@@ -23,10 +24,13 @@ export function useSessionMonitor(
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    router.push('/login')
-  }, [router])
+    // Only redirect if not already on login page
+    if (pathname !== '/login') {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      router.push('/login')
+    }
+  }, [router, pathname])
 
   const startCountdown = useCallback(() => {
     if (countdownRef.current) clearInterval(countdownRef.current)

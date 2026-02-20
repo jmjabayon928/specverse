@@ -1,7 +1,8 @@
+// src/layout/LayoutWithSidebar.tsx
 'use client'
 
-import { usePathname, useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import React, { useMemo } from 'react'
+import { usePathname } from 'next/navigation'
 import AppSidebar from '@/layout/AppSidebar'
 import AppHeader from '@/layout/AppHeader'
 import Backdrop from '@/layout/Backdrop'
@@ -17,37 +18,36 @@ export default function LayoutWithSidebar({
   const { isExpanded, isHovered, isMobileOpen } = useSidebar()
   const { user, loading } = useSession()
   const pathname = usePathname()
-  const router = useRouter()
 
   const isLoginPage = pathname === '/login'
   const isInviteAcceptPage = pathname.startsWith('/invite/accept')
-  const mainContentMargin = isMobileOpen
-    ? 'ml-0'
-    : isExpanded || isHovered
-    ? 'lg:ml-[290px]'
-    : 'lg:ml-[90px]'
 
-  // Redirect to login if user is missing
-  useEffect(() => {
-    const delayRedirect = async () => {
-      await new Promise((res) => setTimeout(res, 150)) // wait 150ms
-      if (!loading && !user && !isLoginPage && !isInviteAcceptPage) {
-        router.push('/login')
-      }
-    }
+  const shouldBypassLayout = isLoginPage || isInviteAcceptPage
 
-    delayRedirect()
-  }, [loading, user, isLoginPage, isInviteAcceptPage, router])
+  const mainContentMargin = useMemo(() => {
+    if (isMobileOpen) return 'ml-0'
+    if (isExpanded || isHovered) return 'lg:ml-[290px]'
+    return 'lg:ml-[90px]'
+  }, [isExpanded, isHovered, isMobileOpen])
 
-  // Show raw children for login page, invite accept page, or loading state
-  // This matches the SSR/first-hydration render and avoids tree mismatch.
-  if (isLoginPage || isInviteAcceptPage || loading) {
+  // Server-side requireAuth() handles auth redirects - do not redirect here
+
+  // Keep login/invite pages render exactly as-is (no sidebar/header)
+  if (shouldBypassLayout) {
     return <>{children}</>
   }
 
-  // IMPORTANT:
-  // Do NOT return null when user is missing. Let the effect redirect instead.
-  // Returning null here can cause hydration/reconciliation issues in production.
+  // While we’re resolving auth, render children to avoid hydration mismatch,
+  // but DO NOT mount the sidebar layout until we know auth state.
+  if (loading) {
+    return <>{children}</>
+  }
+
+  // If user is missing, let the effect redirect. Avoid rendering the full app shell.
+  if (!user) {
+    return <>{children}</>
+  }
+
   return (
     <>
       <DevSecurityWarning />
