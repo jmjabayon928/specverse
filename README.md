@@ -1083,6 +1083,20 @@ Deploy behavior on the VPS:
 - Switches the `/current` symlink to the new release
 - Restarts PM2 processes for backend + Next.js
 
+### VPS Environment Requirements
+
+⚠ IMPORTANT:
+Do not rely on BACKEND_ORIGIN in VPS production.
+VPS must use USE_NGINX_PROXY=true and nginx routing.
+Next.js rewrites must remain disabled in VPS.
+
+**Required environment variable:**
+- `USE_NGINX_PROXY=true` — Disables Next.js rewrites, nginx handles routing
+
+**Nginx configuration:**
+- `/api/backend/*` → proxies to backend server (typically `http://localhost:4000`)
+- `/` → proxies to Next.js server (typically `http://localhost:3000`)
+
 ### Data & migrations
 - Schema is managed via Flyway.
 - `V0001__initial_schema.sql` is treated as **immutable** (CI enforces this).
@@ -1122,6 +1136,29 @@ npm install
 #### Start development servers
 npm run dev-backend
 npm run dev
+
+#### Local Production Parity
+
+To run Next.js in production mode locally (matching VPS behavior with `next build` + `next start`):
+
+**Terminal 1 (Backend):**
+```powershell
+cd c:\projects\specverse
+$env:BACKEND_ORIGIN="http://127.0.0.1:5000"
+npm run backend
+```
+
+**Terminal 2 (Frontend - Production Mode):**
+```powershell
+cd c:\projects\specverse
+$env:NODE_ENV="production"
+$env:BACKEND_ORIGIN="http://127.0.0.1:5000"
+npm run prod:local:fe
+```
+
+**Environment variables:**
+- `BACKEND_ORIGIN` — Backend server URL (defaults to `http://127.0.0.1:5000`)
+- `NODE_ENV=production` — Enables production mode
 
 **Environment configuration**
 

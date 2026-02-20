@@ -19,24 +19,22 @@ const nextConfig: NextConfig = {
   },
   productionBrowserSourceMaps: true,
   async rewrites() {
-    // If NEXT_PUBLIC_API_BASE_URL is set (VPS stage/prod), disable rewrites
+    // Required environment variables:
+    // - Local prod: BACKEND_ORIGIN (defaults to 'http://127.0.0.1:5000')
+    // - VPS: USE_NGINX_PROXY=true (disables rewrites, nginx handles routing)
+    
+    // If USE_NGINX_PROXY is set to 'true' (VPS stage/prod), disable rewrites
     // Frontend will use same-origin requests via nginx gateway
-    const isProduction = process.env.NODE_ENV === 'production'
-    if (isProduction && process.env.NEXT_PUBLIC_API_BASE_URL) {
+    if (process.env.USE_NGINX_PROXY === 'true') {
       return []
     }
 
-    // Local dev: use proxy rewrites to backend server
+    // Local dev/prod: use proxy rewrites to backend server
+    const backendOrigin = process.env.BACKEND_ORIGIN || 'http://127.0.0.1:5000'
     return [
-      // existing backend proxy (kept)
       {
         source: "/api/backend/:path*",
-        destination: "http://localhost:5000/api/backend/:path*",
-      },
-      // ✅ new: mirror API proxy
-      {
-        source: "/api/mirror/:path*",
-        destination: "http://localhost:5000/api/mirror/:path*",
+        destination: `${backendOrigin}/api/backend/:path*`,
       },
     ];
   },
