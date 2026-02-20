@@ -9,7 +9,7 @@ const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
 type AccountsRes = { accounts: AccountRow[]; activeAccountId: number }
 
 export default async function AccountsPage() {
-  await requireAuth()
+  await requireAuth() // Server-side auth gate - redirects to /login if unauth
 
   const cookieStore = await cookies()
   const token = cookieStore.get('token')?.value
@@ -17,8 +17,13 @@ export default async function AccountsPage() {
     redirect('/login')
   }
 
+  // Build URL: use base if set (stage/prod), otherwise relative (local dev)
+  const accountsUrl = base
+    ? `${base}/api/backend/accounts`
+    : '/api/backend/accounts'
+
   const headers = { Cookie: `token=${token}` } as const
-  const res = await fetch(`${base}/api/backend/accounts`, { headers, cache: 'no-store' })
+  const res = await fetch(accountsUrl, { headers, cache: 'no-store' })
 
   if (res.status === 401) {
     redirect('/login')

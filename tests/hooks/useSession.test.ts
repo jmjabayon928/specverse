@@ -36,12 +36,33 @@ describe('useSession', () => {
     expect(result.current.loading).toBe(true)
   })
 
-  it('sets loading false on login page without fetching', () => {
+  it('fetches session on login page and eventually sets loading false', async () => {
     mockUsePathname.mockReturnValue('/login')
-
+  
+    const mockRes = {
+      ok: false,
+      status: 401,
+      json: async () => ({ message: 'Unauthorized' }),
+    } as unknown as Response
+  
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce(mockRes)
+  
     const { result } = renderHook(() => useSession())
-
-    expect(result.current.loading).toBe(false)
-    expect(global.fetch).not.toHaveBeenCalled()
+  
+    // New behavior: we still fetch on /login, so loading starts true
+    expect(result.current.loading).toBe(true)
+  
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/backend/auth/session',
+        expect.objectContaining({ credentials: 'include' })
+      )
+    })
+  
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+    })
+  
+    expect(result.current.user).toBeNull()
   })
 })

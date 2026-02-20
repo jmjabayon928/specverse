@@ -28,10 +28,8 @@ export default function SecurePage({
 
   useEffect(() => {
     if (loading) return
-
+    // Server-side requireAuth() handles auth redirects - do not redirect here
     if (user == null) {
-      const next = pathname ? `?next=${encodeURIComponent(pathname)}` : ''
-      router.replace(`/login${next}`)
       return
     }
 

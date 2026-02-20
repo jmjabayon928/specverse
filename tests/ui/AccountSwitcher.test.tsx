@@ -25,7 +25,7 @@ describe('AccountSwitcher', () => {
     useSessionMock.mockReturnValue({
       user: { userId: 1, roleId: 1, role: 'Admin', permissions: [] },
       loading: false,
-      refetchSession: jest.fn().mockResolvedValue(undefined),
+      refetchSession: jest.fn().mockResolvedValue(true),
     })
     globalThis.fetch = jest.fn()
   })
@@ -94,7 +94,7 @@ describe('AccountSwitcher', () => {
   })
 
   it('on account selection calls POST active-account then refresh', async () => {
-    const refetchSessionMock = jest.fn().mockResolvedValue(undefined)
+    const refetchSessionMock = jest.fn().mockResolvedValue(true)
     useSessionMock.mockReturnValue({
       user: { userId: 1, roleId: 1, role: 'Admin', permissions: [] },
       loading: false,
