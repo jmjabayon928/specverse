@@ -5,7 +5,7 @@ import type { UserSession } from '@/domain/auth/sessionTypes'
 type UseSessionResult = {
   user: UserSession | null
   loading: boolean
-  refetchSession: () => Promise<void>
+  refetchSession: () => Promise<boolean>
 }
 
 export function useSession(): UseSessionResult {
@@ -19,6 +19,7 @@ export function useSession(): UseSessionResult {
     try {
       const res = await fetch('/api/backend/auth/session', {
         credentials: 'include',
+        cache: 'no-store',
       })
 
       if (ignoreStale && id !== refetchIdRef.current) return
@@ -56,18 +57,52 @@ export function useSession(): UseSessionResult {
     }
   }, [])
 
-  const refetchSession = useCallback(async () => {
+  const refetchSession = useCallback(async (): Promise<boolean> => {
     setLoading(true)
-    await fetchSessionInternal(true)
-  }, [fetchSessionInternal])
+    const id = ++refetchIdRef.current
+    try {
+      const res = await fetch('/api/backend/auth/session', {
+        credentials: 'include',
+        cache: 'no-store',
+      })
+
+      if (id !== refetchIdRef.current) return false
+
+      // 304 = session unchanged (valid session exists)
+      if (res.status === 304) {
+        if (id === refetchIdRef.current) setLoading(false)
+        return true
+      }
+
+      if (!res.ok) {
+        if (id === refetchIdRef.current) {
+          setUser(null)
+          setLoading(false)
+        }
+        return false
+      }
+
+      const data: UserSession = await res.json()
+      if (id !== refetchIdRef.current) return false
+
+      if (!Array.isArray(data.permissions)) {
+        data.permissions = []
+      }
+      if (id === refetchIdRef.current) {
+        setUser(data)
+        setLoading(false)
+      }
+      return true
+    } catch {
+      if (id === refetchIdRef.current) {
+        setUser(null)
+        setLoading(false)
+      }
+      return false
+    }
+  }, [])
 
   useEffect(() => {
-    const isLoginPage = pathname === '/login'
-    if (isLoginPage) {
-      setLoading(false)
-      return
-    }
-
     setLoading(true)
     void fetchSessionInternal(false)
   }, [pathname, fetchSessionInternal])
