@@ -8,6 +8,7 @@ import AppSidebar from '@/layout/AppSidebar'
 import AppHeader from '@/layout/AppHeader'
 import Backdrop from '@/layout/Backdrop'
 import DevSecurityWarning from '@/components/security/DevSecurityWarning'
+import { ReactErrorBoundary } from '@/components/error/ReactErrorBoundary'
 
 export default function LayoutWithSidebar({ children }: { children: React.ReactNode }) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar()
@@ -25,13 +26,17 @@ export default function LayoutWithSidebar({ children }: { children: React.ReactN
     return 'lg:ml-[90px]'
   }, [isExpanded, isHovered, isMobileOpen])
 
+  const route = pathname
+  const userId = user?.userId ?? null
+  const buildId = process.env.NEXT_PUBLIC_BUILD_ID ?? process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? 'dev'
+
   // ✅ early returns AFTER all hooks
   if (shouldBypassLayout) return <>{children}</>
   if (loading) return <>{children}</>
   if (!user) return <>{children}</>
 
   return (
-    <>
+    <ReactErrorBoundary route={route} buildId={buildId} userId={userId}>
       <DevSecurityWarning />
       <div className="min-h-screen xl:flex">
         <AppSidebar />
@@ -41,6 +46,6 @@ export default function LayoutWithSidebar({ children }: { children: React.ReactN
           <div className="p-4 mx-auto max-w-screen-2xl md:p-6">{children}</div>
         </div>
       </div>
-    </>
+    </ReactErrorBoundary>
   )
 }
