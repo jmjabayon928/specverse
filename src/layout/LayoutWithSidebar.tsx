@@ -38,7 +38,7 @@ export default function LayoutWithSidebar({ children }: { children: React.ReactN
   return (
     <ReactErrorBoundary route={route} buildId={buildId} userId={userId}>
       <DevSecurityWarning />
-      <div className="min-h-screen xl:flex">
+      <div className="min-h-screen xl:flex" suppressHydrationWarning>
         <AppSidebar />
         <Backdrop />
         <div className={`flex-1 transition-all duration-300 ease-in-out ${mainContentMargin}`}>

@@ -38,19 +38,21 @@ const TemplatesOverTimeChart: React.FC = () => {
   }, []);
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <LineChart
-        data={data}
-        margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
-      >
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="month" />
-        <YAxis />
-        <Tooltip />
-        <Legend />
-        <Line type="monotone" dataKey="total" stroke="#82ca9d" strokeWidth={2} />
-      </LineChart>
-    </ResponsiveContainer>
+    <div suppressHydrationWarning>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart
+          data={data}
+          margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="month" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Line type="monotone" dataKey="total" stroke="#82ca9d" strokeWidth={2} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 
