@@ -17,6 +17,7 @@ function toastMessageForStatus(status: number, fallback: string): string {
 }
 
 export default function AccountSwitcher() {
+  const [mounted, setMounted] = useState(false)
   const { user, refetchSession } = useSession()
   const router = useRouter()
   const [accounts, setAccounts] = useState<AccountItem[]>([])
@@ -24,6 +25,10 @@ export default function AccountSwitcher() {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -104,6 +109,9 @@ export default function AccountSwitcher() {
     [activeAccountId, router, refetchSession]
   )
 
+  // During SSR/hydration, return consistent placeholder to prevent hydration mismatch
+  if (!mounted) return null
+  
   if (!user) return null
 
   const current = activeAccountId != null ? accounts.find((a) => a.accountId === activeAccountId) : null

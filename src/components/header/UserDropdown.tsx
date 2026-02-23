@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "next/navigation";
@@ -9,10 +9,18 @@ import { Dropdown } from "../ui/dropdown/Dropdown";
 //import { DropdownItem } from "../ui/dropdown/DropdownItem";
 
 export default function UserDropdown() {
+  const [mounted, setMounted] = useState(false);
   const { user } = useSession();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // During SSR/hydration, return consistent placeholder to prevent hydration mismatch
+  if (!mounted) return null;
+  
   if (!user) return null;
 
   const toggleDropdown = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {

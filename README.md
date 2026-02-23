@@ -1068,7 +1068,7 @@ SpecVerse favors provable correctness over optimistic assumptions.
 SpecVerse is deployed on a VPS with **separate staging and production environments**:
 
 - **Staging:** `https://stage-specverse.jeffabayon.com`
-- **Production:** `https://prod-specverse.jeffabayon.com`
+- **Production:** `https://specverse.jeffabayon.com`
 
 ### CI/CD (GitHub Actions → VPS)
 On every push:

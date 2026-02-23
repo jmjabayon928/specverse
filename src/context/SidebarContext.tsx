@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useLayoutEffect } from "react";
 
 type SidebarContextType = {
   isExpanded: boolean;
@@ -34,21 +34,25 @@ export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
 
-  useEffect(() => {
-    const handleResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      if (!mobile) {
-        setIsMobileOpen(false);
-      }
-    };
+  useLayoutEffect(() => {
+    // Initialize isMobile state safely - assume desktop during SSR
+    // Use useLayoutEffect to set synchronously before paint to prevent twitching
+    if (typeof window !== 'undefined') {
+      const handleResize = () => {
+        const mobile = window.innerWidth < 768;
+        setIsMobile(mobile);
+        if (!mobile) {
+          setIsMobileOpen(false);
+        }
+      };
 
-    handleResize();
-    window.addEventListener("resize", handleResize);
+      handleResize(); // Set synchronously before paint
+      window.addEventListener("resize", handleResize);
 
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
+      return () => {
+        window.removeEventListener("resize", handleResize);
+      };
+    }
   }, []);
 
   const toggleSidebar = () => {

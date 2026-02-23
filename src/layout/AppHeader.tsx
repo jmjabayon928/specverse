@@ -21,7 +21,7 @@ const AppHeader: React.FC = () => {
   });
 
   const handleToggle = () => {
-    if (window.innerWidth >= 1024) {
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
       toggleSidebar();
     } else {
       toggleMobileSidebar();
