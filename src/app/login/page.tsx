@@ -2,7 +2,6 @@
 'use client'
 
 import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
 import Checkbox from "@/components/form/input/Checkbox";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
@@ -12,7 +11,6 @@ import Link from "next/link";
 import { useSession } from "@/hooks/useSession";
 
 export default function LoginPage() {
-  const router = useRouter();
   const { user, loading, refetchSession } = useSession();
   const hasRedirectedRef = useRef(false);
 
@@ -27,16 +25,16 @@ export default function LoginPage() {
     setMounted(true);
   }, []);
 
-  // Redirect already-authenticated users away from login page
+  // Redirect already-authenticated users away from login page (full-page nav so server receives cookie)
   useEffect(() => {
     if (loading) return;
     if (hasRedirectedRef.current) return;
-    
+
     if (user) {
       hasRedirectedRef.current = true;
-      router.replace("/dashboard");
+      window.location.replace("/dashboard");
     }
-  }, [loading, user, router]);
+  }, [loading, user]);
 
   if (!mounted) return null;
 
@@ -60,9 +58,9 @@ export default function LoginPage() {
 
       // Refetch session to ensure state is synchronized before redirecting
       const isAuthenticated = await refetchSession();
-      
+
       if (isAuthenticated) {
-        router.replace("/dashboard");
+        window.location.replace("/dashboard");
       } else {
         setError("Login successful but session verification failed. Please try again.");
       }
