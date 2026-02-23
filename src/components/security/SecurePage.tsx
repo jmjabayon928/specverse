@@ -53,5 +53,5 @@ export default function SecurePage({
   if (loading) return null
   if (user == null) return null
 
-  return <>{children}</>
+  return <div suppressHydrationWarning>{children}</div>
 }

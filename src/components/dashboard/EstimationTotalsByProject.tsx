@@ -58,29 +58,31 @@ const EstimationTotalsByProject: React.FC = () => {
   }, []);
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="category" />
-        <YAxis
-          tickFormatter={(value) => `${value / 1_000_000}M`}
-          domain={[0, "auto"]}
-          allowDecimals={false}
-        />
-        <Tooltip
-          formatter={(value) => `$${Number(value).toLocaleString()}`}
-        />
-        <Legend />
-        <Bar dataKey="total" name="Total Cost">
-          {data.map((entry, index) => (
-            <Cell
-              key={`cell-${index}`}
-              fill={COLORS[index % COLORS.length]}
-            />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <div suppressHydrationWarning>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="category" />
+          <YAxis
+            tickFormatter={(value) => `${value / 1_000_000}M`}
+            domain={[0, "auto"]}
+            allowDecimals={false}
+          />
+          <Tooltip
+            formatter={(value) => `$${Number(value).toLocaleString()}`}
+          />
+          <Legend />
+          <Bar dataKey="total" name="Total Cost">
+            {data.map((entry, index) => (
+              <Cell
+                key={`cell-${index}`}
+                fill={COLORS[index % COLORS.length]}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 
