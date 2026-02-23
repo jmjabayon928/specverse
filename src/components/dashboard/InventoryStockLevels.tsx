@@ -58,20 +58,22 @@ const InventoryStockLevels: React.FC = () => {
   }, []);
 
   return (
-    <ResponsiveContainer width="100%" height={300} suppressHydrationWarning>
-      <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="itemName" />
-        <YAxis />
-        <Tooltip />
-        <Legend />
-        <Bar dataKey="stock" name="Stock">
-          {data.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <div suppressHydrationWarning>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="itemName" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Bar dataKey="stock" name="Stock">
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 
