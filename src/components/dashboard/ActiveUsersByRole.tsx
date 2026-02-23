@@ -51,7 +51,7 @@ const ActiveUsersByRole: React.FC = () => {
   }, []);
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={300} suppressHydrationWarning>
       <PieChart>
         <Pie
           data={data}
