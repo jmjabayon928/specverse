@@ -304,7 +304,7 @@ export default function EstimationDetailPage() {
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-8">
       {isPrintView && (
         <div className="text-center text-xs text-gray-500 mt-0 mb-4 print:mt-0">
-          Generated from SpecVerse — {new Date().toLocaleDateString()}
+          Generated from SpecVerse — {new Date().toISOString().slice(0, 10)}
         </div>
       )}
       <div className="space-y-3">
@@ -1021,7 +1021,7 @@ export default function EstimationDetailPage() {
       </div>
       {isPrintView && (
         <div className="text-center text-xs text-gray-500 mt-0 mb-4 print:mt-0">
-          Generated from SpecVerse — {new Date().toLocaleDateString()}
+          Generated from SpecVerse — {new Date().toISOString().slice(0, 10)}
         </div>
       )}
     </div>

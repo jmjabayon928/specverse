@@ -18,17 +18,18 @@ export default function LayoutWithSidebar({ children }: { children: React.ReactN
   const isInviteAcceptPage = pathname.startsWith('/invite/accept')
   const shouldBypassLayout = isLoginPage || isInviteAcceptPage
 
-  // ✅ compute memo BEFORE any return
   const mainContentMargin = useMemo(() => {
     if (isMobileOpen) return 'ml-0'
     if (isExpanded || isHovered) return 'lg:ml-[290px]'
     return 'lg:ml-[90px]'
   }, [isExpanded, isHovered, isMobileOpen])
 
-  // ✅ early returns AFTER all hooks
   if (shouldBypassLayout) return <>{children}</>
-  if (loading) return <>{children}</>
-  if (!user) return <>{children}</>
+
+  const shouldShowShell = true
+  const shouldShowProtectedContent = loading === false && user != null
+
+  if (!shouldShowShell) return <>{children}</>
 
   return (
     <>
@@ -36,9 +37,17 @@ export default function LayoutWithSidebar({ children }: { children: React.ReactN
       <div className="min-h-screen xl:flex">
         <AppSidebar />
         <Backdrop />
-        <div className={`flex-1 transition-all duration-300 ease-in-out ${mainContentMargin}`}>
+        <div className={`flex-1 ${mainContentMargin}`}>
           <AppHeader />
-          <div className="p-4 mx-auto max-w-screen-2xl md:p-6">{children}</div>
+          <div className="p-4 mx-auto max-w-screen-2xl md:p-6">
+            {shouldShowProtectedContent ? (
+              children
+            ) : (
+              <div aria-busy="true" className="py-8">
+                <div className="text-sm text-gray-500">Loading…</div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </>

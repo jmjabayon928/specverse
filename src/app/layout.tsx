@@ -1,5 +1,6 @@
 // src/app/layout.tsx
 import { Outfit } from 'next/font/google'
+import { cookies } from 'next/headers'
 import './globals.css'
 
 import { SidebarProvider } from '@/context/SidebarContext'
@@ -12,12 +13,16 @@ const outfit = Outfit({
   subsets: ['latin']
 })
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies()
+  const themeCookie = cookieStore.get('theme')
+  const initialTheme = themeCookie?.value === 'dark' ? 'dark' : 'light'
+
   return (
-    <html lang='en'>
+    <html lang='en' className={initialTheme === 'dark' ? 'dark' : ''}>
       <body className={`${outfit.className} dark:bg-gray-900`}>
         <ClientBootLogger />
-        <ThemeProvider>
+        <ThemeProvider initialTheme={initialTheme}>
           <SidebarProvider>
             <LayoutWithSidebar>{children}</LayoutWithSidebar>
             <Toaster

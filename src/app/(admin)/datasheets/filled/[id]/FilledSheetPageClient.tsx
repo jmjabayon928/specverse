@@ -20,6 +20,8 @@ interface Props {
   filledSheet: UnifiedSheet;
   defaultLanguage: string;
   defaultUnitSystem: "SI" | "USC";
+  initialLang?: string;
+  initialUnitSystem?: "SI" | "USC";
   initialTranslations?: SheetTranslations | null;
 }
 
@@ -33,36 +35,16 @@ const FilledSheetPageClient: React.FC<Props> = ({
   filledSheet,
   defaultLanguage,
   defaultUnitSystem,
+  initialLang,
+  initialUnitSystem,
   initialTranslations = null,
 }) => {
   const router = useRouter();
 
-  const [lang, setLang] = useState<string>(defaultLanguage);
-  const [unitSystem, setUnitSystem] = useState<"SI" | "USC">(defaultUnitSystem);
+  const [lang, setLang] = useState<string>(initialLang ?? defaultLanguage);
+  const [unitSystem, setUnitSystem] = useState<"SI" | "USC">(initialUnitSystem ?? defaultUnitSystem);
   const [translatedSheet, setTranslatedSheet] = useState<UnifiedSheet>(filledSheet);
   const [translations, setTranslations] = useState<SheetTranslations | null>(initialTranslations ?? null);
-
-  // 🔹 Safely read cookies on client only
-  useEffect(() => {
-    if (typeof document !== "undefined") {
-      const cookieLang = document.cookie
-        .split("; ")
-        .find((c) => c.startsWith("lang="));
-      if (cookieLang) {
-        const newLang = decodeURIComponent(cookieLang.split("=")[1]);
-        setLang(newLang);
-      }
-
-      const cookieUOM = document.cookie
-        .split("; ")
-        .find((c) => c.startsWith("unitSystem="));
-      if (cookieUOM?.includes("USC")) {
-        setUnitSystem("USC");
-      } else {
-        setUnitSystem("SI");
-      }
-    }
-  }, []);
 
   // 🔹 Refetch translations when lang or filledSheet changes; use initialTranslations when lang matches defaultLanguage
   useEffect(() => {
