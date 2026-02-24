@@ -27,6 +27,13 @@ type AuditLogDTO = {
 
 type Paged<T> = { page: number; pageSize: number; total: number; rows: T[] };
 
+function formatDateTimeISO(input: string | number | Date | null | undefined): string {
+  if (input == null) return '—';
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toISOString().replace('T', ' ').slice(0, 19);
+}
+
 export default function AuditLogsPage() {
   const [rows, setRows] = useState<AuditLogDTO[]>([]);
   const [total, setTotal] = useState(0);
@@ -157,11 +164,7 @@ export default function AuditLogsPage() {
 
   const formatDate = (dateStr: string | null): string => {
     if (!dateStr) return "—";
-    try {
-      return new Date(dateStr).toLocaleString();
-    } catch {
-      return dateStr;
-    }
+    return formatDateTimeISO(dateStr);
   };
 
   return (
@@ -341,11 +344,7 @@ function AuditLogDetailDrawer({
 }) {
   const formatDate = (dateStr: string | null): string => {
     if (!dateStr) return "—";
-    try {
-      return new Date(dateStr).toLocaleString();
-    } catch {
-      return dateStr;
-    }
+    return formatDateTimeISO(dateStr);
   };
 
   const safeStringify = (value: unknown): string => {

@@ -13,6 +13,13 @@ type RoleDTO = {
 
 type Paged<T> = { page: number; pageSize: number; total: number; rows: T[] };
 
+function formatDateTimeISO(input: string | number | Date | null | undefined): string {
+  if (input == null) return '—';
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toISOString().replace('T', ' ').slice(0, 19);
+}
+
 export default function RolesPage() {
   const [rows, setRows] = useState<RoleDTO[]>([]);
   const [total, setTotal] = useState(0);
@@ -116,7 +123,7 @@ export default function RolesPage() {
                 <td className="py-2">{r.RoleID}</td>
                 <td className="py-2">{r.RoleName ?? "—"}</td>
                 <td className="py-2">{r.PermissionsCount ?? 0}</td>
-                <td className="py-2">{r.UpdatedAt ? new Date(r.UpdatedAt).toLocaleString() : "—"}</td>
+                <td className="py-2">{r.UpdatedAt ? formatDateTimeISO(r.UpdatedAt) : "—"}</td>
                 <td className="py-2">
                   <Link
                     href={`/settings/roles/${r.RoleID}`}

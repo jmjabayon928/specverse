@@ -18,6 +18,13 @@ export interface InventoryItem {
   UnitCost: number;
 }
 
+function formatDateISO(input: string | number | Date | null | undefined): string {
+  if (input == null) return '—';
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toISOString().slice(0, 10);
+}
+
 export default function EstimationDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -83,11 +90,7 @@ export default function EstimationDetailPage() {
 
   const formatDate = (dateStr?: string | Date) => {
     if (!dateStr) return '-';
-    try {
-      return new Date(dateStr).toLocaleDateString();
-    } catch {
-      return '-';
-    }
+    return formatDateISO(dateStr);
   };
 
   useEffect(() => {
@@ -550,12 +553,12 @@ export default function EstimationDetailPage() {
                 <div className="font-medium text-gray-600">Created By</div>
                 <div>{pkg.CreatedByName || '-'}</div>
                 <div className="font-medium text-gray-600">Date Created</div>
-                <div>{pkg.CreatedAt ? new Date(pkg.CreatedAt).toLocaleDateString() : '-'}</div>
+                <div>{pkg.CreatedAt ? formatDateISO(pkg.CreatedAt) : '-'}</div>
 
                 <div className="font-medium text-gray-600">Modified By</div>
                 <div>{pkg.ModifiedByName || '-'}</div>
                 <div className="font-medium text-gray-600">Date Modified</div>
-                <div>{pkg.ModifiedAt ? new Date(pkg.ModifiedAt).toLocaleDateString() : '-'}</div>
+                <div>{pkg.ModifiedAt ? formatDateISO(pkg.ModifiedAt) : '-'}</div>
               </div>
             </div>
 
@@ -586,7 +589,7 @@ export default function EstimationDetailPage() {
                           <td className="border border-gray-300 px-2 py-1">{item.Description || '-'}</td>
                           <td className="border border-gray-300 px-2 py-1">{item.CreatedByName || '-'}</td>
                           <td className="border border-gray-300 px-2 py-1">
-                            {item.CreatedAt ? new Date(item.CreatedAt).toLocaleDateString() : '-'}
+                            {item.CreatedAt ? formatDateISO(item.CreatedAt) : '-'}
                           </td>
                           <td className="border border-gray-300 px-2 py-1 text-center">
                             <div className="flex justify-center gap-2">
