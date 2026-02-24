@@ -22,7 +22,7 @@ function labelFromId(id: number | null): string {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   process.env.BACKEND_URL ??
-  "http://localhost:5000";
+  "http://localhost:4000";
 
 export default async function LayoutDetailPage({ params }: Readonly<PageProps>) {
   const { layoutId } = await params;

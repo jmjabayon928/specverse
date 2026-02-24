@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useLayoutEffect } from "rea
 type SidebarContextType = {
   isExpanded: boolean;
   isMobileOpen: boolean;
+  isMobile: boolean;
   isHovered: boolean;
   activeItem: string | null;
   openSubmenu: string | null;
@@ -40,8 +41,16 @@ export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({
     if (typeof window !== 'undefined') {
       const handleResize = () => {
         const mobile = window.innerWidth < 768;
+      
         setIsMobile(mobile);
+      
+        if (mobile) {
+          // On mobile, prevent hover-driven layout shifts
+          setIsHovered(false);
+        }
+      
         if (!mobile) {
+          // When switching back to desktop, ensure mobile overlay is closed
           setIsMobileOpen(false);
         }
       };
@@ -70,8 +79,9 @@ export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <SidebarContext.Provider
       value={{
-        isExpanded: isMobile ? false : isExpanded,
+        isExpanded,
         isMobileOpen,
+        isMobile,
         isHovered,
         activeItem,
         openSubmenu,
