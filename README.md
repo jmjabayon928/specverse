@@ -1144,7 +1144,7 @@ To run Next.js in production mode locally (matching VPS behavior with `next buil
 **Terminal 1 (Backend):**
 ```powershell
 cd c:\projects\specverse
-$env:BACKEND_ORIGIN="http://127.0.0.1:5000"
+$env:BACKEND_ORIGIN="http://127.0.0.1:4000"
 npm run backend
 ```
 
@@ -1152,12 +1152,12 @@ npm run backend
 ```powershell
 cd c:\projects\specverse
 $env:NODE_ENV="production"
-$env:BACKEND_ORIGIN="http://127.0.0.1:5000"
+$env:BACKEND_ORIGIN="http://127.0.0.1:4000"
 npm run prod:local:fe
 ```
 
 **Environment variables:**
-- `BACKEND_ORIGIN` — Backend server URL (defaults to `http://127.0.0.1:5000`)
+- `BACKEND_ORIGIN` — Backend server URL (defaults to `http://127.0.0.1:4000`)
 - `NODE_ENV=production` — Enables production mode
 
 **Environment configuration**

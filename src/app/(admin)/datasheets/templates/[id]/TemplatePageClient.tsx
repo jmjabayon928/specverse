@@ -21,6 +21,8 @@ interface Props {
   template: UnifiedSheet
   defaultLanguage: string
   defaultUnitSystem: 'SI' | 'USC'
+  initialLang?: string
+  initialUnitSystem?: 'SI' | 'USC'
   initialTranslations: SheetTranslations | null
 }
 
@@ -34,46 +36,15 @@ const TemplatePageClient: React.FC<Props> = ({
   template,
   defaultLanguage,
   defaultUnitSystem,
+  initialLang,
+  initialUnitSystem,
   initialTranslations,
 }) => {
   const router = useRouter()
 
-  const [lang, setLang] = useState<string>(defaultLanguage)
+  const [lang, setLang] = useState<string>(initialLang ?? defaultLanguage)
   const [unitSystem, setUnitSystem] =
-    useState<'SI' | 'USC'>(defaultUnitSystem)
-
-  // Restore language preference from cookie
-  useEffect(() => {
-    const cookie = document.cookie
-      .split('; ')
-      .find((entry) => entry.startsWith('lang='))
-
-    if (!cookie) {
-      return
-    }
-
-    const [, value] = cookie.split('=')
-    if (!value) {
-      return
-    }
-
-    setLang(decodeURIComponent(value))
-  }, [])
-
-  // Restore unit system preference from cookie
-  useEffect(() => {
-    const cookie = document.cookie
-      .split('; ')
-      .find((entry) => entry.startsWith('unitSystem='))
-
-    if (!cookie) {
-      return
-    }
-
-    if (cookie.includes('USC')) {
-      setUnitSystem('USC')
-    }
-  }, [])
+    useState<'SI' | 'USC'>(initialUnitSystem ?? defaultUnitSystem)
 
   const [translatedTemplate, setTranslatedTemplate] =
     useState<UnifiedSheet>(template)

@@ -25,14 +25,14 @@ const nextConfig: NextConfig = {
 
   async rewrites() {
     // Required environment variables:
-    // - Local prod: BACKEND_ORIGIN (defaults to 'http://127.0.0.1:5000')
+    // - Local prod: BACKEND_ORIGIN (defaults to 'http://127.0.0.1:4000')
     // - VPS: USE_NGINX_PROXY=true (disables rewrites, nginx handles routing)
 
     if (process.env.USE_NGINX_PROXY === 'true') {
       return []
     }
 
-    const backendOrigin = process.env.BACKEND_ORIGIN || 'http://127.0.0.1:5000'
+    const backendOrigin = process.env.BACKEND_ORIGIN || 'http://127.0.0.1:4000'
     return [
       {
         source: '/api/backend/:path*',

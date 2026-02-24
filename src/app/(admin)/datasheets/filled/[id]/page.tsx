@@ -1,5 +1,6 @@
 // src/app/(admin)/datasheets/filled/[id]/page.tsx
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import { PERMISSIONS } from "@/constants/permissions";
 import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
 import FilledSheetPageClient from "./FilledSheetPageClient";
@@ -9,6 +10,14 @@ import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 
 type FilledParams = Readonly<{ id: string }>;
 type SearchParamsRecord = Readonly<Record<string, string | string[] | undefined>>;
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -52,6 +61,16 @@ export default async function FilledSheetDetailPage({
   // Enforce the union expected by the client prop
   const defaultUnitSystem: "SI" | "USC" = uomParam === "USC" ? "USC" : "SI";
 
+  const cookieStore = await cookies();
+  const langCookie = cookieStore.get("lang");
+  const unitCookie = cookieStore.get("unitSystem");
+  const cookieLang = langCookie?.value ? safeDecode(langCookie.value) : undefined;
+  const cookieUnit = unitCookie?.value
+    ? (unitCookie.value.trim().toUpperCase() === "USC" ? "USC" : "SI")
+    : undefined;
+  const initialLang = cookieLang ?? defaultLanguage;
+  const initialUnitSystem = cookieUnit ?? defaultUnitSystem;
+
   const accountId = session.accountId;
   if (accountId == null) return notFound();
 
@@ -71,6 +90,8 @@ export default async function FilledSheetDetailPage({
         filledSheet={filledSheet}
         defaultLanguage={defaultLanguage}
         defaultUnitSystem={defaultUnitSystem}
+        initialLang={initialLang}
+        initialUnitSystem={initialUnitSystem}
         initialTranslations={initialTranslations}
       />
     </SecurePage>

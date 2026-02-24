@@ -2,7 +2,7 @@
 'use client'
 
 import { ChevronDown } from 'lucide-react'
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -124,23 +124,16 @@ const navItems: NavItem[] = [
 ]
 
 const AppSidebar: React.FC = () => {
-  const [mounted, setMounted] = useState(false)
   const [transitionsEnabled, setTransitionsEnabled] = useState(false)
-  const [layoutLocked, setLayoutLocked] = useState(true)
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar()
   const { user, loading } = useSession()
   const pathname = usePathname()
 
-  useLayoutEffect(() => {
-    setMounted(true)
-    // Enable transitions after initial paint to prevent twitching
-    requestAnimationFrame(() => {
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
       setTransitionsEnabled(true)
-      // Unlock layout after transitions are enabled
-      requestAnimationFrame(() => {
-        setLayoutLocked(false)
-      })
     })
+    return () => cancelAnimationFrame(id)
   }, [])
 
   const userRole = user?.role?.toLowerCase() ?? ''
@@ -449,12 +442,8 @@ const AppSidebar: React.FC = () => {
 
   // Lock layout during hydration to prevent twitching
   const sidebarWidth = useMemo(() => {
-    if (layoutLocked) {
-      // During hydration, use stable default (desktop expanded)
-      return 'w-[290px]'
-    }
     return isExpanded || isMobileOpen || isHovered ? 'w-[290px]' : 'w-[90px]'
-  }, [layoutLocked, isExpanded, isMobileOpen, isHovered])
+  }, [isExpanded, isMobileOpen, isHovered])
 
   // Always render full sidebar structure to prevent layout shift, but hide until mounted
   return (
@@ -467,7 +456,6 @@ const AppSidebar: React.FC = () => {
         ${sidebarWidth}
         ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0
-        ${mounted ? 'opacity-100' : 'opacity-0'}
       `}
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

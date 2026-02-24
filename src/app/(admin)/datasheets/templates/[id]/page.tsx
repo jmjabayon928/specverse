@@ -1,5 +1,6 @@
 // src/app/(admin)/datasheets/templates/[id]/page.tsx
 
+import { cookies } from 'next/headers'
 import SecurePage from '@/components/security/SecurePage'
 import { PERMISSIONS } from '@/constants/permissions'
 import { getTemplateDetailsById } from '@/backend/services/templateService'
@@ -18,6 +19,14 @@ type TemplateDetailPageProps = Readonly<{
   params: Promise<TemplateParams>
   searchParams: Promise<SearchParamsRecord>
 }>
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -79,6 +88,16 @@ const TemplateDetailPage = async (props: TemplateDetailPageProps) => {
   const sheetId = await resolveSheetId(props.params)
   const { defaultLanguage, defaultUnitSystem } = await resolveFilters(props.searchParams)
 
+  const cookieStore = await cookies()
+  const langCookie = cookieStore.get('lang')
+  const unitCookie = cookieStore.get('unitSystem')
+  const cookieLang = langCookie?.value ? safeDecode(langCookie.value) : undefined
+  const cookieUnit = unitCookie?.value
+    ? (unitCookie.value.trim().toUpperCase() === 'USC' ? 'USC' : 'SI')
+    : undefined
+  const initialLang = cookieLang ?? defaultLanguage
+  const initialUnitSystem = cookieUnit ?? defaultUnitSystem
+
   const result = await getTemplateDetailsById(sheetId, defaultLanguage, defaultUnitSystem, accountId)
 
   if (result == null) {
@@ -98,6 +117,8 @@ const TemplateDetailPage = async (props: TemplateDetailPageProps) => {
         template={template}
         defaultLanguage={defaultLanguage}
         defaultUnitSystem={defaultUnitSystem}
+        initialLang={initialLang}
+        initialUnitSystem={initialUnitSystem}
         initialTranslations={safeTranslations}
       />
     </SecurePage>
