@@ -8,6 +8,7 @@ import {
   updateMemberStatus as repoUpdateStatus,
   type AccountMemberRow,
 } from '../repositories/accountMembersRepository'
+import { AppError } from '../errors/AppError'
 import { getAccountById } from '../repositories/accountsRepository'
 import { isAdminRole } from '../utils/roleUtils'
 import { logAuditAction } from '../utils/logAuditAction'
@@ -67,6 +68,11 @@ export async function updateMemberRole(
     const err = new Error('Account member not found')
     ;(err as Error & { statusCode?: number }).statusCode = 404
     throw err
+  }
+
+  const account = await getAccountById(accountId)
+  if (account?.ownerUserId != null && member.userId === account.ownerUserId) {
+    throw new AppError("Transfer ownership before changing the owner's role.", 403)
   }
 
   const adminCount = await countActiveAdminsInAccount(accountId)

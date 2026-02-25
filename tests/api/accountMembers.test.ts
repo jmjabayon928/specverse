@@ -290,6 +290,41 @@ describe('PATCH /api/backend/account-members/:id/role', () => {
 
     assertValidationError(res)
   })
+
+  it('returns 403 when changing account owner role', async () => {
+    getMemberInAccount.mockResolvedValue({
+      ...sampleMember,
+      userId: 2,
+      roleName: 'Admin',
+      roleId: 1,
+    })
+    getAccountById.mockResolvedValueOnce({
+      accountId: 1,
+      accountName: 'Acme',
+      slug: 'acme',
+      isActive: true,
+      ownerUserId: 2,
+    })
+    countActiveAdminsInAccount.mockResolvedValue(2)
+
+    const token = makeToken({
+      userId: 1,
+      roleId: 1,
+      role: 'Admin',
+      email: 'admin@example.com',
+      name: 'Admin',
+      profilePic: null,
+      permissions: ['ACCOUNT_ROLE_MANAGE'],
+    })
+
+    const res = await request(app)
+      .patch('/api/backend/account-members/10/role')
+      .set('Cookie', [`token=${token}`])
+      .send({ roleId: 2 })
+
+    assertForbidden(res, /transfer ownership|owner's role/i)
+    expect(updateMemberRoleRepo).not.toHaveBeenCalled()
+  })
 })
 
 describe('PATCH /api/backend/account-members/:id/status', () => {
