@@ -23,6 +23,13 @@ type RolePermissionsResponse = {
 
 type Option = { value: number; label: string };
 
+function formatDateTimeISO(input: string | number | Date | null | undefined): string {
+  if (input == null) return '—';
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toISOString().replace('T', ' ').slice(0, 19);
+}
+
 export default function RoleDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -173,7 +180,7 @@ export default function RoleDetailPage() {
       </div>
 
       <div className="text-sm text-slate-600">
-        RoleID: {role!.RoleID} · Updated: {new Date(role!.UpdatedAt).toLocaleString()}
+        RoleID: {role!.RoleID} · Updated: {formatDateTimeISO(role!.UpdatedAt)}
       </div>
 
       <section className="space-y-3">
