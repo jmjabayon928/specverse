@@ -20,9 +20,7 @@ type ByTokenData = {
 
 type PageState =
   | { kind: 'loading' }
-  | { kind: 'missing_token' }
   | { kind: 'invalid' }
-  | { kind: 'expired' }
   | { kind: 'used_or_revoked'; status: InviteStatus }
   | { kind: 'pending_signed_out'; data: ByTokenData }
   | { kind: 'pending_signed_in'; data: ByTokenData }
@@ -31,6 +29,7 @@ type PageState =
   | { kind: 'email_mismatch' }
   | { kind: 'declined' }
   | { kind: 'success'; accountName: string; redirectTo?: 'dashboard' | 'login' }
+  | { kind: 'error' }
 
 function validatePassword(pwd: string): { valid: boolean; errors: string[] } {
   const errors: string[] = []
@@ -79,7 +78,7 @@ export default function InviteAcceptClient() {
 
   useEffect(() => {
     if (!token || !token.trim()) {
-      setState({ kind: 'missing_token' })
+      setState({ kind: 'invalid' })
       return
     }
 
@@ -93,22 +92,31 @@ export default function InviteAcceptClient() {
           return
         }
         if (data.status === 'expired') {
-          setState({ kind: 'expired' })
+          setState({ kind: 'invalid' })
           return
         }
         if (data.status === 'accepted' || data.status === 'revoked' || data.status === 'declined') {
           setState({ kind: 'used_or_revoked', status: data.status })
           return
         }
-        const signedIn = await checkSession()
+        let isLoggedIn = false
+        try {
+          isLoggedIn = await checkSession()
+        } catch {
+          isLoggedIn = false
+        }
         if (cancelled) return
-        if (signedIn) {
+        if (isLoggedIn) {
           setState({ kind: 'pending_signed_in', data })
           return
         }
         setState({ kind: 'pending_signed_out', data })
       } catch {
-        if (!cancelled) setState({ kind: 'invalid' })
+        if (!cancelled) setState({ kind: 'error' })
+      } finally {
+        if (!cancelled) {
+          setState((prev) => (prev.kind === 'loading' ? { kind: 'error' } : prev))
+        }
       }
     }
     run()
@@ -119,6 +127,7 @@ export default function InviteAcceptClient() {
 
   const handleAccept = async () => {
     if (!token || state.kind !== 'pending_signed_in') return
+    const inviteData = state.kind === 'pending_signed_in' ? state.data : null
     setState({ kind: 'accepting' })
     try {
       const res = await fetch('/api/backend/invites/accept', {
@@ -133,17 +142,21 @@ export default function InviteAcceptClient() {
         setTimeout(() => router.replace('/dashboard'), 2000)
         return
       }
+      if (res.status === 401 && inviteData) {
+        setState({ kind: 'pending_signed_out', data: inviteData })
+        return
+      }
       if (res.status === 403) {
         setState({ kind: 'email_mismatch' })
         return
       }
-      if (res.status === 410) {
-        setState({ kind: 'accept_public_error', message: 'Invite expired or already used.' })
+      if (res.status === 400 || res.status === 404 || res.status === 410) {
+        setState({ kind: 'invalid' })
         return
       }
-      setState({ kind: 'invalid' })
+      setState({ kind: 'error' })
     } catch {
-      setState({ kind: 'invalid' })
+      setState({ kind: 'error' })
     }
   }
 
@@ -178,31 +191,22 @@ export default function InviteAcceptClient() {
         }),
       })
       const body = await res.json().catch(() => ({} as Record<string, unknown>))
-      const msg = (body as { message?: string }).message ?? (body as { error?: string }).error
-      if (res.status === 200 || res.status === 201) {
+      if (res.ok) {
         setState({ kind: 'success', accountName: (body as { accountName?: string }).accountName ?? 'Account', redirectTo: 'login' })
         setTimeout(() => router.replace('/login'), 2000)
         return
       }
       if (res.status === 409) {
-        setState({ kind: 'accept_public_error', message: msg ?? 'Account already exists. Please sign in to accept this invite.', showSignInLink: true })
+        setState({ kind: 'used_or_revoked', status: 'accepted' })
         return
       }
-      if (res.status === 410) {
-        setState({ kind: 'accept_public_error', message: msg ?? 'Invite expired or already used.' })
+      if (res.status === 400 || res.status === 404 || res.status === 410) {
+        setState({ kind: 'invalid' })
         return
       }
-      if (res.status === 404) {
-        setState({ kind: 'accept_public_error', message: msg ?? 'Invalid invite token.' })
-        return
-      }
-      if (res.status === 400) {
-        setFieldErrors({ form: msg ?? 'Invalid input.' })
-        return
-      }
-      setFieldErrors({ form: msg ?? 'Something went wrong. Please try again.' })
+      setState({ kind: 'error' })
     } catch {
-      setFieldErrors({ form: 'Something went wrong. Please try again.' })
+      setState({ kind: 'error' })
     } finally {
       setSubmitLoading(false)
     }
@@ -217,19 +221,17 @@ export default function InviteAcceptClient() {
         body: JSON.stringify({ token: token.trim() }),
         credentials: 'include',
       })
-      if (res.status === 204) {
+      if (res.ok) {
         setState({ kind: 'declined' })
         return
       }
-      const j = await res.json().catch(() => ({} as Record<string, unknown>))
-      const message = typeof (j as { message?: unknown }).message === 'string' ? (j as { message: string }).message : undefined
-      if (res.status === 403) {
-        setState({ kind: 'email_mismatch' })
+      if (res.status === 400 || res.status === 404 || res.status === 410) {
+        setState({ kind: 'invalid' })
         return
       }
-      toast.error(message ?? 'Something went wrong.')
+      setState({ kind: 'error' })
     } catch {
-      setState({ kind: 'invalid' })
+      setState({ kind: 'error' })
     }
   }
 
@@ -245,23 +247,11 @@ export default function InviteAcceptClient() {
     )
   }
 
-  if (state.kind === 'missing_token') {
-    return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
-        <h1 className="mb-2 text-xl font-semibold text-gray-800 dark:text-white">Invalid invite link</h1>
-        <p className="mb-4 text-gray-600 dark:text-gray-400">This link is missing the invite token.</p>
-        <Link href="/login" className="text-primary-600 hover:underline dark:text-primary-400">
-          Go to sign in
-        </Link>
-      </div>
-    )
-  }
-
   if (state.kind === 'invalid') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
-        <h1 className="mb-2 text-xl font-semibold text-gray-800 dark:text-white">Invalid or expired invite</h1>
-        <p className="mb-4 text-gray-600 dark:text-gray-400">This invite link is not valid.</p>
+        <h1 className="mb-2 text-xl font-semibold text-gray-800 dark:text-white">Invalid or expired invite link</h1>
+        <p className="mb-4 text-gray-600 dark:text-gray-400">This link is missing, invalid, or has expired. Ask the account admin to send a new invite.</p>
         <Link href="/login" className="text-primary-600 hover:underline dark:text-primary-400">
           Go to sign in
         </Link>
@@ -269,13 +259,13 @@ export default function InviteAcceptClient() {
     )
   }
 
-  if (state.kind === 'expired') {
+  if (state.kind === 'error') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
-        <h1 className="mb-2 text-xl font-semibold text-gray-800 dark:text-white">This invite has expired</h1>
-        <p className="mb-4 text-gray-600 dark:text-gray-400">Ask the account admin to send a new invite.</p>
-        <Link href="/login" className="text-primary-600 hover:underline dark:text-primary-400">
-          Go to sign in
+        <h1 className="mb-2 text-xl font-semibold text-red-600 dark:text-red-400">Something went wrong</h1>
+        <p className="mb-4 text-gray-600 dark:text-gray-400">We couldn’t complete your request. Please try again or sign in and retry.</p>
+        <Link href={token ? `/invite/accept?token=${encodeURIComponent(token)}` : '/login'} className="text-primary-600 hover:underline dark:text-primary-400">
+          {token ? 'Try again' : 'Go to sign in'}
         </Link>
       </div>
     )

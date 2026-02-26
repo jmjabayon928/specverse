@@ -36,8 +36,8 @@ describe('InviteAcceptPage', () => {
     mockGet.mockReturnValue(null)
     render(<InviteAcceptPage />)
     await waitFor(() => {
-      expect(screen.getByText(/Invalid invite link/i)).toBeInTheDocument()
-      expect(screen.getByText(/missing the invite token/i)).toBeInTheDocument()
+      expect(screen.getByText(/Invalid or expired invite link/i)).toBeInTheDocument()
+      expect(screen.getByText(/missing, invalid, or has expired/i)).toBeInTheDocument()
     })
   })
 
@@ -58,7 +58,8 @@ describe('InviteAcceptPage', () => {
     })
     render(<InviteAcceptPage />)
     await waitFor(() => {
-      expect(screen.getByText(/This invite has expired/i)).toBeInTheDocument()
+      expect(screen.getByText(/Invalid or expired invite link/i)).toBeInTheDocument()
+      expect(screen.getByText(/missing, invalid, or has expired/i)).toBeInTheDocument()
     })
   })
 
@@ -243,8 +244,8 @@ describe('InviteAcceptPage', () => {
     fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'SecurePass1!' } })
     fireEvent.click(screen.getByRole('button', { name: /Create account & join/i }))
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Account already exists/i })).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /Sign in/i })).toBeInTheDocument()
+      expect(screen.getByText(/already been accepted/i)).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /Go to sign in/i })).toBeInTheDocument()
     })
   })
 
@@ -288,7 +289,7 @@ describe('InviteAcceptPage', () => {
     })
   })
 
-  it('shows email mismatch when decline returns 403', async () => {
+  it('shows generic error when decline returns 403', async () => {
     mockGet.mockReturnValue('some-token')
     ;(globalThis.fetch as jest.Mock)
       .mockResolvedValueOnce({
@@ -307,8 +308,8 @@ describe('InviteAcceptPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /Decline/i }))
     await waitFor(() => {
-      expect(screen.getByText(/Email does not match/i)).toBeInTheDocument()
-      expect(screen.getByText(/sign in with the email address that received this invite/i)).toBeInTheDocument()
+      expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /Try again/i })).toBeInTheDocument()
     })
   })
 
