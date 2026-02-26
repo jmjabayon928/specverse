@@ -92,8 +92,8 @@ jest.mock('../../src/backend/utils/logAuditAction', () => ({
   logAuditAction: (...args: unknown[]) => logAuditAction(...args),
 }))
 
-jest.mock('../../src/backend/services/email/devEmailSender', () => ({
-  devEmailSender: { sendInviteEmail: jest.fn().mockResolvedValue(undefined) },
+jest.mock('../../src/backend/services/email/emailSenderFactory', () => ({
+  getEmailSender: () => ({ sendInviteEmail: jest.fn().mockResolvedValue(undefined) }),
 }))
 
 jest.mock('../../src/backend/services/usersService', () => ({

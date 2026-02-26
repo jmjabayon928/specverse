@@ -102,9 +102,13 @@ function normalizeAccountInvitesResponse(data: unknown): AccountInviteRow[] {
 
 const isProd = process.env.NODE_ENV === "production";
 
+function hasIsPlatformAdmin(x: unknown): x is { isPlatformAdmin: boolean } {
+  return typeof x === "object" && x !== null && "isPlatformAdmin" in x && typeof (x as { isPlatformAdmin: unknown }).isPlatformAdmin === "boolean";
+}
+
 export default function UsersPage() {
   const { user } = useSession();
-  const isAdmin = user?.role?.toLowerCase() === "admin";
+  const isPlatformAdmin = hasIsPlatformAdmin(user) && user.isPlatformAdmin;
 
   const [rows, setRows] = useState<UserRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -156,10 +160,10 @@ export default function UsersPage() {
     []
   );
 
-  // Load on page/pageSize changes (search only when user clicks Search)
+  // Load users only for platform admins (global Users CRUD is platform-admin only)
   useEffect(() => {
-    void load(page, pageSize, searchRef.current);
-  }, [page, pageSize, load]);
+    if (isPlatformAdmin) void load(page, pageSize, searchRef.current);
+  }, [page, pageSize, load, isPlatformAdmin]);
 
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -353,31 +357,35 @@ export default function UsersPage() {
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center gap-2">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name or email"
-          className="border rounded px-3 py-2"
-        />
-        <button
-          onClick={() => {
-            setPage(1);
-            void load(1, pageSize, search);
-          }}
-          className="border rounded px-3 py-2"
-        >
-          Search
-        </button>
+        {isPlatformAdmin && (
+          <>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name or email"
+              className="border rounded px-3 py-2"
+            />
+            <button
+              onClick={() => {
+                setPage(1);
+                void load(1, pageSize, search);
+              }}
+              className="border rounded px-3 py-2"
+            >
+              Search
+            </button>
+            <button
+              onClick={() => {
+                setEditing(null);
+                setShowForm(true);
+              }}
+              className="border rounded px-3 py-2"
+            >
+              + New User
+            </button>
+          </>
+        )}
         <div className="flex-1" />
-        <button
-          onClick={() => {
-            setEditing(null);
-            setShowForm(true);
-          }}
-          className="border rounded px-3 py-2"
-        >
-          + New User
-        </button>
         <button
           onClick={() => setShowInviteModal(true)}
           className="border rounded px-3 py-2"
@@ -494,41 +502,41 @@ export default function UsersPage() {
         )}
       </section>
 
-      {loading ? (
-        <div>Loading…</div>
-      ) : (
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="text-left border-b">
-              <th className="py-2">ID</th>
-              <th className="py-2">Name</th>
-              <th className="py-2">Email</th>
-              <th className="py-2">Role</th>
-              <th className="py-2">Active</th>
-              <th className="py-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.UserID} className="border-b">
-                <td className="py-2">{r.UserID}</td>
-                <td className="py-2">
-                  {[r.FirstName, r.LastName].filter(Boolean).join(" ") || "—"}
-                </td>
-                <td className="py-2">{r.Email ?? "—"}</td>
-                <td className="py-2">{r.RoleName ?? r.RoleID ?? "—"}</td>
-                <td className="py-2">{r.IsActive ? "Yes" : "No"}</td>
-                <td className="py-2">
-                  <button
-                    className="mr-2 underline"
-                    onClick={() => {
-                      setEditing(r);
-                      setShowForm(true);
-                    }}
-                  >
-                    Edit
-                  </button>
-                  {isAdmin && (
+      {isPlatformAdmin ? (
+        loading ? (
+          <div>Loading…</div>
+        ) : (
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-left border-b">
+                <th className="py-2">ID</th>
+                <th className="py-2">Name</th>
+                <th className="py-2">Email</th>
+                <th className="py-2">Role</th>
+                <th className="py-2">Active</th>
+                <th className="py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.UserID} className="border-b">
+                  <td className="py-2">{r.UserID}</td>
+                  <td className="py-2">
+                    {[r.FirstName, r.LastName].filter(Boolean).join(" ") || "—"}
+                  </td>
+                  <td className="py-2">{r.Email ?? "—"}</td>
+                  <td className="py-2">{r.RoleName ?? r.RoleID ?? "—"}</td>
+                  <td className="py-2">{r.IsActive ? "Yes" : "No"}</td>
+                  <td className="py-2">
+                    <button
+                      className="mr-2 underline"
+                      onClick={() => {
+                        setEditing(r);
+                        setShowForm(true);
+                      }}
+                    >
+                      Edit
+                    </button>
                     <button
                       className="mr-2 underline text-blue-600"
                       onClick={() => {
@@ -537,34 +545,37 @@ export default function UsersPage() {
                     >
                       Reset Password
                     </button>
-                  )}
-                  <button
-                    className="text-red-600 underline"
-                    onClick={async () => {
-                      if (!confirm("Delete this user?")) return;
-                      await fetch(
-                        `/api/backend/settings/users/${r.UserID}`,
-                        { method: "DELETE", credentials: "include" }
-                      );
-                      void load(page, pageSize, searchRef.current);
-                    }}
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-6 text-center text-slate-500">
-                  No users found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                    <button
+                      className="text-red-600 underline"
+                      onClick={async () => {
+                        if (!confirm("Delete this user?")) return;
+                        await fetch(
+                          `/api/backend/settings/users/${r.UserID}`,
+                          { method: "DELETE", credentials: "include" }
+                        );
+                        void load(page, pageSize, searchRef.current);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-slate-500">
+                    No users found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )
+      ) : (
+        <p className="text-sm text-slate-600">User management is restricted to platform administrators.</p>
       )}
 
+      {isPlatformAdmin && (
       <div className="flex items-center gap-2">
         <button
           disabled={page <= 1}
@@ -584,6 +595,7 @@ export default function UsersPage() {
           Next
         </button>
       </div>
+      )}
 
       {showForm && (
         <UserForm

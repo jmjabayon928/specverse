@@ -102,8 +102,8 @@ jest.mock('../../src/backend/utils/logAuditAction', () => ({
   logAuditAction: (...args: unknown[]) => logAuditAction(...args),
 }))
 
-jest.mock('../../src/backend/services/email/devEmailSender', () => ({
-  devEmailSender: { sendInviteEmail: (...args: unknown[]) => sendInviteEmail(...args) },
+jest.mock('../../src/backend/services/email/emailSenderFactory', () => ({
+  getEmailSender: () => ({ sendInviteEmail: (...args: unknown[]) => sendInviteEmail(...args) }),
 }))
 
 import app from '../../src/backend/app'
@@ -153,7 +153,7 @@ describe('POST /api/backend/invites', () => {
 
     expect(res.status).toBe(201)
     expect(res.body).toMatchObject({ email: 'new@example.com', roleId: 2, resent: false })
-    expect(sendInviteEmail).toHaveBeenCalled()
+    expect(sendInviteEmail).toHaveBeenCalledTimes(1)
     expect(logAuditAction).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'invite.created', recordId: 1 }),
     )
@@ -200,6 +200,7 @@ describe('POST /api/backend/invites', () => {
     expect(res.status).toBe(200)
     expect(res.body).toMatchObject({ resent: true, roleId: 2, roleName: 'Viewer' })
     expect(updateTokenAndIncrementSend).toHaveBeenCalled()
+    expect(sendInviteEmail).toHaveBeenCalledTimes(1)
     expect(logAuditAction).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'invite.resent' }),
     )

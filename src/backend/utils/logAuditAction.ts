@@ -1,5 +1,6 @@
 // src/backend/utils/logAuditAction.ts
 import { insertAuditLog } from "@/backend/database/auditQueries";
+import { redactChangesForLog } from "@/backend/utils/redact";
 
 interface LogAuditInput {
   tableName?: string | null;
@@ -12,12 +13,24 @@ interface LogAuditInput {
   changes?: Record<string, string | number | boolean | null> | null;
 }
 
+function safeSummary(input: LogAuditInput): Record<string, unknown> {
+  return {
+    tableName: input.tableName,
+    recordId: input.recordId,
+    action: input.action,
+    performedBy: input.performedBy,
+    route: input.route,
+    method: input.method,
+    statusCode: input.statusCode,
+    changes: redactChangesForLog(input.changes ?? null),
+  };
+}
+
 export async function logAuditAction(input: LogAuditInput): Promise<void> {
-  console.log("🧾 Final audit entry payload:", input);
   if (!input.performedBy) {
     throw new Error("🛑 Missing PerformedBy in audit log input");
   }
-  console.log("📝 Logging audit action with PerformedBy:", input.performedBy);
+  console.log("🧾 Audit:", safeSummary(input));
   await insertAuditLog({
     TableName: input.tableName ?? null,
     RecordID: input.recordId ?? null,

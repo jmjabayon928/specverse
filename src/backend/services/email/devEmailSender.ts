@@ -1,8 +1,9 @@
 // src/backend/services/email/devEmailSender.ts
 import type { IEmailSender, SendInviteEmailParams } from './emailSender.types'
+import { redactInviteUrl } from '../../utils/redact'
 
 /**
- * Dev sender: logs the accept URL so developers can copy it. No real email sent.
+ * Dev sender: logs a redacted summary (no token in logs). No real email sent.
  */
 export const devEmailSender: IEmailSender = {
   async sendInviteEmail(params: SendInviteEmailParams): Promise<void> {
@@ -10,7 +11,7 @@ export const devEmailSender: IEmailSender = {
       to: params.to,
       accountName: params.accountName,
       inviterName: params.inviterName,
-      acceptUrl: params.inviteAcceptLink,
+      acceptUrl: redactInviteUrl(params.inviteAcceptLink),
     })
   },
 }
