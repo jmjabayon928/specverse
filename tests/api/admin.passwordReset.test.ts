@@ -67,18 +67,6 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
       next(new AppError('Invalid or expired session', 403))
     }
   },
-  requireAdmin: (req: Request, _res: Response, next: NextFunction) => {
-    if (!req.user) {
-      next(new AppError('Missing user in request', 403))
-      return
-    }
-    const role = req.user.role?.toLowerCase()
-    if (role !== 'admin') {
-      next(new AppError('Admin access required', 403))
-      return
-    }
-    next()
-  },
   requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
   optionalVerifyToken: (req: Request, _res: Response, next: NextFunction) => {
     const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
@@ -110,6 +98,11 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => ({
     next()
   },
   verifyTokenOnly: (_req: Request, _res: Response, next: NextFunction) => next(),
+}))
+
+// Reset-password route uses requirePlatformAdmin (not requireAdmin); mock DB check
+jest.mock('../../src/backend/database/platformAdminQueries', () => ({
+  isActivePlatformAdmin: jest.fn(),
 }))
 
 // Mock the database and services
@@ -159,7 +152,10 @@ describe('Admin Password Reset', () => {
       expect(res.statusCode).toBe(401)
     })
 
-    it('returns 403 when authenticated but not admin', async () => {
+    it('returns 403 when authenticated but not platform admin (e.g. Engineer)', async () => {
+      const { isActivePlatformAdmin } = require('../../src/backend/database/platformAdminQueries')
+      isActivePlatformAdmin.mockResolvedValue(false)
+
       const app = buildTestApp()
       const authCookie = createAuthCookie('Engineer', [])
 
@@ -169,12 +165,31 @@ describe('Admin Password Reset', () => {
         .send({})
 
       expect(res.statusCode).toBe(403)
-      expect(res.body.error || res.body.message).toContain('Admin')
+      expect(res.body.error || res.body.message).toMatch(/Platform admin|Admin/i)
+    })
+
+    it('returns 403 when account admin (role admin) but not platform admin', async () => {
+      const { isActivePlatformAdmin } = require('../../src/backend/database/platformAdminQueries')
+      isActivePlatformAdmin.mockResolvedValue(false)
+
+      const app = buildTestApp()
+      const authCookie = createAuthCookie('Admin', [])
+
+      const res = await request(app)
+        .post('/api/backend/admin/users/123/reset-password')
+        .set('Cookie', [authCookie])
+        .send({})
+
+      expect(res.statusCode).toBe(403)
+      expect(res.body.error || res.body.message).toMatch(/Platform admin|required/i)
     })
   })
 
   describe('Success Cases', () => {
-    it('returns 200 with tempPassword when newPassword not provided', async () => {
+    it('returns 200 with tempPassword when newPassword not provided (platform admin)', async () => {
+      const { isActivePlatformAdmin } = require('../../src/backend/database/platformAdminQueries')
+      isActivePlatformAdmin.mockResolvedValue(true)
+
       const app = buildTestApp()
       const authCookie = createAuthCookie('Admin', [])
 
@@ -191,7 +206,10 @@ describe('Admin Password Reset', () => {
       expect(res.body).toHaveProperty('message')
     })
 
-    it('returns 200 without tempPassword when newPassword is provided', async () => {
+    it('returns 200 without tempPassword when newPassword is provided (platform admin)', async () => {
+      const { isActivePlatformAdmin } = require('../../src/backend/database/platformAdminQueries')
+      isActivePlatformAdmin.mockResolvedValue(true)
+
       const app = buildTestApp()
       const authCookie = createAuthCookie('Admin', [])
 
@@ -209,6 +227,9 @@ describe('Admin Password Reset', () => {
 
   describe('Validation', () => {
     it('returns 400 for invalid userId', async () => {
+      const { isActivePlatformAdmin } = require('../../src/backend/database/platformAdminQueries')
+      isActivePlatformAdmin.mockResolvedValue(true)
+
       const app = buildTestApp()
       const authCookie = createAuthCookie('Admin', [])
 
@@ -222,6 +243,9 @@ describe('Admin Password Reset', () => {
     })
 
     it('returns 400 for invalid body shape', async () => {
+      const { isActivePlatformAdmin } = require('../../src/backend/database/platformAdminQueries')
+      isActivePlatformAdmin.mockResolvedValue(true)
+
       const app = buildTestApp()
       const authCookie = createAuthCookie('Admin', [])
 
@@ -239,6 +263,8 @@ describe('Admin Password Reset', () => {
 
   describe('User Not Found', () => {
     it('returns 404 when user does not exist', async () => {
+      const { isActivePlatformAdmin } = require('../../src/backend/database/platformAdminQueries')
+      isActivePlatformAdmin.mockResolvedValue(true)
       const { getUserById } = require('../../src/backend/services/usersService')
       getUserById.mockResolvedValueOnce(null)
 

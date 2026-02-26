@@ -20,7 +20,7 @@ import { getAccountNameById } from '../repositories/accountsRepository'
 import { getUserByEmail } from '../database/userQueries'
 import { createUser, updateUser } from './usersService'
 import { generateInviteToken, inviteTokenSha256Hex } from '../utils/inviteTokenUtils'
-import { devEmailSender } from './email/devEmailSender'
+import { getEmailSender } from './email/emailSenderFactory'
 import { logAuditAction } from '../utils/logAuditAction'
 import { AppError } from '../errors/AppError'
 
@@ -176,7 +176,7 @@ export async function createOrResendInvite(
     await updateTokenAndIncrementSend(pending.inviteId, tokenHash, expiresAt)
     const inviteBaseUrl = resolveInviteBaseUrl(originFromRequest)
     const inviteLink = `${inviteBaseUrl}/invite/accept?token=${encodeURIComponent(token)}`
-    await devEmailSender.sendInviteEmail({
+    await getEmailSender().sendInviteEmail({
       to: normalizedEmail,
       inviteAcceptLink: inviteLink,
       accountName: (await getAccountNameById(accountId)) ?? 'Account',
@@ -217,7 +217,7 @@ export async function createOrResendInvite(
   )
   const inviteBaseUrl = resolveInviteBaseUrl(originFromRequest)
   const inviteLink = `${inviteBaseUrl}/invite/accept?token=${encodeURIComponent(token)}`
-  await devEmailSender.sendInviteEmail({
+  await getEmailSender().sendInviteEmail({
     to: normalizedEmail,
     inviteAcceptLink: inviteLink,
     accountName: (await getAccountNameById(accountId)) ?? 'Account',
@@ -283,7 +283,7 @@ export async function resendInvite(
   await updateTokenAndIncrementSend(inviteId, tokenHash, expiresAt)
   const inviteBaseUrl = resolveInviteBaseUrl(originFromRequest)
   const inviteLink = `${inviteBaseUrl}/invite/accept?token=${encodeURIComponent(token)}`
-  await devEmailSender.sendInviteEmail({
+  await getEmailSender().sendInviteEmail({
     to: row.email,
     inviteAcceptLink: inviteLink,
     accountName: (await getAccountNameById(accountId)) ?? 'Account',

@@ -1,12 +1,12 @@
 // src/backend/routes/adminRoutes.ts
 import { Router } from 'express'
 import { verifyToken } from '../middleware/authMiddleware'
-import { requireAdmin } from '../middleware/requireAdmin'
+import { requirePlatformAdmin } from '../middleware/requirePlatformAdmin'
 import { resetPassword } from '../controllers/usersController'
 
 const router = Router()
 
-// All admin routes require authentication and admin role
-router.post('/users/:userId/reset-password', verifyToken, requireAdmin, resetPassword)
+// Platform admin only: reset any user's password
+router.post('/users/:userId/reset-password', verifyToken, requirePlatformAdmin, resetPassword)
 
 export default router
