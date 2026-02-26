@@ -30,7 +30,24 @@ export const loginHandler = async (req: Request, res: Response): Promise<void> =
       })
   } catch (error) {
     console.error('❌ Login error:', error)
-    res.status(500).json({ message: 'Internal server error' })
+    const isProduction = process.env.NODE_ENV === 'production'
+    if (isProduction) {
+      res.status(500).json({ message: 'Internal server error' })
+      return
+    }
+    const err = error instanceof Error ? error : new Error(String(error))
+    const stackLines = (err.stack ?? '')
+      .split('\n')
+      .slice(0, 5)
+      .join('\n')
+    res.status(500).json({
+      message: 'Internal server error',
+      diagnostic: {
+        name: err.name,
+        message: err.message,
+        stack: stackLines || undefined,
+      },
+    })
   }
 }
 
@@ -86,6 +103,23 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
     res.status(200).json({ user: req.user })
   } catch (error) {
     console.error('❌ Error in getProfile:', error)
-    res.status(500).json({ message: 'Failed to fetch user profile' })
+    const isProduction = process.env.NODE_ENV === 'production'
+    if (isProduction) {
+      res.status(500).json({ message: 'Failed to fetch user profile' })
+      return
+    }
+    const err = error instanceof Error ? error : new Error(String(error))
+    const stackLines = (err.stack ?? '')
+      .split('\n')
+      .slice(0, 5)
+      .join('\n')
+    res.status(500).json({
+      message: 'Failed to fetch user profile',
+      diagnostic: {
+        name: err.name,
+        message: err.message,
+        stack: stackLines || undefined,
+      },
+    })
   }
 }

@@ -1,7 +1,9 @@
 // src/utils/sessionUtils.server.ts
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import type { UserSession } from '@/domain/auth/sessionTypes'
+
+const sessionUrl = '/api/backend/auth/session'
 
 /**
  * Use this in protected pages.
@@ -23,9 +25,11 @@ export async function requireAuth(): Promise<UserSession> {
   }
 
   try {
-    const res = await fetch('/api/backend/auth/session', {
+    const cookieHeader = (await headers()).get('cookie') ?? ''
+    const res = await fetch(sessionUrl, {
       method: 'GET',
       cache: 'no-store',
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
     })
 
     if (!res.ok) {
@@ -65,9 +69,11 @@ export default async function getUserSession(): Promise<UserSession | null> {
   }
 
   try {
-    const res = await fetch('/api/backend/auth/session', {
+    const cookieHeader = (await headers()).get('cookie') ?? ''
+    const res = await fetch(sessionUrl, {
       method: 'GET',
       cache: 'no-store',
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
     })
 
     if (!res.ok) {

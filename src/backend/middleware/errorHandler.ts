@@ -19,6 +19,11 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
     if (typeof err.message === 'string') {
       message = err.message
     }
+  } else {
+    if ((err as { type?: string })?.type === 'entity.parse.failed') {
+      statusCode = 400
+      message = 'Invalid JSON body'
+    }
   }
 
   if (statusCode === 400) code = 'BAD_REQUEST'
@@ -26,7 +31,8 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
   if (statusCode === 403) code = 'FORBIDDEN'
   if (statusCode === 404) code = 'NOT_FOUND'
 
-  if (process.env.NODE_ENV !== 'production') {
+  const isProd = process.env.NODE_ENV === 'production'
+  if (!isProd) {
     console.error(err)
   }
 
@@ -35,6 +41,12 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
   const body: Record<string, unknown> = { error: message, message, code }
   if (err instanceof AppError && err.payload != null) {
     Object.assign(body, err.payload)
+  }
+  if (!isProd) {
+    body.name = err instanceof Error ? err.name : 'UnknownError'
+    body.stackPreview = err instanceof Error && typeof err.stack === 'string'
+      ? err.stack.split('\n').slice(0, 5)
+      : []
   }
   res.status(statusCode).json(body)
 }

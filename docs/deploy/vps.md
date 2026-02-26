@@ -28,15 +28,15 @@ https://<domain>/api/* → backend on loopback port
 - Production: `https://prod-specverse.jeffabayon.com/api/*` → `http://localhost:4000/api/*`
 - Staging: `https://stage-specverse.jeffabayon.com/api/*` → `http://localhost:4001/api/*`
 
-### Frontend API Calls
+### Frontend API Calls (cloud-first)
 
-The frontend must call backend APIs using:
+SpecVerse is **cloud-first**: the frontend uses **relative** paths for all backend calls:
 
 ```
-${NEXT_PUBLIC_API_BASE_URL}/api/backend/...
+/api/backend/...
 ```
 
-**Important**: Frontend must NOT hardcode `http://localhost:5000` or direct port calls (`:4000`/`:4001`). All requests go through the same-origin gateway.
+All requests go through the same-origin gateway (Next.js or nginx). Do **not** hardcode `http://localhost:5000` or direct port calls (`:4000`/`:4001`). `NEXT_PUBLIC_API_BASE_URL` is **not required** for same-origin deployments and is legacy/optional only.
 
 ## PM2 Configuration
 
@@ -81,15 +81,11 @@ curl -H "Cookie: token=<token>" https://stage-specverse.jeffabayon.com/api/backe
 
 ## Common Failure Modes
 
-### Wrong NEXT_PUBLIC_API_BASE_URL
+### CORS or 404 on API calls
 
 **Symptom**: Frontend API calls fail with CORS errors or 404s.
 
-**Cause**: `NEXT_PUBLIC_API_BASE_URL` is not set or points to wrong domain.
-
-**Fix**: Set `NEXT_PUBLIC_API_BASE_URL` to:
-- Production: `https://prod-specverse.jeffabayon.com`
-- Staging: `https://stage-specverse.jeffabayon.com`
+**Cause**: Usually CORS or routing. With cloud-first routing, the frontend uses relative `/api/backend/...`; ensure nginx (or Next.js) proxies those paths to the backend. Ensure `CORS_ALLOWED_ORIGINS` includes the frontend origin.
 
 ### CORS Missing CORS_ALLOWED_ORIGINS
 
@@ -111,18 +107,16 @@ curl -H "Cookie: token=<token>" https://stage-specverse.jeffabayon.com/api/backe
 - `INVITE_BASE_URL=https://prod-specverse.jeffabayon.com` (preferred)
 - `NEXT_PUBLIC_APP_URL=https://prod-specverse.jeffabayon.com` (fallback)
 
-### Next.js Rewrites Active in Production
+### Next.js rewrites vs nginx
 
 **Symptom**: Requests fail or timeout, backend not reachable.
 
-**Cause**: `next.config.ts` rewrites still active when `NEXT_PUBLIC_API_BASE_URL` is set.
-
-**Fix**: Ensure `NEXT_PUBLIC_API_BASE_URL` is set in production/staging. The rewrites are automatically disabled when this env var is present.
+**Cause**: With nginx in front, set `USE_NGINX_PROXY=true` for the Next.js app so Next.js rewrites are disabled and nginx handles routing to the backend. The frontend uses relative `/api/backend/...`; no `NEXT_PUBLIC_API_BASE_URL` is required for same-origin.
 
 ## Deployment Checklist
 
-- [ ] `NEXT_PUBLIC_API_BASE_URL` set correctly for environment
 - [ ] `CORS_ALLOWED_ORIGINS` includes frontend domain
+- [ ] `BACKEND_TRUST_PROXY=true` set for backend when behind nginx/TLS
 - [ ] `INVITE_BASE_URL` or `NEXT_PUBLIC_APP_URL` set for invite links
 - [ ] Database credentials configured (`DB_SERVER`, `DB_DATABASE`, `DB_USER`, `DB_PASSWORD`)
 - [ ] `JWT_SECRET` set (different for prod/stage)
