@@ -34,7 +34,7 @@ export default function CreateTransactionPage({ params }: Readonly<CreateTransac
     setIsSubmitting(true);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/backend/inventory/${inventoryId}/transactions`,
+        `/api/backend/inventory/${inventoryId}/transactions`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

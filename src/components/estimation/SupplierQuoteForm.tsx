@@ -44,14 +44,10 @@ export default function SupplierQuoteForm({
         return;
       }
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-      if (!baseUrl) {
-        throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
-      }
       const url =
         mode === "edit"
-          ? `${baseUrl}/api/backend/estimation/quotes/${defaultValues?.QuoteID}`
-          : `${baseUrl}/api/backend/estimation/quotes/create`;
+          ? `/api/backend/estimation/quotes/${defaultValues?.QuoteID}`
+          : '/api/backend/estimation/quotes/create';
 
       const res = await fetch(url, {
         method: mode === "edit" ? "PUT" : "POST",
