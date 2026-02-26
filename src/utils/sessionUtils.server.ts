@@ -7,9 +7,15 @@ import type { UserSession } from '@/domain/auth/sessionTypes'
  * Use this in protected pages.
  * Redirects to /login when there is no valid session.
  */
+const AUTH_DEBUG = process.env.AUTH_DEBUG === '1'
+
 export async function requireAuth(): Promise<UserSession> {
   const cookieStore = await cookies()
   const token = cookieStore.get('token')?.value
+
+  if (AUTH_DEBUG) {
+    console.log('[AUTH_DEBUG] requireAuth token=', token ? 'present' : 'missing')
+  }
 
   if (!token) {
     redirect('/login')
@@ -17,18 +23,8 @@ export async function requireAuth(): Promise<UserSession> {
   }
 
   try {
-    // In local dev, NEXT_PUBLIC_API_BASE_URL may be unset (uses Next.js rewrites)
-    // In stage/prod, it's set to the frontend domain
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
-    const sessionUrl = baseUrl
-      ? `${baseUrl}/api/backend/auth/session`
-      : '/api/backend/auth/session'
-
-    const res = await fetch(sessionUrl, {
+    const res = await fetch('/api/backend/auth/session', {
       method: 'GET',
-      headers: {
-        Cookie: `token=${token}`,
-      },
       cache: 'no-store',
     })
 
@@ -60,23 +56,17 @@ export default async function getUserSession(): Promise<UserSession | null> {
   const cookieStore = await cookies()
   const token = cookieStore.get('token')?.value
 
+  if (AUTH_DEBUG) {
+    console.log('[AUTH_DEBUG] getUserSession token=', token ? 'present' : 'missing')
+  }
+
   if (!token) {
     return null
   }
 
   try {
-    // In local dev, NEXT_PUBLIC_API_BASE_URL may be unset (uses Next.js rewrites)
-    // In stage/prod, it's set to the frontend domain
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
-    const sessionUrl = baseUrl
-      ? `${baseUrl}/api/backend/auth/session`
-      : '/api/backend/auth/session'
-
-    const res = await fetch(sessionUrl, {
+    const res = await fetch('/api/backend/auth/session', {
       method: 'GET',
-      headers: {
-        Cookie: `token=${token}`,
-      },
       cache: 'no-store',
     })
 
