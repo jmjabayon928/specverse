@@ -40,7 +40,7 @@ describe('SecurePage gating', () => {
       </SecurePage>
     )
 
-    expect(mockReplace).toHaveBeenCalledWith('/unauthorized')
+    expect(mockReplace).toHaveBeenCalledWith('/unauthorized?reason=missing_permission&perm=DATASHEET_APPROVE')
     expect(screen.getByText('Protected content')).toBeInTheDocument()
   })
 

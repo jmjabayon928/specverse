@@ -36,7 +36,7 @@ export default function AddMaintenanceLogPage({ params }: Readonly<PageProps>) {
     setIsSubmitting(true);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/backend/inventory/${inventoryId}/maintenance`,
+        `/api/backend/inventory/${inventoryId}/maintenance`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

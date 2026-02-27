@@ -26,10 +26,6 @@ export default function EstimationForm({
 }: EstimationFormProps) {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!baseUrl) {
-    throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
-  }
 
   const {
     register,
@@ -59,7 +55,7 @@ export default function EstimationForm({
 
     const fetchProjects = async () => {
       try {
-        const res = await fetch(`${baseUrl}/api/projects`);
+        const res = await fetch('/api/projects');
         const data: unknown = await res.json();
         const projectsList = toProjectList(data);
         setProjects(projectsList);
@@ -77,15 +73,15 @@ export default function EstimationForm({
     };
 
     fetchProjects();
-  }, [defaultValues?.ProjectID, baseUrl, setValue]);
+  }, [defaultValues?.ProjectID, setValue]);
 
   // ✅ Handle submit
   const onSubmit = async (data: EstimationFormData) => {
     try {
       const res = await fetch(
         mode === 'edit'
-          ? `${baseUrl}/api/backend/estimation/${defaultValues?.EstimationID}`
-          : `${baseUrl}/api/backend/estimation`,
+          ? `/api/backend/estimation/${defaultValues?.EstimationID}`
+          : '/api/backend/estimation',
         {
           method: mode === 'edit' ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },

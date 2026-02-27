@@ -6,12 +6,6 @@ import Image from "next/image";
 import type { LayoutBundle, LayoutBlock, LayoutRegion } from "@/domain/layouts/layoutTypes";
 import styles from "./BuilderClient.module.css";
 
-const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-if (!baseUrl) {
-  throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
-}
-const API_BASE = baseUrl;
-
 // ---- modal + error helper --------------------------------------------
 type ModalState = Readonly<{
   open: boolean;
@@ -217,7 +211,7 @@ export default function BuilderClient({ layoutId }: Readonly<Props>) {
     let abort = false;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/backend/layouts/${layoutId}/bodyslots`, {
+        const res = await fetch(`/api/backend/layouts/${layoutId}/bodyslots`, {
           credentials: "include",
           cache: "no-store",
         });
@@ -271,10 +265,10 @@ export default function BuilderClient({ layoutId }: Readonly<Props>) {
 
       // Adjust these to your real JSON routes feeding the two viewer pages:
       const filledUrls = [
-        `${API_BASE}/api/backend/filledsheets/${sheetId}`,
+        `/api/backend/filledsheets/${sheetId}`,
       ];
       const templateUrls = [
-        `${API_BASE}/api/backend/templates/${sheetId}`,
+        `/api/backend/templates/${sheetId}`,
       ];
 
       // Try fetch in order: filled → template
@@ -733,7 +727,7 @@ export default function BuilderClient({ layoutId }: Readonly<Props>) {
     setSaving(true);
     try {
       const res = await fetch(
-        `${API_BASE}/api/backend/layouts/${layoutId}/bodyslots`,
+        `/api/backend/layouts/${layoutId}/bodyslots`,
         {
           method: "POST",
           credentials: "include",
@@ -768,7 +762,7 @@ export default function BuilderClient({ layoutId }: Readonly<Props>) {
   React.useEffect(() => {
     let abort = false;
     (async () => {
-      const r = await fetch(`${API_BASE}/api/backend/layouts/${layoutId}`, {
+      const r = await fetch(`/api/backend/layouts/${layoutId}`, {
         credentials: "include",
         cache: "no-store",
       });
@@ -786,7 +780,7 @@ export default function BuilderClient({ layoutId }: Readonly<Props>) {
     let abort = false;
     (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/backend/layouts/${layoutId}/structure`, {
+        const r = await fetch(`/api/backend/layouts/${layoutId}/structure`, {
           credentials: "include",
           cache: "no-store",
         });
@@ -878,7 +872,7 @@ export default function BuilderClient({ layoutId }: Readonly<Props>) {
       if (!block) return;
 
       const updated: Partial<LayoutBlock> = { x, y, regionId: region.regionId };
-      const res = await fetch(`${API_BASE}/api/backend/layouts/blocks/${block.blockId}`, {
+      const res = await fetch(`/api/backend/layouts/blocks/${block.blockId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -928,7 +922,7 @@ export default function BuilderClient({ layoutId }: Readonly<Props>) {
       orderIndex: index,
     };
 
-    const r = await fetch(`${API_BASE}/api/backend/layouts/regions/${region.regionId}/blocks`, {
+    const r = await fetch(`/api/backend/layouts/regions/${region.regionId}/blocks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -954,7 +948,7 @@ export default function BuilderClient({ layoutId }: Readonly<Props>) {
   // -------------------------------------------------
   // Width helpers for Subsheet blocks
   async function saveWidth(b: LayoutBlock, w: number) {
-    const res = await fetch(`${API_BASE}/api/backend/layouts/blocks/${b.blockId}`, {
+    const res = await fetch(`/api/backend/layouts/blocks/${b.blockId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "include",

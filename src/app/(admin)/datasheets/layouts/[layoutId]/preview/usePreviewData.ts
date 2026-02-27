@@ -108,12 +108,6 @@ export type HeaderVM = Readonly<{
   categoryName?: string | null;
 }>;
 
-const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-if (!baseUrl) {
-  throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
-}
-const API_BASE = baseUrl;
-
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
@@ -405,7 +399,7 @@ export async function loadSubsheetLayoutConfig(
 
   // ───────────────────────── network ─────────────────────────
   try {
-    const r = await fetch(`${API_BASE}/api/backend/layouts/${layoutId}/subsheets/${subId}/slots`, {
+    const r = await fetch(`/api/backend/layouts/${layoutId}/subsheets/${subId}/slots`, {
       credentials: "include",
       cache: "no-store",
     });
@@ -443,7 +437,7 @@ export function usePreviewData(layoutId: number) {
     (async () => {
       setErr(null);
       try {
-        const r = await fetch(`${API_BASE}/api/backend/layouts/${layoutId}`, { credentials: "include", cache: "no-store" });
+        const r = await fetch(`/api/backend/layouts/${layoutId}`, { credentials: "include", cache: "no-store" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const json = (await r.json()) as unknown;
         if (abort) return;
@@ -473,11 +467,8 @@ export function usePreviewData(layoutId: number) {
       if (!sid) { setPayload(null); setErr("No sheet/template id available."); return; }
       setBusy(true); setErr(null);
       try {
-        const url = new URL(`${API_BASE}/api/backend/layouts/${layoutId}/render`);
-        url.searchParams.set("sheetId", String(sid));
-        url.searchParams.set("uom", uom);
-        url.searchParams.set("lang", lang);
-        const r = await fetch(url.toString(), { credentials: "include", cache: "no-store" });
+        const params = new URLSearchParams({ sheetId: String(sid), uom, lang });
+        const r = await fetch(`/api/backend/layouts/${layoutId}/render?${params.toString()}`, { credentials: "include", cache: "no-store" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const json = (await r.json()) as RenderPayload;
         if (!abort) setPayload(json);
@@ -569,8 +560,8 @@ export function usePreviewData(layoutId: number) {
     (async () => {
       try {
         const [slotsJson, structureJson] = await Promise.all([
-          fetchJson(`${API_BASE}/api/backend/layouts/${layoutId}/bodyslots`),
-          fetchJson(`${API_BASE}/api/backend/layouts/${layoutId}/structure`),
+          fetchJson(`/api/backend/layouts/${layoutId}/bodyslots`),
+          fetchJson(`/api/backend/layouts/${layoutId}/structure`),
         ]);
         if (abort) return;
 
@@ -621,8 +612,8 @@ export function usePreviewData(layoutId: number) {
         return null;
       };
       const unified =
-        (await tryFetchUnified([`${API_BASE}/api/backend/filledsheets/${sheetId}`, `${API_BASE}/api/backend/filledsheets/${sheetId}?v=2`])) ??
-        (await tryFetchUnified([`${API_BASE}/api/backend/templates/${sheetId}`]));
+        (await tryFetchUnified([`/api/backend/filledsheets/${sheetId}`, `/api/backend/filledsheets/${sheetId}?v=2`])) ??
+        (await tryFetchUnified([`/api/backend/templates/${sheetId}`]));
       if (!unified) return;
 
       const isRec = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
