@@ -23,6 +23,62 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Guard - forbid committed env files
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden_files=""
+
+          # Explicit well-known env filenames
+          for f in .env .env.local .env.production .env.development .env.staging .env.test; do
+            if [ -f "$f" ]; then
+              forbidden_files="$forbidden_files $f"
+            fi
+          done
+
+          # Any other .env.* files except .env.example
+          extra_env="$(ls -1 .env.* 2>/dev/null | grep -v '^\.env\.example$' || true)"
+          if [ -n "$extra_env" ]; then
+            forbidden_files="$forbidden_files $extra_env"
+          fi
+
+          if [ -n "${forbidden_files// /}" ]; then
+            echo "Forbidden env file(s) committed:"
+            echo "$forbidden_files"
+            echo "Use runtime env and .env.example only."
+            exit 1
+          fi
+
+      - name: Guard - obvious secret patterns
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Private keys should never be committed
+          if git grep -n "BEGIN PRIVATE KEY" -- . >/dev/null 2>&1; then
+            echo "Forbidden private key material found in repository."
+            exit 1
+          fi
+
+          # Helper to check for non-placeholder values
+          check_var() {
+            local name="$1"
+            local placeholder="$2"
+            local matches
+            matches="$(git grep -n "${name}=" -- . ':!:docs/*' ':!*.env.example' || true)"
+            if [ -z "$matches" ]; then
+              return 0
+            fi
+            if echo "$matches" | grep -v "${name}=${placeholder}" >/dev/null 2>&1; then
+              echo "Suspicious ${name} value found (non-placeholder)."
+              echo "$matches"
+              exit 1
+            fi
+          }
+
+          check_var "JWT_SECRET" "CHANGEME"
+          check_var "DB_PASSWORD" "CHANGEME"
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
