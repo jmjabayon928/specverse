@@ -36,6 +36,14 @@ const logAuditAction = jest.fn().mockResolvedValue(undefined)
 const createUser = jest.fn().mockResolvedValue(999)
 const updateUser = jest.fn().mockResolvedValue(undefined)
 
+jest.mock('../../src/backend/controllers/authController', () => {
+  const actual = jest.requireActual('../../src/backend/controllers/authController')
+  return {
+    ...actual,
+    setAuthCookieForUser: jest.fn().mockResolvedValue(undefined),
+  }
+})
+
 jest.mock('../../src/backend/database/accountContextQueries', () => ({
   getAccountContextForUser,
   getAccountContextForUserAndAccount,

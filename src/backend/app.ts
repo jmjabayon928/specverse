@@ -54,7 +54,15 @@ import { errorHandler } from './middleware/errorHandler'
 const app: Application = express()
 
 // Trust proxy when behind nginx/TLS so req.secure and cookie secure work correctly
-if (process.env.BACKEND_TRUST_PROXY === 'true' || process.env.BACKEND_TRUST_PROXY === '1') {
+const isProdLike =
+  process.env.NODE_ENV === 'production' ||
+  process.env.SPECVERSE_ENV === 'staging' ||
+  process.env.SPECVERSE_ENV === 'production'
+
+const shouldTrustProxy =
+  isProdLike || process.env.BACKEND_TRUST_PROXY === 'true' || process.env.BACKEND_TRUST_PROXY === '1'
+
+if (shouldTrustProxy) {
   app.set('trust proxy', 1)
 }
 
@@ -131,6 +139,36 @@ app.use(cookieParser())
 app.use(helmet())
 app.use(compression())
 app.use(morgan('dev'))
+
+const isDebugAuth =
+  process.env.NODE_ENV !== 'production' &&
+  (process.env.SPECVERSE_ENV === 'staging' || process.env.SPECVERSE_ENV == null)
+
+if (isDebugAuth) {
+  app.use((req, _res, next) => {
+    if (
+      req.path.startsWith('/api/backend/auth/session') ||
+      req.path.startsWith('/api/backend/auth/login')
+    ) {
+      const hasCookie = typeof req.headers.cookie === 'string' && req.headers.cookie.length > 0
+      const xfProto = req.headers['x-forwarded-proto']
+      const xfHost = req.headers['x-forwarded-host']
+      const host = req.headers.host
+      console.log(
+        JSON.stringify({
+          msg: 'auth_debug',
+          path: req.path,
+          method: req.method,
+          hasCookie,
+          xfProto,
+          xfHost,
+          host,
+        }),
+      )
+    }
+    next()
+  })
+}
 
 // Routes
 app.use('/api/backend/settings/users', usersRoutes)

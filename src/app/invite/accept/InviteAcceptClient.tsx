@@ -62,7 +62,7 @@ export default function InviteAcceptClient() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const fetchByToken = useCallback(async (t: string): Promise<ByTokenData | null> => {
-    const res = await fetch(`/api/backend/invites/by-token?token=${encodeURIComponent(t)}`, {
+    const res = await fetch(`/api/backend/invites/validate?token=${encodeURIComponent(t)}`, {
       credentials: 'include',
     })
     if (!res.ok) return null
@@ -192,8 +192,8 @@ export default function InviteAcceptClient() {
       })
       const body = await res.json().catch(() => ({} as Record<string, unknown>))
       if (res.ok) {
-        setState({ kind: 'success', accountName: (body as { accountName?: string }).accountName ?? 'Account', redirectTo: 'login' })
-        setTimeout(() => router.replace('/login'), 2000)
+        setState({ kind: 'success', accountName: (body as { accountName?: string }).accountName ?? 'Account', redirectTo: 'dashboard' })
+        router.replace('/dashboard')
         return
       }
       if (res.status === 409) {

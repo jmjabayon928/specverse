@@ -2,6 +2,14 @@
 import type { Request, Response } from 'express'
 import type { JwtPayload as CustomJwtPayload } from '../../domain/auth/JwtTypes'
 import { loginWithEmailAndPassword } from '../services/authService'
+import jwt from 'jsonwebtoken'
+import { getUserById } from '../services/usersService'
+import { getAccountContextForUserAndAccount } from '../database/accountContextQueries'
+
+const JWT_SECRET = process.env.JWT_SECRET
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is not defined in environment variables')
+}
 
 // POST /login
 export const loginHandler = async (req: Request, res: Response): Promise<void> => {
@@ -27,7 +35,6 @@ export const loginHandler = async (req: Request, res: Response): Promise<void> =
       .json({
         user: result.payload,
         message: 'Login successful',
-        token: result.token,
       })
   } catch (error) {
     console.error('❌ Login error:', error)
@@ -50,6 +57,62 @@ export const loginHandler = async (req: Request, res: Response): Promise<void> =
       },
     })
   }
+}
+
+/**
+ * Helper: Sets auth cookie for a user by userId and accountId.
+ * Fetches user data by userId, builds token payload using account-specific context,
+ * signs token, and sets HttpOnly cookie.
+ */
+export async function setAuthCookieForUser(
+  res: Response,
+  userId: number,
+  accountId: number,
+  email?: string,
+): Promise<void> {
+  const user = await getUserById(userId)
+  if (!user) {
+    throw new Error('User not found')
+  }
+
+  const ctx = await getAccountContextForUserAndAccount(userId, accountId)
+
+  const payload: CustomJwtPayload = ctx
+    ? {
+        userId,
+        roleId: ctx.roleId,
+        role: ctx.roleName,
+        email: user.Email ?? email ?? '',
+        name: `${user.FirstName ?? ''} ${user.LastName ?? ''}`.trim(),
+        profilePic: user.ProfilePic ?? null,
+        permissions: ctx.permissions,
+        accountId: ctx.accountId,
+      }
+    : {
+        userId,
+        roleId: user.RoleID ?? 0,
+        role: user.RoleName ?? '',
+        email: user.Email ?? email ?? '',
+        name: `${user.FirstName ?? ''} ${user.LastName ?? ''}`.trim(),
+        profilePic: user.ProfilePic ?? null,
+        permissions: [],
+        accountId,
+      }
+
+  if (!JWT_SECRET) {
+    throw new Error('JWT_SECRET is not defined')
+  }
+  const token = jwt.sign(payload, JWT_SECRET, {
+    expiresIn: '60m',
+  })
+
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 1000 * 60 * 60, // 60 minutes
+  })
 }
 
 // POST /logout

@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EstimationPackage } from "@/domain/estimations/estimationTypes";
+import { apiFetch } from "@/lib/apiClient";
 
 export default function EstimationPackagesPage() {
   const [packages, setPackages] = useState<EstimationPackage[]>([]);
@@ -11,9 +12,7 @@ export default function EstimationPackagesPage() {
   useEffect(() => {
     const fetchPackages = async () => {
       try {
-        const res = await fetch("/api/backend/estimation/packages/all", {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-        });
+        const res = await apiFetch("/api/backend/estimation/packages/all", {});
         const data = await res.json();
         setPackages(Array.isArray(data) ? data : []);
       } catch (err) {

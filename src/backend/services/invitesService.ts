@@ -83,6 +83,8 @@ export type ByTokenResult = {
 export type AcceptInviteResult = {
   accountId: number
   accountName: string
+  userId: number
+  email: string
 }
 
 export type InviteResolvedStatus = InviteDto['resolvedStatus']
@@ -471,6 +473,8 @@ export async function acceptInvite(
   return {
     accountId: row.accountId,
     accountName: row.accountName,
+    userId,
+    email: normalizedUserEmail,
   }
 }
 
@@ -650,5 +654,7 @@ export async function acceptInvitePublic(
   return {
     accountId: row.accountId,
     accountName: row.accountName,
+    userId,
+    email: inviteEmail,
   }
 }

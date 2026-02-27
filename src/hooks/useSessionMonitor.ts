@@ -29,8 +29,9 @@ export function useSessionMonitor(
     fetch('/api/backend/auth/session', { credentials: 'include', cache: 'no-store' })
       .then((res) => {
         if (cancelled) return
+        // Server-side gating handles redirects; monitor only tracks state
         if (res.status === 401) {
-          router.push('/login?reason=session_401&from=useSessionMonitor&status=401')
+          // Session expired - let server gating handle redirect
         }
       })
       .catch(() => {})
@@ -39,8 +40,6 @@ export function useSessionMonitor(
 
   const logout = useCallback(() => {
     if (pathname !== '/login') {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
       router.push('/login')
     }
   }, [router, pathname])

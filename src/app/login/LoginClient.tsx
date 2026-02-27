@@ -83,14 +83,7 @@ export default function LoginClient() {
         return
       }
 
-      if (response.ok && isLoginResponse(body)) {
-        if (typeof body.token === 'string' && body.token.length > 0) {
-          localStorage.setItem('token', body.token)
-        }
-        if (typeof body.user === 'object' && body.user !== null) {
-          localStorage.setItem('user', JSON.stringify(body.user))
-        }
-      }
+      // Cookie is set by backend; no localStorage needed
 
       const isAuthenticated = await refetchSession()
 

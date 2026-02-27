@@ -29,10 +29,8 @@ export default function SecurePage({
   useEffect(() => {
     if (loading) return
     // Server-side requireAuth() handles auth redirects - do not redirect here
-    if (user == null) {
-      router.replace('/login?reason=securepage_no_user&from=SecurePage')
-      return
-    }
+    // If user is null, render nothing and let server gating handle it
+    if (user == null) return
 
     if (requiredRole != null && requiredRole !== '') {
       const userRoleLower = user.role?.toLowerCase() ?? ''
