@@ -1,6 +1,19 @@
 'use client'
 
 import { useState } from 'react'
+
+type LoginResponse = {
+  token?: string
+  user?: unknown
+  message?: string
+  error?: string
+}
+
+const isLoginResponse = (value: unknown): value is LoginResponse => {
+  if (typeof value !== 'object' || value === null) return false
+  return true
+}
+
 import Checkbox from '@/components/form/input/Checkbox'
 import Input from '@/components/form/input/InputField'
 import Label from '@/components/form/Label'
@@ -30,10 +43,20 @@ export default function LoginClient() {
         credentials: 'include',
       })
 
+      const body = await response.json().catch(() => ({}))
+
       if (!response.ok) {
-        const result = await response.json()
-        setError(result.error || 'Invalid login. Please try again.')
+        setError(isLoginResponse(body) ? (body.error ?? 'Invalid login. Please try again.') : 'Invalid login. Please try again.')
         return
+      }
+
+      if (response.ok && isLoginResponse(body)) {
+        if (typeof body.token === 'string' && body.token.length > 0) {
+          localStorage.setItem('token', body.token)
+        }
+        if (typeof body.user === 'object' && body.user !== null) {
+          localStorage.setItem('user', JSON.stringify(body.user))
+        }
       }
 
       const isAuthenticated = await refetchSession()
