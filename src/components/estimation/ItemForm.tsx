@@ -55,14 +55,10 @@ export default function ItemForm({
         return;
       }
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-      if (!baseUrl) {
-        throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
-      }
       const url =
         mode === 'edit'
-          ? `${baseUrl}/api/backend/estimation/items/${defaultValues?.EItemID}`
-          : `${baseUrl}/api/backend/estimation/items/create`;
+          ? `/api/backend/estimation/items/${defaultValues?.EItemID}`
+          : '/api/backend/estimation/items/create';
 
       const res = await fetch(url, {
         method: mode === 'edit' ? 'PUT' : 'POST',

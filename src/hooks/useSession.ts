@@ -31,6 +31,7 @@ export function useSession(): UseSessionResult {
       }
 
       if (!res.ok) {
+        console.warn('[AUTH_DEBUG] useSession refetch non-ok', { status: res.status })
         if (!ignoreStale || id === refetchIdRef.current) {
           setUser(null)
           setLoading(false)
@@ -75,6 +76,7 @@ export function useSession(): UseSessionResult {
       }
 
       if (!res.ok) {
+        console.warn('[AUTH_DEBUG] useSession refetch non-ok', { status: res.status })
         if (id === refetchIdRef.current) {
           setUser(null)
           setLoading(false)

@@ -30,10 +30,6 @@ export default function EstimationDetailPage() {
   const searchParams = useSearchParams();
   const estimationId = Number.parseInt(params.id as string);
   const isEditing = searchParams.get('edit') === 'true';
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!baseUrl) {
-    throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
-  }
 
   const [estimation, setEstimation] = useState<Estimation | null>(null);
   const [packages, setPackages] = useState<EstimationPackage[]>([]);
@@ -71,7 +67,7 @@ export default function EstimationDetailPage() {
         // If not already fetched, fetch the quotes for this item
         if (!quotesByItem[item.EItemID]) {
           try {
-            const res = await fetch(`${baseUrl}/api/backend/estimation/quotes?itemId=${item.EItemID}`, {
+            const res = await fetch(`/api/backend/estimation/quotes?itemId=${item.EItemID}`, {
               credentials: "include",
             });
             const data = await res.json();
@@ -104,7 +100,7 @@ export default function EstimationDetailPage() {
 
   useEffect(() => {
     if (!Number.isNaN(estimationId)) {
-      fetch(`${baseUrl}/api/backend/estimation/${estimationId}`, { credentials: "include" })
+      fetch(`/api/backend/estimation/${estimationId}`, { credentials: "include" })
         .then(res => res.json())
         .then(data => {
           console.log("Fetched estimation data:", data); 
@@ -113,7 +109,7 @@ export default function EstimationDetailPage() {
         .catch(err => console.error('Failed to fetch estimation:', err))
         .finally(() => setLoading(false));
     }
-  }, [estimationId, baseUrl]);
+  }, [estimationId]);
 
   useEffect(() => {
     if (!Number.isNaN(estimationId)) {
@@ -162,7 +158,7 @@ export default function EstimationDetailPage() {
     if (!confirmDeleteQuoteId || !confirmDeleteItem?.EItemID) return;
 
     try {
-      const res = await fetch(`${baseUrl}/api/backend/estimation/quotes/${confirmDeleteQuoteId}`, {
+      const res = await fetch(`/api/backend/estimation/quotes/${confirmDeleteQuoteId}`, {
         method: "DELETE",
         credentials: "include",
       });
@@ -185,7 +181,7 @@ export default function EstimationDetailPage() {
 
   const fetchPackagesAndItems = async () => {
     try {
-      const res = await fetch(`${baseUrl}/api/backend/estimation/packages?estimationId=${estimationId}`, {
+      const res = await fetch(`/api/backend/estimation/packages?estimationId=${estimationId}`, {
         credentials: 'include',
       });
       const pkgData = await res.json();
@@ -194,7 +190,7 @@ export default function EstimationDetailPage() {
 
       const allItems: Record<number, EstimationItem[]> = {};
       for (const pkg of pkgData) {
-        const itemRes = await fetch(`${baseUrl}/api/backend/estimation/items?packageId=${pkg.PackageID}`);
+        const itemRes = await fetch(`/api/backend/estimation/items?packageId=${pkg.PackageID}`);
         const itemData = await itemRes.json();
         allItems[pkg.PackageID] = Array.isArray(itemData) ? itemData : [];
       }
@@ -209,7 +205,7 @@ export default function EstimationDetailPage() {
 
     if (!quotesByItem[itemId]) {
       try {
-        const res = await fetch(`${baseUrl}/api/backend/estimation/quotes?itemId=${itemId}`, {
+        const res = await fetch(`/api/backend/estimation/quotes?itemId=${itemId}`, {
           credentials: 'include', // 👈 send cookies with the request
         });
         const data = await res.json();
@@ -227,7 +223,7 @@ export default function EstimationDetailPage() {
   };
 
   const refreshQuotes = async (itemId: number) => {
-    const res = await fetch(`${baseUrl}/api/backend/estimation/quotes?itemId=${itemId}`, {
+    const res = await fetch(`/api/backend/estimation/quotes?itemId=${itemId}`, {
       credentials: 'include',
     });
     const quoteData: SupplierQuote[] = await res.json();
@@ -273,7 +269,7 @@ export default function EstimationDetailPage() {
 
     // Proceed with your final estimation submission logic
     try {
-      const res = await fetch(`${baseUrl}/api/backend/estimation/submit/${estimationId}`, {
+      const res = await fetch(`/api/backend/estimation/submit/${estimationId}`, {
         method: "POST",
         credentials: "include",
       });
@@ -318,7 +314,7 @@ export default function EstimationDetailPage() {
           {!isPrintView && (
             <div className="flex flex-wrap gap-2 justify-end">
               <a
-                href={`${baseUrl}/api/backend/estimation/export/${estimationId}/pdf`}
+                href={`/api/backend/estimation/export/${estimationId}/pdf`}
                 target="_blank"
                 className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1 rounded shadow"
               >
@@ -326,7 +322,7 @@ export default function EstimationDetailPage() {
                 Full Report (PDF)
               </a>
               <a
-                href={`${baseUrl}/api/backend/estimation/export/${estimationId}/summary-pdf`}
+                href={`/api/backend/estimation/export/${estimationId}/summary-pdf`}
                 target="_blank"
                 className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1 rounded shadow"
               >
@@ -334,7 +330,7 @@ export default function EstimationDetailPage() {
                 Summary (PDF)
               </a>
               <a
-                href={`${baseUrl}/api/backend/estimation/export/estimation-procurement/${estimationId}/pdf`}
+                href={`/api/backend/estimation/export/estimation-procurement/${estimationId}/pdf`}
                 target="_blank"
                 className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1 rounded shadow"
               >
@@ -375,7 +371,7 @@ export default function EstimationDetailPage() {
 
             <div className="flex gap-2 justify-end">
               <a
-                href={`${baseUrl}/api/backend/estimation/export/${estimationId}/excel`}
+                href={`/api/backend/estimation/export/${estimationId}/excel`}
                 target="_blank"
                 className="inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1 rounded shadow"
               >
@@ -383,7 +379,7 @@ export default function EstimationDetailPage() {
                 Full Report (Excel)
               </a>
               <a
-                href={`${baseUrl}/api/backend/estimation/export/${estimationId}/summary-excel`}
+                href={`/api/backend/estimation/export/${estimationId}/summary-excel`}
                 target="_blank"
                 className="inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1 rounded shadow"
               >
@@ -391,7 +387,7 @@ export default function EstimationDetailPage() {
                 Summary (Excel)
               </a>
               <a
-                href={`${baseUrl}/api/backend/estimation/export/estimation-procurement/${estimationId}/excel`}
+                href={`/api/backend/estimation/export/estimation-procurement/${estimationId}/excel`}
                 target="_blank"
                 className="inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1 rounded shadow"
               >
@@ -467,7 +463,7 @@ export default function EstimationDetailPage() {
                     <>
                       {!isPrintView && (
                         <a
-                          href={`${baseUrl}/api/backend/estimation/export/package-procurement/${pkg.PackageID}/pdf`}
+                          href={`/api/backend/estimation/export/package-procurement/${pkg.PackageID}/pdf`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-blue-600 hover:underline ml-4"
@@ -477,7 +473,7 @@ export default function EstimationDetailPage() {
                       )}
                       {!isPrintView && (
                         <a
-                          href={`${baseUrl}/api/backend/estimation/export/package-procurement/${pkg.PackageID}/excel`}
+                          href={`/api/backend/estimation/export/package-procurement/${pkg.PackageID}/excel`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-blue-600 hover:underline ml-4"
@@ -709,7 +705,7 @@ export default function EstimationDetailPage() {
                                                       onClick={async () => {
                                                         setIsSelecting(true);
                                                         try {
-                                                          await fetch(`${baseUrl}/api/backend/estimation/quotes/select/${quote.QuoteID}`, {
+                                                          await fetch(`/api/backend/estimation/quotes/select/${quote.QuoteID}`, {
                                                             method: "POST",
                                                             credentials: 'include',
                                                           });
@@ -901,14 +897,9 @@ export default function EstimationDetailPage() {
             <button
               className="text-red-600 hover:text-red-800 font-semibold text-sm"
               onClick={async () => {
-                const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-                if (!baseUrl) {
-                  throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
-                }
-
                 try {
                   const res = await fetch(
-                    `${baseUrl}/api/backend/estimation/packages/${confirmDeletePackageId}`,
+                    `/api/backend/estimation/packages/${confirmDeletePackageId}`,
                     {
                       method: 'DELETE',
                       credentials: 'include',
@@ -958,9 +949,8 @@ export default function EstimationDetailPage() {
                 </button>
                 <button
                   onClick={async () => {
-                    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000';
                     await fetch(
-                      `${baseUrl}/api/backend/estimation/items/${confirmDeleteItem.EItemID}`,
+                      `/api/backend/estimation/items/${confirmDeleteItem.EItemID}`,
                       { method: 'DELETE' }
                     );
                     setConfirmDeleteItem(null);

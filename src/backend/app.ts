@@ -53,6 +53,11 @@ import { errorHandler } from './middleware/errorHandler'
 
 const app: Application = express()
 
+// Trust proxy when behind nginx/TLS so req.secure and cookie secure work correctly
+if (process.env.BACKEND_TRUST_PROXY === 'true' || process.env.BACKEND_TRUST_PROXY === '1') {
+  app.set('trust proxy', 1)
+}
+
 // Body parsing
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))

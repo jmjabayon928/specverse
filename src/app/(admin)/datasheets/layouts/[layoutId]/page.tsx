@@ -19,11 +19,6 @@ function labelFromId(id: number | null): string {
   return id === null ? "—" : `#${id}`;
 }
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ??
-  process.env.BACKEND_URL ??
-  "http://localhost:4000";
-
 export default async function LayoutDetailPage({ params }: Readonly<PageProps>) {
   const { layoutId } = await params;
   const id = toPositiveInt(layoutId);
@@ -39,7 +34,7 @@ export default async function LayoutDetailPage({ params }: Readonly<PageProps>) 
   if (cookie) forwardHeaders["cookie"] = cookie;
   if (auth) forwardHeaders["authorization"] = auth;
 
-  const url = `${API_BASE}/api/backend/layouts/${id}`;
+  const url = `/api/backend/layouts/${id}`;
   const res = await fetch(url, {
     cache: "no-store",
     headers: forwardHeaders,

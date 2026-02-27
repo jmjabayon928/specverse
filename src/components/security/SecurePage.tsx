@@ -30,6 +30,7 @@ export default function SecurePage({
     if (loading) return
     // Server-side requireAuth() handles auth redirects - do not redirect here
     if (user == null) {
+      router.replace('/login?reason=securepage_no_user&from=SecurePage')
       return
     }
 
@@ -45,7 +46,7 @@ export default function SecurePage({
     if (requiredPermission != null && requiredPermission !== '') {
       const hasPermission = user.permissions.includes(requiredPermission)
       if (!hasPermission && user.role?.toLowerCase() !== 'admin') {
-        router.replace('/unauthorized')
+        router.replace(`/unauthorized?reason=missing_permission&perm=${encodeURIComponent(requiredPermission)}`)
       }
     }
   }, [user, loading, requiredPermission, requiredRole, router, pathname])

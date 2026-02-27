@@ -8,7 +8,7 @@ This document lists all environment variables used by SpecVerse, organized by co
 
 | Name | Required? | Applies To | Example Placeholder | Notes |
 |------|-----------|------------|---------------------|-------|
-| `NEXT_PUBLIC_API_BASE_URL` | **Yes** (VPS) | Frontend | `https://prod-specverse.jeffabayon.com` | Base URL for API calls. Must match the frontend domain. In local dev, can be empty (uses Next.js rewrites). |
+| `NEXT_PUBLIC_API_BASE_URL` | No (legacy) | Frontend | — | **Cloud-first**: Frontend uses relative `/api/backend/...`. Set only for legacy or non–same-origin setups. Not required for nginx/same-origin deployments. |
 | `NEXT_PUBLIC_APP_URL` | No | Frontend | `https://prod-specverse.jeffabayon.com` | Used as fallback for invite base URL generation. Optional if `INVITE_BASE_URL` is set in backend. |
 
 ## Backend Environment Variables
@@ -23,6 +23,7 @@ This document lists all environment variables used by SpecVerse, organized by co
 | `DB_PASSWORD` | **Yes** | Backend | `__REPLACE_ME__` | Database password. |
 | `JWT_SECRET` | **Yes** | Backend | `__REPLACE_ME__` | Secret key for JWT token signing. Must be different for prod/stage. |
 | `CORS_ALLOWED_ORIGINS` | **Yes** (VPS) | Backend | `https://prod-specverse.jeffabayon.com` (prod), `https://stage-specverse.jeffabayon.com` (stage) | Comma-separated list of allowed CORS origins. In local dev, defaults to localhost. |
+| `BACKEND_TRUST_PROXY` | **Yes** (behind nginx) | Backend | `true` or `1` | Set when the backend runs behind nginx/TLS so Express trusts `X-Forwarded-*` and cookie `secure` works correctly. Server-only (not `NEXT_PUBLIC`). |
 | `INVITE_BASE_URL` | No | Backend | `https://prod-specverse.jeffabayon.com` | Base URL for invite acceptance links. Preferred over `NEXT_PUBLIC_APP_URL`. |
 | `NEXT_PUBLIC_APP_URL` | No | Backend | `https://prod-specverse.jeffabayon.com` | Fallback for invite base URL if `INVITE_BASE_URL` not set. |
 | `HOST_ENVIRONMENT` | No | Backend | `local`, `render`, `vercel` | Used to determine SQL Server `trustServerCertificate` setting. |
@@ -35,13 +36,13 @@ This document lists all environment variables used by SpecVerse, organized by co
 ### Production Environment
 
 ```bash
-# Frontend
-NEXT_PUBLIC_API_BASE_URL=https://prod-specverse.jeffabayon.com
+# Frontend (cloud-first: relative /api/backend; NEXT_PUBLIC_API_BASE_URL optional)
 NEXT_PUBLIC_APP_URL=https://prod-specverse.jeffabayon.com
 
 # Backend
 PORT=4000
 NODE_ENV=production
+BACKEND_TRUST_PROXY=true
 DB_SERVER=your-db-server.database.windows.net
 DB_DATABASE=SpecVerse_Prod
 DB_USER=specverse_prod_app
@@ -55,13 +56,13 @@ HOST_ENVIRONMENT=vercel
 ### Staging Environment
 
 ```bash
-# Frontend
-NEXT_PUBLIC_API_BASE_URL=https://stage-specverse.jeffabayon.com
+# Frontend (cloud-first: relative /api/backend; NEXT_PUBLIC_API_BASE_URL optional)
 NEXT_PUBLIC_APP_URL=https://stage-specverse.jeffabayon.com
 
 # Backend
 PORT=4001
 NODE_ENV=development
+BACKEND_TRUST_PROXY=true
 DB_SERVER=your-db-server.database.windows.net
 DB_DATABASE=SpecVerse_Stage
 DB_USER=specverse_stage_app
@@ -82,7 +83,7 @@ HOST_ENVIRONMENT=vercel
 | `DB_USER` | `specverse_prod_app` | `specverse_stage_app` |
 | `CORS_ALLOWED_ORIGINS` | `https://prod-specverse.jeffabayon.com` | `https://stage-specverse.jeffabayon.com` |
 | `INVITE_BASE_URL` | `https://prod-specverse.jeffabayon.com` | `https://stage-specverse.jeffabayon.com` |
-| `NEXT_PUBLIC_API_BASE_URL` | `https://prod-specverse.jeffabayon.com` | `https://stage-specverse.jeffabayon.com` |
+| `BACKEND_TRUST_PROXY` | `true` | `true` |
 
 ## Notes
 

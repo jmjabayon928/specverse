@@ -6,12 +6,6 @@ import React from "react";
 type PaperSize = "A4" | "Letter";
 type Orientation = "portrait" | "landscape";
 
-const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-if (!baseUrl) {
-  throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
-}
-const API_BASE = baseUrl;
-
 interface LayoutListRow {
   layoutId: number;
   templateId: number | null;
@@ -120,7 +114,7 @@ export default function LayoutsIndexClient() {
     try {
       setLoading(true);
       setError(null);
-      const r = await fetch(`${API_BASE}/api/backend/layouts`, { credentials: "include" });
+      const r = await fetch('/api/backend/layouts', { credentials: "include" });
       if (!r.ok) {
         setRows([]);
         setError(`Failed to load layouts (${r.status})`);
@@ -153,7 +147,7 @@ export default function LayoutsIndexClient() {
     try {
       setCreating(true);
       setError(null);
-      const res = await fetch(`${API_BASE}/api/backend/layouts`, {
+      const res = await fetch('/api/backend/layouts', {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -185,7 +179,7 @@ export default function LayoutsIndexClient() {
     const ok = window.confirm(`Delete layout #${id}? This cannot be undone.`);
     if (!ok) return;
     try {
-      const res = await fetch(`${API_BASE}/api/backend/layouts/${id}`, {
+      const res = await fetch(`/api/backend/layouts/${id}`, {
         method: "DELETE",
         credentials: "include",
       });
