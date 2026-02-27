@@ -1,8 +1,6 @@
 // src/backend/middleware/authMiddleware.ts
 import type { Request, Response, NextFunction, RequestHandler } from 'express'
-import jwt from 'jsonwebtoken'
 import { AppError } from '../errors/AppError'
-import type { JwtPayload as CustomJwtPayload } from '../../domain/auth/JwtTypes'
 import { checkUserPermission } from '../database/permissionQueries'
 import {
   getAccountContextForUser,
@@ -15,37 +13,36 @@ import {
   getActiveAccountId as getStoredActiveAccountId,
   clearActiveAccount,
 } from '../repositories/userActiveAccountRepository'
+import { getSidFromRequest, loadSessionData } from '../services/authSessionsService'
 
-const JWT_SECRET = process.env.JWT_SECRET
-
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET is not defined in environment variables')
-}
-
-/** Optional auth: sets req.user when cookie/header present; never fails. Use for routes that accept either session or token param. */
-export const optionalVerifyToken: RequestHandler = (req: Request, res: Response, next: NextFunction): void => {
-  const token = req.cookies?.token || req.headers.authorization?.split(' ')[1]
-  if (!token) {
+/** Optional auth: sets req.user when sid cookie present and valid; never fails. Use for routes that accept either session or token param. */
+export const optionalVerifyToken: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  const sid = getSidFromRequest(req)
+  if (!sid) {
     next()
     return
   }
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload
-    if (decoded.userId && decoded.role) {
+    const sessionData = await loadSessionData(sid)
+    if (sessionData && sessionData.userId && sessionData.role) {
       req.user = {
-        userId: decoded.userId,
-        roleId: decoded.roleId,
-        role: decoded.role,
-        email: decoded.email,
-        name: decoded.name,
-        profilePic: decoded.profilePic ?? undefined,
-        permissions: decoded.permissions ?? [],
-        accountId: decoded.accountId,
-        isSuperadmin: decoded.isSuperadmin,
+        userId: sessionData.userId,
+        roleId: sessionData.roleId,
+        role: sessionData.role,
+        email: sessionData.email,
+        name: sessionData.name,
+        profilePic: sessionData.profilePic ?? undefined,
+        permissions: sessionData.permissions ?? [],
+        accountId: sessionData.accountId ?? undefined,
+        isSuperadmin: sessionData.isSuperadmin,
       }
     }
   } catch {
-    // ignore invalid token; route handler will require token param or session
+    // ignore invalid session; route handler will require token param or session
   }
   next()
 }
@@ -193,35 +190,39 @@ async function attachAccountContext(req: Request): Promise<void> {
   throw new AppError('No active account membership', 403)
 }
 
-/** Validates JWT and sets req.user; does NOT attach account context. Use for routes that need a signed-in user without account scope (e.g. invite accept). */
-export const verifyTokenOnly: RequestHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+/** Validates session and sets req.user; does NOT attach account context. Use for routes that need a signed-in user without account scope (e.g. invite accept). */
+export const verifyTokenOnly: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
   if (req.skipAuth) {
     next()
     return
   }
 
-  const token = req.cookies?.token ?? req.headers.authorization?.split(' ')[1]
-  if (!token) {
-    next(new AppError('Unauthorized - No token', 401))
+  const sid = getSidFromRequest(req)
+  if (!sid) {
+    next(new AppError('Unauthorized - No session', 401))
     return
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload
-    if (!decoded.userId) {
-      next(new AppError('Invalid token payload', 403))
+    const sessionData = await loadSessionData(sid)
+    if (!sessionData || !sessionData.userId) {
+      next(new AppError('Invalid session', 403))
       return
     }
     req.user = {
-      userId: decoded.userId,
-      roleId: decoded.roleId,
-      role: decoded.role ?? undefined,
-      email: decoded.email,
-      name: decoded.name,
-      profilePic: decoded.profilePic ?? undefined,
-      permissions: decoded.permissions ?? [],
-      accountId: decoded.accountId,
-      isSuperadmin: decoded.isSuperadmin,
+      userId: sessionData.userId,
+      roleId: sessionData.roleId,
+      role: sessionData.role ?? undefined,
+      email: sessionData.email,
+      name: sessionData.name,
+      profilePic: sessionData.profilePic ?? undefined,
+      permissions: sessionData.permissions ?? [],
+      accountId: sessionData.accountId ?? undefined,
+      isSuperadmin: sessionData.isSuperadmin,
     }
     next()
   } catch (error) {
@@ -240,33 +241,33 @@ export const verifyToken: RequestHandler = async (req: Request, res: Response, n
     return
   }
 
-  const token = req.cookies.token || req.headers.authorization?.split(' ')[1]
+  const sid = getSidFromRequest(req)
 
-  if (!token) {
-    console.warn('⛔ No token received')
-    next(new AppError('Unauthorized - No token', 401))
+  if (!sid) {
+    console.warn('⛔ No session cookie received')
+    next(new AppError('Unauthorized - No session', 401))
     return
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload
+    const sessionData = await loadSessionData(sid)
 
-    if (!decoded.userId || !decoded.role) {
-      console.warn('⛔ Token payload missing required fields')
-      next(new AppError('Invalid token payload', 403))
+    if (!sessionData || !sessionData.userId || !sessionData.role) {
+      console.warn('⛔ Session data missing required fields')
+      next(new AppError('Invalid session', 403))
       return
     }
 
     req.user = {
-      userId: decoded.userId,
-      roleId: decoded.roleId,
-      role: decoded.role,
-      email: decoded.email,
-      name: decoded.name,
-      profilePic: decoded.profilePic ?? undefined,
-      permissions: decoded.permissions ?? [],
-      accountId: decoded.accountId,
-      isSuperadmin: decoded.isSuperadmin,
+      userId: sessionData.userId,
+      roleId: sessionData.roleId,
+      role: sessionData.role,
+      email: sessionData.email,
+      name: sessionData.name,
+      profilePic: sessionData.profilePic ?? undefined,
+      permissions: sessionData.permissions ?? [],
+      accountId: sessionData.accountId ?? undefined,
+      isSuperadmin: sessionData.isSuperadmin,
     }
 
     await attachAccountContext(req)
@@ -277,7 +278,7 @@ export const verifyToken: RequestHandler = async (req: Request, res: Response, n
       return
     }
   
-    console.error('❌ Token verification error:', error)
+    console.error('❌ Session verification error:', error)
     next(new AppError('Invalid or expired session', 403))
   }
 }

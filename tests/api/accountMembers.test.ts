@@ -4,10 +4,7 @@
  * - PATCH role/status reject cross-account (404) and last-admin (403); happy paths succeed
  */
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
 import { assertForbidden, assertNotFound, assertValidationError } from '../helpers/httpAsserts'
-
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
 
 const defaultContext = {
   accountId: 1,
@@ -66,10 +63,30 @@ jest.mock('../../src/backend/repositories/accountMembersRepository', () => ({
   updateMemberStatus: (...args: unknown[]) => updateMemberStatusRepo(...args),
 }))
 
+const loadSessionData = jest.fn()
+const revokeSession = jest.fn()
+jest.mock('../../src/backend/services/authSessionsService', () => ({
+  getSidFromRequest: (req: { cookies?: { sid?: string } }) => req.cookies?.sid ?? null,
+  loadSessionData: (...args: unknown[]) => loadSessionData(...args),
+  revokeSession: (...args: unknown[]) => revokeSession(...args),
+}))
+
 import app from '../../src/backend/app'
 
-function makeToken(payload: Record<string, unknown>): string {
-  return jwt.sign(payload, process.env.JWT_SECRET ?? 'secret', { expiresIn: '1h' })
+function makeSid(): string {
+  return 'test-sid-' + Math.random().toString(36).slice(2)
+}
+
+const defaultSessionData = {
+  userId: 1,
+  accountId: 1,
+  roleId: 1,
+  role: 'Admin',
+  email: 'u@example.com',
+  name: 'User',
+  profilePic: null as string | null,
+  permissions: ['ACCOUNT_VIEW', 'ACCOUNT_ROLE_MANAGE', 'ACCOUNT_USER_MANAGE'],
+  isSuperadmin: false,
 }
 
 const sampleMember = {
@@ -88,6 +105,7 @@ const sampleMember = {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  loadSessionData.mockResolvedValue(defaultSessionData)
   getAccountContextForUser.mockResolvedValue(defaultContext)
   getStoredActiveAccountId.mockResolvedValue(null)
   checkUserPermission.mockResolvedValue(true)
@@ -110,19 +128,17 @@ describe('GET /api/backend/account-members', () => {
       roleName: 'Viewer',
       permissions: [],
     })
-    const token = makeToken({
-      userId: 1,
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       roleId: 2,
       role: 'Viewer',
-      email: 'viewer@example.com',
-      name: 'Viewer',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .get('/api/backend/account-members')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(200)
     expect(res.body.members).toBeDefined()
@@ -138,19 +154,17 @@ describe('GET /api/backend/account-members', () => {
       permissions: [],
     })
     checkUserPermission.mockResolvedValueOnce(false)
-    const token = makeToken({
-      userId: 1,
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       roleId: 2,
       role: 'Engineer',
-      email: 'e@example.com',
-      name: 'Engineer',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .get('/api/backend/account-members')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     assertForbidden(res)
   })
@@ -164,18 +178,14 @@ describe('GET /api/backend/account-members', () => {
         updatedAt: sampleMember.updatedAt.toISOString(),
       },
     ])
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       permissions: ['ACCOUNT_VIEW'],
     })
+    const sid = makeSid()
     const res = await request(app)
       .get('/api/backend/account-members')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
     expect(res.status).toBe(200)
     expect(res.body.members).toHaveLength(1)
     expect(res.body.members[0].isOwner).toBe(true)
@@ -207,19 +217,15 @@ describe('PATCH /api/backend/account-members/:id/role', () => {
       .mockResolvedValueOnce({ ...sampleMember, roleId: 1, roleName: 'Admin' })
     countActiveAdminsInAccount.mockResolvedValue(2)
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       permissions: ['ACCOUNT_ROLE_MANAGE'],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/account-members/10/role')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ roleId: 1 })
 
     expect(res.status).toBe(200)
@@ -230,19 +236,11 @@ describe('PATCH /api/backend/account-members/:id/role', () => {
   it('returns 404 when member not in active account', async () => {
     getMemberInAccount.mockResolvedValue(null)
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_ROLE_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/account-members/999/role')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ roleId: 2 })
 
     assertNotFound(res)
@@ -253,19 +251,15 @@ describe('PATCH /api/backend/account-members/:id/role', () => {
     getMemberInAccount.mockResolvedValue({ ...sampleMember, roleName: 'Admin', roleId: 1 })
     countActiveAdminsInAccount.mockResolvedValue(1)
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       permissions: ['ACCOUNT_ROLE_MANAGE'],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/account-members/10/role')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ roleId: 2 })
 
     assertForbidden(res, /last.*admin|demote/i)
@@ -273,19 +267,15 @@ describe('PATCH /api/backend/account-members/:id/role', () => {
   })
 
   it('returns 400 when roleId missing', async () => {
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       permissions: ['ACCOUNT_ROLE_MANAGE'],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/account-members/10/role')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({})
 
     assertValidationError(res)
@@ -307,19 +297,15 @@ describe('PATCH /api/backend/account-members/:id/role', () => {
     })
     countActiveAdminsInAccount.mockResolvedValue(2)
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       permissions: ['ACCOUNT_ROLE_MANAGE'],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/account-members/10/role')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ roleId: 2 })
 
     assertForbidden(res, /transfer ownership|owner's role/i)
@@ -334,19 +320,11 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
       .mockResolvedValueOnce({ ...sampleMember, isActive: false })
     countActiveAdminsInAccount.mockResolvedValue(2)
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/account-members/10/status')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ isActive: false })
 
     expect(res.status).toBe(200)
@@ -357,19 +335,11 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
   it('returns 404 when member not in active account', async () => {
     getMemberInAccount.mockResolvedValue(null)
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/account-members/999/status')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ isActive: false })
 
     assertNotFound(res)
@@ -380,19 +350,11 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
     getMemberInAccount.mockResolvedValue({ ...sampleMember, roleName: 'Admin', isActive: true })
     countActiveAdminsInAccount.mockResolvedValue(1)
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/account-members/10/status')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ isActive: false })
 
     assertForbidden(res, /last.*admin|deactivate/i)
@@ -400,19 +362,11 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
   })
 
   it('returns 400 when isActive missing', async () => {
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/account-members/10/status')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({})
 
     assertValidationError(res)
@@ -428,19 +382,11 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
     countActiveAdminsInAccount.mockResolvedValue(2)
     countActiveOwnersInAccount.mockResolvedValue(1)
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/account-members/10/status')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ isActive: false })
 
     assertForbidden(res, /last.*owner|deactivate/i)
@@ -464,19 +410,11 @@ describe('PATCH /api/backend/account-members/:id/status', () => {
     countActiveAdminsInAccount.mockResolvedValue(2)
     countActiveOwnersInAccount.mockResolvedValue(2)
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/account-members/10/status')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ isActive: false })
 
     assertForbidden(res, 'Cannot deactivate the account owner; transfer ownership first.')

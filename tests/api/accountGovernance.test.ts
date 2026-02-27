@@ -4,7 +4,6 @@
 import request from 'supertest'
 import express from 'express'
 import cookieParser from 'cookie-parser'
-import jwt from 'jsonwebtoken'
 import accountGovernanceRoutes from '../../src/backend/routes/accountGovernanceRoutes'
 import { errorHandler } from '../../src/backend/middleware/errorHandler'
 import { assertForbidden } from '../helpers/httpAsserts'
@@ -21,14 +20,19 @@ import {
   ROLE_ID_NON_ADMIN,
   ROLE_ADMIN,
   ROLE_ENGINEER,
-  makeTokenPayload,
   makeAccount,
   makeMember,
   makeAccountContext,
   FIXED_DATE,
 } from '../helpers/fixtures'
 
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
+const loadSessionData = jest.fn()
+const revokeSession = jest.fn()
+jest.mock('../../src/backend/services/authSessionsService', () => ({
+  getSidFromRequest: (req: { cookies?: { sid?: string } }) => req.cookies?.sid ?? null,
+  loadSessionData: (...args: unknown[]) => loadSessionData(...args),
+  revokeSession: (...args: unknown[]) => revokeSession(...args),
+}))
 
 const defaultContext = makeAccountContext({
   accountId: ACCOUNT_ID_1,
@@ -78,8 +82,20 @@ jest.mock('../../src/backend/repositories/accountMembersRepository', () => ({
   clearAccountMemberOwnerFlags: (...args: unknown[]) => clearAccountMemberOwnerFlags(...args),
 }))
 
-function makeToken(payload: Record<string, unknown>): string {
-  return jwt.sign(payload, process.env.JWT_SECRET ?? 'secret', { expiresIn: '1h' })
+function makeSid(): string {
+  return 'test-sid-' + Math.random().toString(36).slice(2)
+}
+
+const defaultSessionData = {
+  userId: USER_ID_1,
+  accountId: ACCOUNT_ID_1,
+  roleId: ROLE_ID_ADMIN,
+  role: ROLE_ADMIN,
+  email: 'owner@example.com',
+  name: 'Owner',
+  profilePic: null as string | null,
+  permissions: [] as string[],
+  isSuperadmin: false,
 }
 
 function createApp(): express.Express {
@@ -93,6 +109,7 @@ function createApp(): express.Express {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  loadSessionData.mockResolvedValue(defaultSessionData)
   getAccountContextForUser.mockResolvedValue(defaultContext)
   getStoredActiveAccountId.mockResolvedValue(null)
 })
@@ -108,21 +125,11 @@ describe('PATCH /api/backend/account-governance/status', () => {
         ownerUserId: USER_ID_1,
       })
     )
-    const token = makeToken(
-      makeTokenPayload({
-        userId: USER_ID_1,
-        roleId: ROLE_ID_ADMIN,
-        role: ROLE_ADMIN,
-        email: 'owner@example.com',
-        name: 'Owner',
-        profilePic: null,
-        permissions: [],
-      })
-    )
+    const sid = makeSid()
     const app = createApp()
     const res = await request(app)
       .patch('/api/backend/account-governance/status')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ isActive: false })
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ isActive: false })
@@ -140,21 +147,18 @@ describe('PATCH /api/backend/account-governance/status', () => {
         ownerUserId: USER_ID_99,
       })
     )
-    const token = makeToken(
-      makeTokenPayload({
-        userId: USER_ID_1,
-        roleId: ROLE_ID_NON_ADMIN,
-        role: ROLE_ENGINEER,
-        email: 'e@example.com',
-        name: 'Engineer',
-        profilePic: null,
-        permissions: [],
-      })
-    )
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
+      userId: USER_ID_1,
+      roleId: ROLE_ID_NON_ADMIN,
+      role: ROLE_ENGINEER,
+      permissions: [],
+    })
+    const sid = makeSid()
     const app = createApp()
     const res = await request(app)
       .patch('/api/backend/account-governance/status')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ isActive: true })
     assertForbidden(res)
     expect(res.body.message).toBe('Owner access required')
@@ -162,21 +166,11 @@ describe('PATCH /api/backend/account-governance/status', () => {
   })
 
   it('returns 400 when isActive missing', async () => {
-    const token = makeToken(
-      makeTokenPayload({
-        userId: USER_ID_1,
-        roleId: ROLE_ID_ADMIN,
-        role: ROLE_ADMIN,
-        email: 'owner@example.com',
-        name: 'Owner',
-        profilePic: null,
-        permissions: [],
-      })
-    )
+    const sid = makeSid()
     const app = createApp()
     const res = await request(app)
       .patch('/api/backend/account-governance/status')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({})
     expect(res.status).toBe(400)
   })
@@ -223,21 +217,11 @@ describe('POST /api/backend/account-governance/transfer-ownership', () => {
         updatedAt: FIXED_DATE,
       })
     )
-    const token = makeToken(
-      makeTokenPayload({
-        userId: USER_ID_1,
-        roleId: ROLE_ID_ADMIN,
-        role: ROLE_ADMIN,
-        email: 'owner@example.com',
-        name: 'Owner',
-        profilePic: null,
-        permissions: [],
-      })
-    )
+    const sid = makeSid()
     const app = createApp()
     const res = await request(app)
       .post('/api/backend/account-governance/transfer-ownership')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ targetUserId: USER_ID_2 })
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ ownerUserId: USER_ID_2 })
@@ -247,21 +231,11 @@ describe('POST /api/backend/account-governance/transfer-ownership', () => {
   })
 
   it('returns 400 when target is already owner', async () => {
-    const token = makeToken(
-      makeTokenPayload({
-        userId: USER_ID_1,
-        roleId: ROLE_ID_ADMIN,
-        role: ROLE_ADMIN,
-        email: 'owner@example.com',
-        name: 'Owner',
-        profilePic: null,
-        permissions: [],
-      })
-    )
+    const sid = makeSid()
     const app = createApp()
     const res = await request(app)
       .post('/api/backend/account-governance/transfer-ownership')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ targetUserId: USER_ID_1 })
     expect(res.status).toBe(400)
     expect(res.body.message).toMatch(/already the owner/i)
@@ -271,21 +245,11 @@ describe('POST /api/backend/account-governance/transfer-ownership', () => {
   it('returns 404 when target is not a member', async () => {
     getMemberByAccountAndUser.mockReset()
     getMemberByAccountAndUser.mockResolvedValue(null)
-    const token = makeToken(
-      makeTokenPayload({
-        userId: USER_ID_1,
-        roleId: ROLE_ID_ADMIN,
-        role: ROLE_ADMIN,
-        email: 'owner@example.com',
-        name: 'Owner',
-        profilePic: null,
-        permissions: [],
-      })
-    )
+    const sid = makeSid()
     const app = createApp()
     const res = await request(app)
       .post('/api/backend/account-governance/transfer-ownership')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ targetUserId: USER_ID_999 })
     expect(res.status).toBe(404)
     expect(res.body.message).toMatch(/not a member/i)
@@ -293,21 +257,11 @@ describe('POST /api/backend/account-governance/transfer-ownership', () => {
   })
 
   it('returns 400 when targetUserId missing', async () => {
-    const token = makeToken(
-      makeTokenPayload({
-        userId: USER_ID_1,
-        roleId: ROLE_ID_ADMIN,
-        role: ROLE_ADMIN,
-        email: 'owner@example.com',
-        name: 'Owner',
-        profilePic: null,
-        permissions: [],
-      })
-    )
+    const sid = makeSid()
     const app = createApp()
     const res = await request(app)
       .post('/api/backend/account-governance/transfer-ownership')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({})
     expect(res.status).toBe(400)
   })
@@ -324,21 +278,11 @@ describe('DELETE /api/backend/account-governance', () => {
         ownerUserId: USER_ID_1,
       })
     )
-    const token = makeToken(
-      makeTokenPayload({
-        userId: USER_ID_1,
-        roleId: ROLE_ID_ADMIN,
-        role: ROLE_ADMIN,
-        email: 'owner@example.com',
-        name: 'Owner',
-        profilePic: null,
-        permissions: [],
-      })
-    )
+    const sid = makeSid()
     const app = createApp()
     const res = await request(app)
       .delete('/api/backend/account-governance')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ isActive: false })
     expect(updateAccount).toHaveBeenCalledWith(ACCOUNT_ID_1, { isActive: false })
@@ -355,21 +299,18 @@ describe('DELETE /api/backend/account-governance', () => {
         ownerUserId: USER_ID_99,
       })
     )
-    const token = makeToken(
-      makeTokenPayload({
-        userId: USER_ID_1,
-        roleId: ROLE_ID_NON_ADMIN,
-        role: ROLE_ENGINEER,
-        email: 'e@example.com',
-        name: 'Engineer',
-        profilePic: null,
-        permissions: [],
-      })
-    )
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
+      userId: USER_ID_1,
+      roleId: ROLE_ID_NON_ADMIN,
+      role: ROLE_ENGINEER,
+      permissions: [],
+    })
+    const sid = makeSid()
     const app = createApp()
     const res = await request(app)
       .delete('/api/backend/account-governance')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
     assertForbidden(res)
     expect(updateAccount).not.toHaveBeenCalled()
   })

@@ -1,7 +1,6 @@
 // tests/middleware/authMiddleware.test.ts
 import request from "supertest";
 import express from "express";
-import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import { verifyToken, requireOwner } from "../../src/backend/middleware/authMiddleware";
 import authRoutes from "../../src/backend/routes/authRoutes";
@@ -29,6 +28,13 @@ jest.mock("../../src/backend/repositories/userActiveAccountRepository", () => ({
   clearActiveAccount: jest.fn().mockResolvedValue(undefined),
 }));
 
+const loadSessionData = jest.fn();
+jest.mock("../../src/backend/services/authSessionsService", () => ({
+  getSidFromRequest: (req: { cookies?: { sid?: string } }) => req.cookies?.sid ?? null,
+  loadSessionData: (...args: unknown[]) => loadSessionData(...args),
+  revokeSession: jest.fn(),
+}));
+
 const { getAccountContextForUser, getAccountContextForUserAndAccount, getActiveAccountId } =
   jest.requireMock<typeof import("../../src/backend/database/accountContextQueries")>(
     "../../src/backend/database/accountContextQueries"
@@ -41,11 +47,27 @@ const {
   "../../src/backend/repositories/userActiveAccountRepository"
 );
 
+function makeSid(): string {
+  return "test-sid-" + Math.random().toString(36).slice(2);
+}
+
+const defaultSessionData = {
+  userId: 1,
+  accountId: 1,
+  roleId: 1,
+  role: "Admin",
+  email: "admin@example.com",
+  name: "Admin",
+  profilePic: null as string | null,
+  permissions: [] as string[],
+  isSuperadmin: false,
+};
+
 describe("verifyToken middleware", () => {
   beforeEach(() => {
-    process.env.JWT_SECRET = process.env.JWT_SECRET || "secret";
     process.env.SUPERADMIN_USER_IDS = "";
     process.env.SUPERADMIN_EMAILS = "";
+    loadSessionData.mockResolvedValue(defaultSessionData);
     (getAccountContextForUser as jest.Mock).mockResolvedValue({
       accountId: 1,
       roleId: 1,
@@ -57,11 +79,7 @@ describe("verifyToken middleware", () => {
     (getActiveAccountId as jest.Mock).mockResolvedValue(5);
   });
 
-  function makeToken(payload: Record<string, unknown>) {
-    return jwt.sign(payload, process.env.JWT_SECRET || "secret", { expiresIn: "1h" });
-  }
-
-  it("should block access without token", async () => {
+  it("should block access without session", async () => {
     const app = express();
     app.use(express.json());
     app.use(cookieParser());
@@ -73,7 +91,7 @@ describe("verifyToken middleware", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("should allow access with valid token and derive accountId from membership", async () => {
+  it("should allow access with valid session and derive accountId from membership", async () => {
     const app = express();
     app.use(express.json());
     app.use(cookieParser());
@@ -81,17 +99,9 @@ describe("verifyToken middleware", () => {
       res.json({ message: "Access granted", accountId: req.user?.accountId ?? null });
     });
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: "admin",
-      email: "admin@example.com",
-      name: "Admin",
-      profilePic: null,
-      permissions: [],
-    });
+    const sid = makeSid();
 
-    const res = await request(app).get("/protected").set("Cookie", [`token=${token}`]);
+    const res = await request(app).get("/protected").set("Cookie", [`sid=${sid}`]);
 
     expect(res.statusCode).toBe(200);
     expect(res.body.message).toBe("Access granted");
@@ -109,19 +119,11 @@ describe("verifyToken middleware", () => {
       res.json({ accountId: req.user?.accountId ?? null });
     });
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: "admin",
-      email: "admin@example.com",
-      name: "Admin",
-      profilePic: null,
-      permissions: [],
-    });
+    const sid = makeSid();
 
     const res = await request(app)
       .get("/api/backend/platform/accounts")
-      .set("Cookie", [`token=${token}`])
+      .set("Cookie", [`sid=${sid}`])
       .set("x-specverse-account-id", "5");
 
     expect(res.statusCode).toBe(200);
@@ -140,19 +142,11 @@ describe("verifyToken middleware", () => {
       res.json({ accountId: req.user?.accountId ?? null });
     });
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: "admin",
-      email: "admin@example.com",
-      name: "Admin",
-      profilePic: null,
-      permissions: [],
-    });
+    const sid = makeSid();
 
     const res = await request(app)
       .get("/api/backend/settings/clients")
-      .set("Cookie", [`token=${token}`])
+      .set("Cookie", [`sid=${sid}`])
       .set("x-specverse-account-id", "5");
 
     expect(res.statusCode).toBe(403);
@@ -169,19 +163,11 @@ describe("verifyToken middleware", () => {
       res.json({ ok: true });
     });
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: "admin",
-      email: "admin@example.com",
-      name: "Admin",
-      profilePic: null,
-      permissions: [],
-    });
+    const sid = makeSid();
 
     const res = await request(app)
       .get("/api/backend/platform/accounts")
-      .set("Cookie", [`token=${token}`])
+      .set("Cookie", [`sid=${sid}`])
       .set("x-specverse-account-id", "5");
 
     expect(res.statusCode).toBe(403);
@@ -198,19 +184,11 @@ describe("verifyToken middleware", () => {
       res.json({ ok: true });
     });
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: "admin",
-      email: "admin@example.com",
-      name: "Admin",
-      profilePic: null,
-      permissions: [],
-    });
+    const sid = makeSid();
 
     const res = await request(app)
       .get("/api/backend/platform/accounts")
-      .set("Cookie", [`token=${token}`])
+      .set("Cookie", [`sid=${sid}`])
       .set("x-specverse-account-id", "not-a-number");
 
     expect(res.statusCode).toBe(400);
@@ -228,19 +206,11 @@ describe("verifyToken middleware", () => {
       res.json({ ok: true });
     });
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: "admin",
-      email: "admin@example.com",
-      name: "Admin",
-      profilePic: null,
-      permissions: [],
-    });
+    const sid = makeSid();
 
     const res = await request(app)
       .get("/api/backend/platform/accounts")
-      .set("Cookie", [`token=${token}`])
+      .set("Cookie", [`sid=${sid}`])
       .set("x-specverse-account-id", "999");
 
     expect(res.statusCode).toBe(404);
@@ -257,19 +227,11 @@ describe("verifyToken middleware", () => {
       res.json({ accountId: req.user?.accountId ?? null });
     });
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: "admin",
-      email: "admin@example.com",
-      name: "Admin",
-      profilePic: null,
-      permissions: [],
-    });
+    const sid = makeSid();
 
     const res = await request(app)
       .get("/api/backend/platform/accounts?foo=bar")
-      .set("Cookie", [`token=${token}`])
+      .set("Cookie", [`sid=${sid}`])
       .set("x-specverse-account-id", "5");
 
     expect(res.statusCode).toBe(200);
@@ -293,17 +255,9 @@ describe("verifyToken middleware", () => {
         permissions: ["DATASHEET_VIEW"],
       });
 
-      const token = makeToken({
-        userId: 1,
-        roleId: 1,
-        role: "Admin",
-        email: "u@example.com",
-        name: "User",
-        profilePic: null,
-        permissions: [],
-      });
+      const sid = makeSid();
 
-      const res = await request(app).get("/protected").set("Cookie", [`token=${token}`]);
+      const res = await request(app).get("/protected").set("Cookie", [`sid=${sid}`]);
 
       expect(res.statusCode).toBe(200);
       expect(res.body.accountId).toBe(2);
@@ -328,17 +282,9 @@ describe("verifyToken middleware", () => {
         permissions: [],
       });
 
-      const token = makeToken({
-        userId: 1,
-        roleId: 1,
-        role: "Admin",
-        email: "u@example.com",
-        name: "User",
-        profilePic: null,
-        permissions: [],
-      });
+      const sid = makeSid();
 
-      const res = await request(app).get("/protected").set("Cookie", [`token=${token}`]);
+      const res = await request(app).get("/protected").set("Cookie", [`sid=${sid}`]);
 
       expect(res.statusCode).toBe(200);
       expect(res.body.accountId).toBe(1);
@@ -365,17 +311,15 @@ describe("verifyToken middleware", () => {
         ownerUserId: 99,
       });
 
-      const token = makeToken({
-        userId: 1,
+      loadSessionData.mockResolvedValueOnce({
+        ...defaultSessionData,
         roleId: 2,
         role: "Engineer",
-        email: "e@example.com",
-        name: "Engineer",
-        profilePic: null,
         permissions: [],
       });
+      const sid = makeSid();
 
-      const res = await request(app).get("/owner-only").set("Cookie", [`token=${token}`]);
+      const res = await request(app).get("/owner-only").set("Cookie", [`sid=${sid}`]);
 
       expect(res.statusCode).toBe(403);
       expect(res.body.message).toBe("Owner access required");
@@ -399,17 +343,9 @@ describe("verifyToken middleware", () => {
         ownerUserId: 1,
       });
 
-      const token = makeToken({
-        userId: 1,
-        roleId: 1,
-        role: "Admin",
-        email: "owner@example.com",
-        name: "Owner",
-        profilePic: null,
-        permissions: [],
-      });
+      const sid = makeSid();
 
-      const res = await request(app).get("/owner-only").set("Cookie", [`token=${token}`]);
+      const res = await request(app).get("/owner-only").set("Cookie", [`sid=${sid}`]);
 
       expect(res.statusCode).toBe(200);
       expect(res.body.ok).toBe(true);
@@ -431,19 +367,11 @@ describe("verifyToken middleware", () => {
         permissions: ["DATASHEET_VIEW", "ACCOUNT_VIEW"],
       });
 
-      const token = makeToken({
-        userId: 1,
-        roleId: 1,
-        role: "Admin",
-        email: "u@example.com",
-        name: "User",
-        profilePic: null,
-        permissions: [],
-      });
+      const sid = makeSid();
 
       const res = await request(app)
         .get("/api/backend/auth/session")
-        .set("Cookie", [`token=${token}`]);
+        .set("Cookie", [`sid=${sid}`]);
 
       expect(res.statusCode).toBe(200);
       expect(res.body.accountId).toBe(2);

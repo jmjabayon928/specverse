@@ -3,10 +3,7 @@
  * GET /by-token, POST /accept, POST /decline
  */
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
 import { assertUnauthenticated, assertForbidden, assertNotFound, assertValidationError } from '../helpers/httpAsserts'
-
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
 
 const defaultContext = {
   accountId: 1,
@@ -106,14 +103,35 @@ jest.mock('../../src/backend/services/email/emailSenderFactory', () => ({
   getEmailSender: () => ({ sendInviteEmail: (...args: unknown[]) => sendInviteEmail(...args) }),
 }))
 
+const loadSessionData = jest.fn()
+const revokeSession = jest.fn()
+jest.mock('../../src/backend/services/authSessionsService', () => ({
+  getSidFromRequest: (req: { cookies?: { sid?: string } }) => req.cookies?.sid ?? null,
+  loadSessionData: (...args: unknown[]) => loadSessionData(...args),
+  revokeSession: (...args: unknown[]) => revokeSession(...args),
+}))
+
 import app from '../../src/backend/app'
 
-function makeToken(payload: Record<string, unknown>): string {
-  return jwt.sign(payload, process.env.JWT_SECRET ?? 'secret', { expiresIn: '1h' })
+function makeSid(): string {
+  return 'test-sid-' + Math.random().toString(36).slice(2)
+}
+
+const defaultSessionData = {
+  userId: 1,
+  accountId: 1,
+  roleId: 1,
+  role: 'Admin',
+  email: 'admin@example.com',
+  name: 'Admin',
+  profilePic: null as string | null,
+  permissions: ['ACCOUNT_VIEW', 'ACCOUNT_USER_MANAGE'],
+  isSuperadmin: false,
 }
 
 beforeEach(() => {
   jest.clearAllMocks()
+  loadSessionData.mockResolvedValue(defaultSessionData)
   getAccountContextForUser.mockResolvedValue(defaultContext)
   getStoredActiveAccountId.mockResolvedValue(null)
   checkUserPermission.mockResolvedValue(true)
@@ -136,19 +154,11 @@ describe('POST /api/backend/invites', () => {
       roleId: 2,
       createdAt: new Date('2024-01-01'),
     })
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ email: 'new@example.com', roleId: 2 })
 
     expect(res.status).toBe(201)
@@ -182,19 +192,11 @@ describe('POST /api/backend/invites', () => {
         expiresAt: new Date(),
       },
     ])
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ email: 'pending@example.com', roleId: 1 })
 
     expect(res.status).toBe(200)
@@ -214,19 +216,17 @@ describe('POST /api/backend/invites', () => {
       permissions: [],
     })
     checkUserPermission.mockResolvedValue(false)
-    const token = makeToken({
-      userId: 1,
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       roleId: 2,
       role: 'Viewer',
-      email: 'v@example.com',
-      name: 'Viewer',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ email: 'x@example.com', roleId: 2 })
 
     assertForbidden(res)
@@ -234,19 +234,11 @@ describe('POST /api/backend/invites', () => {
   })
 
   it('returns 400 when email missing', async () => {
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ roleId: 2 })
 
     assertValidationError(res, /email/i)
@@ -255,19 +247,11 @@ describe('POST /api/backend/invites', () => {
   it('returns 409 when user already member', async () => {
     getUserByEmail.mockResolvedValue({ UserID: 99 })
     getMemberByAccountAndUser.mockResolvedValue({ accountMemberId: 10, userId: 99 })
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ email: 'member@example.com', roleId: 2 })
 
     expect(res.status).toBe(409)
@@ -301,19 +285,11 @@ describe('GET /api/backend/invites', () => {
         accountName: 'Test Account',
       },
     ])
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .get('/api/backend/invites')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(200)
     expect(res.body.invites).toHaveLength(1)
@@ -336,19 +312,17 @@ describe('GET /api/backend/invites', () => {
       permissions: [],
     })
     checkUserPermission.mockResolvedValue(false)
-    const token = makeToken({
-      userId: 1,
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       roleId: 2,
       role: 'Viewer',
-      email: 'v@example.com',
-      name: 'Viewer',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .get('/api/backend/invites')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     assertForbidden(res)
   })
@@ -376,19 +350,11 @@ describe('POST /api/backend/invites/:id/resend', () => {
         createdAt: new Date(),
       },
     ])
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/1/resend')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(200)
     expect(updateTokenAndIncrementSend).toHaveBeenCalledWith(1, expect.any(String), expect.any(Date))
@@ -397,19 +363,11 @@ describe('POST /api/backend/invites/:id/resend', () => {
 
   it('returns 404 when invite not in account', async () => {
     getByIdAndAccount.mockResolvedValue(null)
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/999/resend')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     assertNotFound(res)
     expect(updateTokenAndIncrementSend).not.toHaveBeenCalled()
@@ -424,19 +382,11 @@ describe('POST /api/backend/invites/:id/revoke', () => {
       email: 'a@example.com',
       status: 'Pending',
     })
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/1/revoke')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(204)
     expect(setStatusRevoked).toHaveBeenCalledWith(1, 1)
@@ -447,19 +397,11 @@ describe('POST /api/backend/invites/:id/revoke', () => {
 
   it('returns 404 when invite not found', async () => {
     getByIdAndAccount.mockResolvedValue(null)
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'admin@example.com',
-      name: 'Admin',
-      profilePic: null,
-      permissions: ['ACCOUNT_USER_MANAGE'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/999/revoke')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     assertNotFound(res)
     expect(setStatusRevoked).not.toHaveBeenCalled()
@@ -509,19 +451,20 @@ describe('POST /api/backend/invites/accept', () => {
       expiresAt: new Date(Date.now() + 86400000),
     })
     getMemberByAccountAndUser.mockResolvedValue(null)
-    const token = makeToken({
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       userId: 99,
       roleId: 2,
       role: 'Viewer',
       email: 'invited@example.com',
       name: 'Invited',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/accept')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ token: 'secret-token' })
 
     expect(res.status).toBe(200)
@@ -544,19 +487,20 @@ describe('POST /api/backend/invites/accept', () => {
       status: 'Pending',
       expiresAt: new Date(Date.now() + 86400000),
     })
-    const token = makeToken({
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       userId: 99,
       roleId: 2,
       role: 'Viewer',
       email: 'other@example.com',
       name: 'Other',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/accept')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ token: 'secret-token' })
 
     assertForbidden(res, /sign in with the email/i)
@@ -594,19 +538,20 @@ describe('POST /api/backend/invites/accept', () => {
       firstName: null,
       lastName: null,
     })
-    const token = makeToken({
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       userId: 99,
       roleId: 2,
       role: 'Viewer',
       email: 'invited@example.com',
       name: 'Invited',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/accept')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ token: 'secret-token' })
 
     expect(res.status).toBe(409)
@@ -626,19 +571,20 @@ describe('POST /api/backend/invites/accept', () => {
     })
     getMemberByAccountAndUser.mockResolvedValue(null)
     setStatusAcceptedIfPending.mockResolvedValueOnce(false)
-    const token = makeToken({
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       userId: 99,
       roleId: 2,
       role: 'Viewer',
       email: 'invited@example.com',
       name: 'Invited',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/accept')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ token: 'secret-token' })
 
     expect(res.status).toBe(410)
@@ -656,26 +602,27 @@ describe('POST /api/backend/invites/accept', () => {
       status: 'Pending',
       expiresAt: new Date(Date.now() - 86400000),
     })
-    const token = makeToken({
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       userId: 99,
       roleId: 2,
       role: 'Viewer',
       email: 'invited@example.com',
       name: 'Invited',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/accept')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ token: 'secret-token' })
 
     expect(res.status).toBe(410)
     expect(res.body.message).toMatch(/expired/i)
   })
 
-  it('returns 200 when JWT payload omits role field', async () => {
+  it('returns 200 when session payload omits role field', async () => {
     findByTokenHash.mockResolvedValue({
       inviteId: 1,
       accountId: 1,
@@ -687,18 +634,20 @@ describe('POST /api/backend/invites/accept', () => {
       expiresAt: new Date(Date.now() + 86400000),
     })
     getMemberByAccountAndUser.mockResolvedValue(null)
-    const token = makeToken({
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       userId: 99,
       roleId: 2,
+      role: 'Viewer',
       email: 'invited@example.com',
       name: 'Invited',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/accept')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ token: 'secret-token' })
 
     expect(res.status).toBe(200)
@@ -752,19 +701,20 @@ describe('POST /api/backend/invites/decline', () => {
       status: 'Pending',
       expiresAt: new Date(Date.now() + 86400000),
     })
-    const token = makeToken({
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       userId: 99,
       roleId: 2,
       role: 'Viewer',
       email: 'other@example.com',
       name: 'Other',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/decline')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ token: 'decline-token' })
 
     assertForbidden(res, /sign in with the email address/i)
@@ -779,19 +729,20 @@ describe('POST /api/backend/invites/decline', () => {
       status: 'Pending',
       expiresAt: new Date(Date.now() + 86400000),
     })
-    const token = makeToken({
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       userId: 99,
       roleId: 2,
       role: 'Viewer',
       email: 'invited@example.com',
       name: 'Invited',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/invites/decline')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ token: 'decline-token' })
 
     expect(res.status).toBe(204)
