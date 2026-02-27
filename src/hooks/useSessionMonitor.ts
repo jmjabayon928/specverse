@@ -23,8 +23,21 @@ export function useSessionMonitor(
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
 
+  useEffect(() => {
+    if (pathname === '/login') return
+    let cancelled = false
+    fetch('/api/backend/auth/session', { credentials: 'include', cache: 'no-store' })
+      .then((res) => {
+        if (cancelled) return
+        if (res.status === 401) {
+          router.push('/login')
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [pathname, router])
+
   const logout = useCallback(() => {
-    // Only redirect if not already on login page
     if (pathname !== '/login') {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
