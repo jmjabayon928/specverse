@@ -36,7 +36,7 @@ describe('useSessionMonitor', () => {
     render(<Wrapper />)
     await Promise.resolve()
     await Promise.resolve()
-    expect(mockPush).toHaveBeenCalledWith('/login')
+    expect(mockPush).toHaveBeenCalledWith('/login?reason=session_401&from=useSessionMonitor&status=401')
   })
 
   it('does not redirect when session returns 500', async () => {

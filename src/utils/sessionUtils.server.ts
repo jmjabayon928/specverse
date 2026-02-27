@@ -3,7 +3,26 @@ import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import type { UserSession } from '@/domain/auth/sessionTypes'
 
-const sessionUrl = '/api/backend/auth/session'
+type HeaderGetter = {
+  get(name: string): string | null
+}
+
+const buildSessionUrl = (hdrs: HeaderGetter): string => {
+  const proto = hdrs.get('x-forwarded-proto') ?? 'http'
+  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host')
+
+  if (!host) {
+    throw new Error('Missing host header for session URL')
+  }
+
+  return new URL('/api/backend/auth/session', `${proto}://${host}`).toString()
+}
+
+const loginUrl = (reason: string, from: string, status?: number): string => {
+  const params = new URLSearchParams({ reason, from })
+  if (typeof status === 'number') params.set('status', String(status))
+  return `/login?${params.toString()}`
+}
 
 /**
  * Use this in protected pages.
@@ -20,20 +39,31 @@ export async function requireAuth(): Promise<UserSession> {
   }
 
   if (!token) {
-    redirect('/login')
+    if (AUTH_DEBUG) {
+      console.log('[AUTH_DEBUG] requireAuth redirect: missing token')
+    }
+    redirect(loginUrl('missing_token', 'requireAuth'))
     throw new Error('Redirected due to missing token')
   }
 
   try {
-    const cookieHeader = (await headers()).get('cookie') ?? ''
-    const res = await fetch(sessionUrl, {
+    const hdrs = await headers()
+    const cookieHeader = hdrs.get('cookie') ?? ''
+    const sessionFetchUrl = buildSessionUrl(hdrs)
+    if (AUTH_DEBUG) {
+      console.log('[AUTH_DEBUG] requireAuth sessionFetchUrl=', sessionFetchUrl)
+    }
+    const res = await fetch(sessionFetchUrl, {
       method: 'GET',
       cache: 'no-store',
       headers: cookieHeader ? { cookie: cookieHeader } : undefined,
     })
 
     if (!res.ok) {
-      redirect('/login')
+      if (AUTH_DEBUG) {
+        console.log('[AUTH_DEBUG] requireAuth redirect: session endpoint returned non-ok', { status: res.status })
+      }
+      redirect(loginUrl('session_non_ok', 'requireAuth', res.status))
       throw new Error('Redirected due to invalid token')
     }
 
@@ -41,13 +71,19 @@ export async function requireAuth(): Promise<UserSession> {
 
     // Ensure required fields exist to prevent user?.userId errors
     if (!session.userId || !session.roleId) {
-      redirect('/login')
+      if (AUTH_DEBUG) {
+        console.log('[AUTH_DEBUG] requireAuth redirect: incomplete session payload')
+      }
+      redirect(loginUrl('session_incomplete', 'requireAuth'))
       throw new Error('Redirected due to incomplete session')
     }
 
     return session
-  } catch {
-    redirect('/login')
+  } catch (err: unknown) {
+    if (AUTH_DEBUG) {
+      console.log('[AUTH_DEBUG] requireAuth redirect: session fetch threw', { message: String(err) })
+    }
+    redirect(loginUrl('session_fetch_error', 'requireAuth'))
     throw new Error('Redirected due to session fetch error')
   }
 }
@@ -69,25 +105,39 @@ export default async function getUserSession(): Promise<UserSession | null> {
   }
 
   try {
-    const cookieHeader = (await headers()).get('cookie') ?? ''
-    const res = await fetch(sessionUrl, {
+    const hdrs = await headers()
+    const cookieHeader = hdrs.get('cookie') ?? ''
+    const sessionFetchUrl = buildSessionUrl(hdrs)
+    if (AUTH_DEBUG) {
+      console.log('[AUTH_DEBUG] getUserSession sessionFetchUrl=', sessionFetchUrl)
+    }
+    const res = await fetch(sessionFetchUrl, {
       method: 'GET',
       cache: 'no-store',
       headers: cookieHeader ? { cookie: cookieHeader } : undefined,
     })
 
     if (!res.ok) {
+      if (AUTH_DEBUG) {
+        console.log('[AUTH_DEBUG] getUserSession session endpoint returned non-ok', { status: res.status })
+      }
       return null
     }
 
     const session: UserSession = await res.json()
 
     if (!session.userId || !session.roleId) {
+      if (AUTH_DEBUG) {
+        console.log('[AUTH_DEBUG] getUserSession incomplete session payload')
+      }
       return null
     }
 
     return session
-  } catch {
+  } catch (err: unknown) {
+    if (AUTH_DEBUG) {
+      console.log('[AUTH_DEBUG] getUserSession session fetch threw', { message: String(err) })
+    }
     return null
   }
 }

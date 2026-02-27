@@ -30,7 +30,7 @@ export function useSessionMonitor(
       .then((res) => {
         if (cancelled) return
         if (res.status === 401) {
-          router.push('/login')
+          router.push('/login?reason=session_401&from=useSessionMonitor&status=401')
         }
       })
       .catch(() => {})

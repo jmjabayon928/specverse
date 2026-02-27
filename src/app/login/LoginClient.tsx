@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 
 type LoginResponse = {
   token?: string
@@ -22,8 +23,40 @@ import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from '@/icons'
 import Link from 'next/link'
 import { useSession } from '@/hooks/useSession'
 
+const getReasonMessage = (reason: string): string | null => {
+  if (reason === 'missing_token') {
+    return 'Your session cookie was missing. Please sign in again.'
+  }
+  if (reason === 'session_non_ok') {
+    return 'Your session was rejected by the server. Please sign in again.'
+  }
+  if (reason === 'session_401') {
+    return 'Your session expired. Please sign in again.'
+  }
+  if (reason === 'session_fetch_error') {
+    return 'We couldn\'t verify your session. Please sign in again.'
+  }
+  if (reason === 'securepage_no_user') {
+    return 'You must be signed in to access that page.'
+  }
+  return null
+}
+
 export default function LoginClient() {
   const { refetchSession } = useSession()
+  const searchParams = useSearchParams()
+  const reason = searchParams.get('reason') ?? ''
+  const status = searchParams.get('status') ?? ''
+  const hasAlertedRef = useRef(false)
+
+  const bannerMessage = getReasonMessage(reason)
+
+  useEffect(() => {
+    if (reason && !hasAlertedRef.current && bannerMessage) {
+      hasAlertedRef.current = true
+      window.alert(bannerMessage + (status ? ` (Status: ${status})` : ''))
+    }
+  }, [reason, status, bannerMessage])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -92,6 +125,14 @@ export default function LoginClient() {
             Enter your email and password to sign in!
           </p>
         </div>
+        {bannerMessage && (
+          <div className="mb-4 rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-100">
+            <p>
+              {bannerMessage}
+              {status ? ` (Status: ${status})` : ''}
+            </p>
+          </div>
+        )}
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
             <Label>
