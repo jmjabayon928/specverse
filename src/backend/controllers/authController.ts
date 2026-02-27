@@ -27,6 +27,7 @@ export const loginHandler = async (req: Request, res: Response): Promise<void> =
       .json({
         user: result.payload,
         message: 'Login successful',
+        token: result.token,
       })
   } catch (error) {
     console.error('❌ Login error:', error)
