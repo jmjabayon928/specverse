@@ -12,6 +12,8 @@ concurrency:
 jobs:
   test-build:
     runs-on: ubuntu-latest
+    env:
+      HOST_ENVIRONMENT: render
     strategy:
       fail-fast: false
       matrix:
