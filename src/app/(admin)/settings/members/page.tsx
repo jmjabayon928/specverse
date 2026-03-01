@@ -5,8 +5,6 @@ import { requireAuth } from '@/utils/sessionUtils.server'
 import type { MemberRow } from './MembersTable'
 import MembersTable from './MembersTable'
 
-const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
-
 type MembersRes = { members: MemberRow[] }
 type RolesRes = { roles: { roleId: number; roleName: string }[] }
 
@@ -17,20 +15,15 @@ export default async function MembersPage() {
   }
 
   const cookieStore = await cookies()
-  const token = cookieStore.get('token')?.value
-  if (!token) {
+  const sid = cookieStore.get('sid')?.value
+  if (!sid) {
     redirect('/login')
   }
 
-  // Build URLs: use base if set (stage/prod), otherwise relative (local dev)
-  const membersUrl = base
-    ? `${base}/api/backend/account-members`
-    : '/api/backend/account-members'
-  const rolesUrl = base
-    ? `${base}/api/backend/roles`
-    : '/api/backend/roles'
+  const membersUrl = '/api/backend/account-members'
+  const rolesUrl = '/api/backend/roles'
 
-  const headers = { Cookie: `token=${token}` } as const
+  const headers = { Cookie: `sid=${sid}` } as const
   const [membersRes, rolesRes] = await Promise.all([
     fetch(membersUrl, { headers, cache: 'no-store' }),
     fetch(rolesUrl, { headers, next: { revalidate: 60 } }),

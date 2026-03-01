@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { usePathname } from 'next/navigation'
 import type { UserSession } from '@/domain/auth/sessionTypes'
 
 type UseSessionResult = {
@@ -11,7 +10,6 @@ type UseSessionResult = {
 export function useSession(): UseSessionResult {
   const [user, setUser] = useState<UserSession | null>(null)
   const [loading, setLoading] = useState(true)
-  const pathname = usePathname()
   const refetchIdRef = useRef(0)
 
   const fetchSessionInternal = useCallback(async (ignoreStale: boolean): Promise<void> => {
@@ -107,7 +105,7 @@ export function useSession(): UseSessionResult {
   useEffect(() => {
     setLoading(true)
     void fetchSessionInternal(false)
-  }, [pathname, fetchSessionInternal])
+  }, [fetchSessionInternal])
 
   return { user, loading, refetchSession }
 }

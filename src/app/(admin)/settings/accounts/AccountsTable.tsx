@@ -16,11 +16,6 @@ type Props = {
   initialAccounts: AccountRow[]
 }
 
-function apiBase(): string {
-  if (typeof window !== 'undefined') return ''
-  return process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
-}
-
 async function readServerMessage(res: Response): Promise<string | undefined> {
   const j = await res.json().catch(() => ({}))
   const msg = (j as { message?: string }).message ?? (j as { error?: string }).error
@@ -52,7 +47,7 @@ export default function AccountsTable({ initialAccounts }: Props) {
 
     setUpdatingId(accountId)
     try {
-      const res = await fetch(`${apiBase()}/api/backend/accounts/${accountId}`, {
+      const res = await fetch(`/api/backend/accounts/${accountId}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -89,7 +84,7 @@ export default function AccountsTable({ initialAccounts }: Props) {
     if (isSubmitting) return
     setIsSubmitting(true)
     try {
-      const res = await fetch(`${apiBase()}/api/backend/accounts`, {
+      const res = await fetch(`/api/backend/accounts`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -126,7 +121,7 @@ export default function AccountsTable({ initialAccounts }: Props) {
       if (isSubmitting) return
       setIsSubmitting(true)
       try {
-        const res = await fetch(`${apiBase()}/api/backend/accounts/${accountId}`, {
+        const res = await fetch(`/api/backend/accounts/${accountId}`, {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },

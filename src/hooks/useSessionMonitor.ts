@@ -23,21 +23,6 @@ export function useSessionMonitor(
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
 
-  useEffect(() => {
-    if (pathname === '/login') return
-    let cancelled = false
-    fetch('/api/backend/auth/session', { credentials: 'include', cache: 'no-store' })
-      .then((res) => {
-        if (cancelled) return
-        // Server-side gating handles redirects; monitor only tracks state
-        if (res.status === 401) {
-          // Session expired - let server gating handle redirect
-        }
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [pathname, router])
-
   const logout = useCallback(() => {
     if (pathname !== '/login') {
       router.push('/login')

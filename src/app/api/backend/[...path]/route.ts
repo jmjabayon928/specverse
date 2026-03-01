@@ -9,23 +9,20 @@ type RouteContext = {
   }
 }
 
-const getBackendOrigin = (): string | null => {
-  const envOrigin = process.env.BACKEND_INTERNAL_ORIGIN
-  if (envOrigin && envOrigin.length > 0) {
-    return envOrigin.replace(/\/+$/, '')
+const getBackendOrigin = (): string => {
+  const internal = process.env.BACKEND_INTERNAL_ORIGIN
+  if (internal && internal.length > 0) {
+    return internal.replace(/\/+$/, '')
   }
-
-  if (process.env.NODE_ENV !== 'production') {
-    return 'http://localhost:4000'
+  const origin = process.env.BACKEND_ORIGIN
+  if (origin && origin.length > 0) {
+    return origin.replace(/\/+$/, '')
   }
-
-  return null
+  return 'http://127.0.0.1:4000'
 }
 
-const buildUpstreamUrl = (req: NextRequest, context: RouteContext): string | null => {
+const buildUpstreamUrl = (req: NextRequest, context: RouteContext): string => {
   const origin = getBackendOrigin()
-  if (!origin) return null
-
   const segments = Array.isArray(context.params.path) ? context.params.path : [context.params.path]
   const joined = segments.join('/')
   const search = req.nextUrl.search
@@ -80,16 +77,6 @@ const createBackendResponse = async (upstream: Response): Promise<Response> => {
 
 const handleRequest = async (req: NextRequest, context: RouteContext): Promise<Response> => {
   const upstreamUrl = buildUpstreamUrl(req, context)
-  if (!upstreamUrl) {
-    return new Response(
-      JSON.stringify({ error: 'BACKEND_INTERNAL_ORIGIN is not configured in production' }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    )
-  }
-
   const method = req.method.toUpperCase()
   const headers = prepareHeaders(req)
 

@@ -140,11 +140,7 @@ app.use(helmet())
 app.use(compression())
 app.use(morgan('dev'))
 
-const isDebugAuth =
-  process.env.NODE_ENV !== 'production' &&
-  (process.env.SPECVERSE_ENV === 'staging' || process.env.SPECVERSE_ENV == null)
-
-if (isDebugAuth) {
+if (process.env.AUTH_DEBUG === '1') {
   app.use((req, _res, next) => {
     if (
       req.path.startsWith('/api/backend/auth/session') ||

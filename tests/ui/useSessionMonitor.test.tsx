@@ -37,7 +37,7 @@ describe('useSessionMonitor', () => {
     await Promise.resolve()
     await Promise.resolve()
     expect(mockPush).not.toHaveBeenCalled()
-    expect(globalThis.fetch).toHaveBeenCalledWith('/api/backend/auth/session', { credentials: 'include', cache: 'no-store' })
+    expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 
   it('does not redirect when session returns 500', async () => {

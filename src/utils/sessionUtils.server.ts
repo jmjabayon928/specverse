@@ -39,18 +39,18 @@ const AUTH_DEBUG = process.env.AUTH_DEBUG === '1'
 
 export async function requireAuth(): Promise<UserSession> {
   const cookieStore = await cookies()
-  const token = cookieStore.get('token')?.value
+  const sid = cookieStore.get('sid')?.value
 
   if (AUTH_DEBUG) {
-    console.log('[AUTH_DEBUG] requireAuth token=', token ? 'present' : 'missing')
+    console.log('[AUTH_DEBUG] requireAuth sid=', sid ? 'present' : 'missing')
   }
 
-  if (!token) {
+  if (!sid) {
     if (AUTH_DEBUG) {
-      console.log('[AUTH_DEBUG] requireAuth redirect: missing token')
+      console.log('[AUTH_DEBUG] requireAuth redirect: missing session')
     }
-    redirect(loginUrl('missing_token', 'requireAuth'))
-    throw new Error('Redirected due to missing token')
+    redirect(loginUrl('missing_session', 'requireAuth'))
+    throw new Error('Redirected due to missing session')
   }
 
   try {
@@ -101,13 +101,13 @@ export async function requireAuth(): Promise<UserSession> {
  */
 export default async function getUserSession(): Promise<UserSession | null> {
   const cookieStore = await cookies()
-  const token = cookieStore.get('token')?.value
+  const sid = cookieStore.get('sid')?.value
 
   if (AUTH_DEBUG) {
-    console.log('[AUTH_DEBUG] getUserSession token=', token ? 'present' : 'missing')
+    console.log('[AUTH_DEBUG] getUserSession sid=', sid ? 'present' : 'missing')
   }
 
-  if (!token) {
+  if (!sid) {
     return null
   }
 
