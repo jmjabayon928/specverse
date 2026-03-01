@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 type LoginResponse = {
@@ -24,7 +24,7 @@ import Link from 'next/link'
 import { useSession } from '@/hooks/useSession'
 
 const getReasonMessage = (reason: string): string | null => {
-  if (reason === 'missing_token') {
+  if (reason === 'missing_token' || reason === 'missing_session') {
     return 'Your session cookie was missing. Please sign in again.'
   }
   if (reason === 'session_non_ok') {
@@ -47,16 +47,7 @@ export default function LoginClient() {
   const searchParams = useSearchParams()
   const reason = searchParams.get('reason') ?? ''
   const status = searchParams.get('status') ?? ''
-  const hasAlertedRef = useRef(false)
-
   const bannerMessage = getReasonMessage(reason)
-
-  useEffect(() => {
-    if (reason && !hasAlertedRef.current && bannerMessage) {
-      hasAlertedRef.current = true
-      window.alert(bannerMessage + (status ? ` (Status: ${status})` : ''))
-    }
-  }, [reason, status, bannerMessage])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -119,7 +110,7 @@ export default function LoginClient() {
           </p>
         </div>
         {bannerMessage && (
-          <div className="mb-4 rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-100">
+          <div role="alert" className="mb-4 rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-100">
             <p>
               {bannerMessage}
               {status ? ` (Status: ${status})` : ''}

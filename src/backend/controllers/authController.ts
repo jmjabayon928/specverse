@@ -32,7 +32,7 @@ export const loginHandler = async (req: Request, res: Response): Promise<void> =
 
     await createAuthSession(sidHash, userId, sessionAccountId, expiresAt)
 
-    setSidCookie(res, sid)
+    setSidCookie(res, sid, req.secure)
 
     res.status(200).json({
       user: result.payload,
@@ -82,7 +82,7 @@ export async function setAuthCookieForUser(
 
   await createAuthSession(sidHash, userId, accountId, expiresAt)
 
-  setSidCookie(res, sid)
+  setSidCookie(res, sid, undefined)
 }
 
 // POST /logout
@@ -95,7 +95,7 @@ export const logoutHandler = async (req: Request, res: Response): Promise<void> 
     })
   }
 
-  clearSidCookie(res)
+  clearSidCookie(res, req.secure)
 
   res.status(200).json({ message: 'Logout successful' })
 }

@@ -3,19 +3,26 @@ import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import type { UserSession } from '@/domain/auth/sessionTypes'
 
-type HeaderGetter = {
-  get(name: string): string | null
+type HeaderGetter = { get(name: string): string | null }
+
+function canonicalizeHost(host: string): string {
+  if (host.startsWith('127.0.0.1:')) {
+    return 'localhost:' + host.slice('127.0.0.1:'.length)
+  }
+  if (host === '127.0.0.1') {
+    return 'localhost'
+  }
+  return host
 }
 
-const buildSessionUrl = (hdrs: HeaderGetter): string => {
+export function buildSessionUrl(hdrs: HeaderGetter): string {
   const proto = hdrs.get('x-forwarded-proto') ?? 'http'
   const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host')
-
   if (!host) {
     throw new Error('Missing host header for session URL')
   }
-
-  return new URL('/api/backend/auth/session', `${proto}://${host}`).toString()
+  const canonicalHost = canonicalizeHost(host)
+  return new URL('/api/backend/auth/session', `${proto}://${canonicalHost}`).toString()
 }
 
 const loginUrl = (reason: string, from: string, status?: number): string => {
