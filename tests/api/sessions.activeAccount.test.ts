@@ -4,9 +4,6 @@
  * - Reject: not a member -> 403
  */
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
-
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
 
 const defaultContext = {
   accountId: 1,
@@ -37,10 +34,22 @@ jest.mock('../../src/backend/repositories/userActiveAccountRepository', () => ({
   clearActiveAccount: (...args: unknown[]) => clearActiveAccount(...args),
 }))
 
+const loadSessionData = jest.fn()
+jest.mock('../../src/backend/services/authSessionsService', () => ({
+  getSidFromRequest: jest.fn((req: { cookies?: { sid?: string } }) => req.cookies?.sid ?? null),
+  loadSessionData: (...args: unknown[]) => loadSessionData(...args),
+  revokeSession: jest.fn(),
+}))
+
+const getUserById = jest.fn()
+jest.mock('../../src/backend/services/usersService', () => ({
+  getUserById: (...args: unknown[]) => getUserById(...args),
+}))
+
 import app from '../../src/backend/app'
 
-function makeToken(payload: Record<string, unknown>): string {
-  return jwt.sign(payload, process.env.JWT_SECRET ?? 'secret', { expiresIn: '1h' })
+function makeSid(): string {
+  return 'test-sid-' + Math.random().toString(36).substring(7)
 }
 
 beforeEach(() => {
@@ -49,6 +58,26 @@ beforeEach(() => {
   getStoredActiveAccountId.mockResolvedValue(null)
   setActiveAccountRepo.mockResolvedValue(undefined)
   clearActiveAccount.mockResolvedValue(undefined)
+  getUserById.mockResolvedValue({
+    UserID: 1,
+    FirstName: 'Test',
+    LastName: 'User',
+    Email: 'u@example.com',
+    RoleID: 1,
+    RoleName: 'Admin',
+    ProfilePic: null,
+  })
+  loadSessionData.mockResolvedValue({
+    userId: 1,
+    accountId: 1,
+    roleId: 1,
+    role: 'Admin',
+    email: 'u@example.com',
+    name: 'User',
+    profilePic: null,
+    permissions: [],
+    isSuperadmin: false,
+  })
 })
 
 describe('POST /api/backend/sessions/active-account', () => {
@@ -60,19 +89,22 @@ describe('POST /api/backend/sessions/active-account', () => {
       permissions: ['DATASHEET_VIEW'],
     })
 
-    const token = makeToken({
+    const sid = makeSid()
+    loadSessionData.mockResolvedValueOnce({
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
       email: 'u@example.com',
       name: 'User',
       profilePic: null,
       permissions: [],
+      isSuperadmin: false,
     })
 
     const res = await request(app)
       .post('/api/backend/sessions/active-account')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ accountId: 2 })
 
     expect(res.status).toBe(204)
@@ -83,19 +115,22 @@ describe('POST /api/backend/sessions/active-account', () => {
   it('returns 403 when user is not a member of the account', async () => {
     getAccountContextForUserAndAccount.mockResolvedValueOnce(null)
 
-    const token = makeToken({
+    const sid = makeSid()
+    loadSessionData.mockResolvedValueOnce({
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
       email: 'u@example.com',
       name: 'User',
       profilePic: null,
       permissions: [],
+      isSuperadmin: false,
     })
 
     const res = await request(app)
       .post('/api/backend/sessions/active-account')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ accountId: 999 })
 
     expect(res.status).toBe(403)
@@ -103,7 +138,8 @@ describe('POST /api/backend/sessions/active-account', () => {
     expect(setActiveAccountRepo).not.toHaveBeenCalled()
   })
 
-  it('returns 401 when no token', async () => {
+  it('returns 401 when no session', async () => {
+    loadSessionData.mockResolvedValueOnce(null)
     const res = await request(app)
       .post('/api/backend/sessions/active-account')
       .send({ accountId: 1 })
@@ -113,19 +149,24 @@ describe('POST /api/backend/sessions/active-account', () => {
   })
 
   it('returns 400 when accountId missing', async () => {
-    const token = makeToken({
+    const sid = makeSid()
+    const fullSession = {
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
       email: 'u@example.com',
       name: 'User',
-      profilePic: null,
-      permissions: [],
-    })
+      profilePic: null as string | null,
+      permissions: [] as string[],
+      isSuperadmin: false,
+    }
+    loadSessionData.mockReset()
+    loadSessionData.mockResolvedValue(fullSession)
 
     const res = await request(app)
       .post('/api/backend/sessions/active-account')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({})
 
     expect(res.status).toBe(400)
@@ -133,19 +174,22 @@ describe('POST /api/backend/sessions/active-account', () => {
   })
 
   it('returns 400 when accountId is not a positive number', async () => {
-    const token = makeToken({
+    const sid = makeSid()
+    loadSessionData.mockResolvedValueOnce({
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
       email: 'u@example.com',
       name: 'User',
       profilePic: null,
       permissions: [],
+      isSuperadmin: false,
     })
 
     const res = await request(app)
       .post('/api/backend/sessions/active-account')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ accountId: 0 })
 
     expect(res.status).toBe(400)

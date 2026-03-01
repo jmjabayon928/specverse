@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 type LoginResponse = {
@@ -23,8 +23,16 @@ import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from '@/icons'
 import Link from 'next/link'
 import { useSession } from '@/hooks/useSession'
 
+function isSafeReturnUrl(returnUrl: string | null): returnUrl is string {
+  if (returnUrl == null || returnUrl === '') return false
+  if (!returnUrl.startsWith('/')) return false
+  if (returnUrl.startsWith('//')) return false
+  if (returnUrl.includes('://')) return false
+  return true
+}
+
 const getReasonMessage = (reason: string): string | null => {
-  if (reason === 'missing_token') {
+  if (reason === 'missing_token' || reason === 'missing_session') {
     return 'Your session cookie was missing. Please sign in again.'
   }
   if (reason === 'session_non_ok') {
@@ -47,16 +55,8 @@ export default function LoginClient() {
   const searchParams = useSearchParams()
   const reason = searchParams.get('reason') ?? ''
   const status = searchParams.get('status') ?? ''
-  const hasAlertedRef = useRef(false)
-
+  const returnUrl = searchParams.get('returnUrl')
   const bannerMessage = getReasonMessage(reason)
-
-  useEffect(() => {
-    if (reason && !hasAlertedRef.current && bannerMessage) {
-      hasAlertedRef.current = true
-      window.alert(bannerMessage + (status ? ` (Status: ${status})` : ''))
-    }
-  }, [reason, status, bannerMessage])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -83,19 +83,13 @@ export default function LoginClient() {
         return
       }
 
-      if (response.ok && isLoginResponse(body)) {
-        if (typeof body.token === 'string' && body.token.length > 0) {
-          localStorage.setItem('token', body.token)
-        }
-        if (typeof body.user === 'object' && body.user !== null) {
-          localStorage.setItem('user', JSON.stringify(body.user))
-        }
-      }
+      // Cookie is set by backend; no localStorage needed
 
       const isAuthenticated = await refetchSession()
 
       if (isAuthenticated) {
-        window.location.replace('/dashboard')
+        const target = isSafeReturnUrl(returnUrl) ? returnUrl : '/dashboard'
+        window.location.replace(target)
       } else {
         setError('Login successful but session verification failed. Please try again.')
       }
@@ -126,7 +120,7 @@ export default function LoginClient() {
           </p>
         </div>
         {bannerMessage && (
-          <div className="mb-4 rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-100">
+          <div role="alert" className="mb-4 rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-100">
             <p>
               {bannerMessage}
               {status ? ` (Status: ${status})` : ''}

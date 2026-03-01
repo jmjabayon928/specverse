@@ -8,27 +8,18 @@ export default function ResetSessionPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Clear localStorage
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.clear();
-
-    // Attempt to clear cookies (client-side)
-    const cookies = document.cookie.split(';')
-
-    for (const raw of cookies) {
-      const cookie = raw.replace(/^ +/, '')
-      const expired = cookie.replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`)
-      document.cookie = expired
-    }
-
-    // Optional: call backend to clear HttpOnly cookie
-    fetch("/api/backend/auth/logout", { method: "POST" });
-
-    // Wait a moment then redirect
-    setTimeout(() => {
+    const logout = async () => {
+      try {
+        await fetch("/api/backend/auth/logout", {
+          method: "POST",
+          credentials: "include",
+        });
+      } catch {
+        // Ignore errors - redirect anyway
+      }
       router.replace("/login");
-    }, 1000);
+    };
+    void logout();
   }, [router]);
 
   return (

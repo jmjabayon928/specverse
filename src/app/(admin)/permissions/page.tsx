@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/apiClient';
 
 type Permission = {
   PermissionID: number;
@@ -19,11 +20,7 @@ export default function PermissionsPage() {
   useEffect(() => {
     const fetchPermissions = async () => {
       try {
-        const res = await fetch('/api/backend/permissions/all', {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
+        const res = await apiFetch('/api/backend/permissions/all', {});
         const data = await res.json();
         if (Array.isArray(data)) {
           setPermissions(data);
@@ -39,11 +36,7 @@ export default function PermissionsPage() {
 
     const fetchRolePermissions = async () => {
       try {
-        const res = await fetch('/api/backend/permissions/by-role', {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
+        const res = await apiFetch('/api/backend/permissions/by-role', {});
         const data = await res.json();
         if (data && typeof data === 'object') {
           setRolePermissions(data);

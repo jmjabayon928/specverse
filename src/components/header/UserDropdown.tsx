@@ -39,9 +39,6 @@ export default function UserDropdown() {
         credentials: "include",
       });
 
-      localStorage.removeItem("token"); 
-      localStorage.removeItem("user");
-
       toast.success("Logged out successfully");
       router.push("/login");
       router.refresh();

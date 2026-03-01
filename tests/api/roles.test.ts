@@ -2,9 +2,6 @@
  * GET /api/backend/roles — minimal roles list for UI dropdown (account member management)
  */
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
-
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
 
 const defaultContext = {
   accountId: 1,
@@ -51,14 +48,35 @@ jest.mock('../../src/backend/repositories/rolesRepository', () => ({
   listRoleIdsAndNames: (...args: unknown[]) => listRoleIdsAndNames(...args),
 }))
 
+const loadSessionData = jest.fn()
+const revokeSession = jest.fn()
+jest.mock('../../src/backend/services/authSessionsService', () => ({
+  getSidFromRequest: (req: { cookies?: { sid?: string } }) => req.cookies?.sid ?? null,
+  loadSessionData: (...args: unknown[]) => loadSessionData(...args),
+  revokeSession: (...args: unknown[]) => revokeSession(...args),
+}))
+
 import app from '../../src/backend/app'
 
-function makeToken(payload: Record<string, unknown>): string {
-  return jwt.sign(payload, process.env.JWT_SECRET ?? 'secret', { expiresIn: '1h' })
+function makeSid(): string {
+  return 'test-sid-' + Math.random().toString(36).slice(2)
+}
+
+const defaultSessionData = {
+  userId: 1,
+  accountId: 1,
+  roleId: 1,
+  role: 'Admin',
+  email: 'u@example.com',
+  name: 'User',
+  profilePic: null as string | null,
+  permissions: ['ACCOUNT_VIEW'],
+  isSuperadmin: false,
 }
 
 beforeEach(() => {
   jest.clearAllMocks()
+  loadSessionData.mockResolvedValue(defaultSessionData)
   getAccountContextForUser.mockResolvedValue(defaultContext)
   getStoredActiveAccountId.mockResolvedValue(null)
   checkUserPermission.mockResolvedValue(true)
@@ -71,26 +89,18 @@ beforeEach(() => {
 })
 
 describe('GET /api/backend/roles', () => {
-  it('returns 401 when no token', async () => {
+  it('returns 401 when no session', async () => {
     const res = await request(app).get('/api/backend/roles')
     expect(res.status).toBe(401)
     expect(listRoleIdsAndNames).not.toHaveBeenCalled()
   })
 
   it('returns 200 and roles array including Admin and Manager', async () => {
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'u@example.com',
-      name: 'User',
-      profilePic: null,
-      permissions: ['ACCOUNT_VIEW'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .get('/api/backend/roles')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(200)
     expect(res.body.roles).toBeDefined()
@@ -107,19 +117,11 @@ describe('GET /api/backend/roles', () => {
       { roleId: 2, roleName: 'Manager' },
     ])
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'u@example.com',
-      name: 'User',
-      profilePic: null,
-      permissions: ['ACCOUNT_VIEW'],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .get('/api/backend/roles')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(200)
     const names = res.body.roles.map((r: { roleName: string }) => r.roleName)
@@ -136,19 +138,17 @@ describe('GET /api/backend/roles', () => {
       permissions: [],
     })
     checkUserPermission.mockResolvedValueOnce(false)
-    const token = makeToken({
-      userId: 1,
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
       roleId: 2,
       role: 'Engineer',
-      email: 'e@example.com',
-      name: 'Engineer',
-      profilePic: null,
       permissions: [],
     })
+    const sid = makeSid()
 
     const res = await request(app)
       .get('/api/backend/roles')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(403)
     expect(listRoleIdsAndNames).not.toHaveBeenCalled()

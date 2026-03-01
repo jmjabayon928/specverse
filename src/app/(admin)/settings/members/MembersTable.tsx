@@ -26,11 +26,6 @@ type Props = {
   permissions: string[]
 }
 
-function apiBase(): string {
-  if (typeof window !== 'undefined') return ''
-  return process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
-}
-
 function errorMessageForStatus(status: number, serverMessage: string | undefined, fallback: string): string {
   if (status === 403) return "You don't have permission."
   if (status === 401) return 'Please sign in again.'
@@ -49,7 +44,7 @@ export default function MembersTable({ members: initialMembers, roles, permissio
     async (accountMemberId: number, roleId: number) => {
       setUpdatingId(accountMemberId)
       try {
-        const res = await fetch(`${apiBase()}/api/backend/account-members/${accountMemberId}/role`, {
+        const res = await fetch(`/api/backend/account-members/${accountMemberId}/role`, {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -77,7 +72,7 @@ export default function MembersTable({ members: initialMembers, roles, permissio
     async (accountMemberId: number, isActive: boolean) => {
       setUpdatingId(accountMemberId)
       try {
-        const res = await fetch(`${apiBase()}/api/backend/account-members/${accountMemberId}/status`, {
+        const res = await fetch(`/api/backend/account-members/${accountMemberId}/status`, {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },

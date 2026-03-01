@@ -4,25 +4,20 @@ import { requireAuth } from '@/utils/sessionUtils.server'
 import type { AccountRow } from './AccountsTable'
 import AccountsTable from './AccountsTable'
 
-const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
-
 type AccountsRes = { accounts: AccountRow[]; activeAccountId: number }
 
 export default async function AccountsPage() {
   await requireAuth() // Server-side auth gate - redirects to /login if unauth
 
   const cookieStore = await cookies()
-  const token = cookieStore.get('token')?.value
-  if (!token) {
+  const sid = cookieStore.get('sid')?.value
+  if (!sid) {
     redirect('/login')
   }
 
-  // Build URL: use base if set (stage/prod), otherwise relative (local dev)
-  const accountsUrl = base
-    ? `${base}/api/backend/accounts`
-    : '/api/backend/accounts'
+  const accountsUrl = '/api/backend/accounts'
 
-  const headers = { Cookie: `token=${token}` } as const
+  const headers = { Cookie: `sid=${sid}` } as const
   const res = await fetch(accountsUrl, { headers, cache: 'no-store' })
 
   if (res.status === 401) {

@@ -54,7 +54,15 @@ import { errorHandler } from './middleware/errorHandler'
 const app: Application = express()
 
 // Trust proxy when behind nginx/TLS so req.secure and cookie secure work correctly
-if (process.env.BACKEND_TRUST_PROXY === 'true' || process.env.BACKEND_TRUST_PROXY === '1') {
+const isProdLike =
+  process.env.NODE_ENV === 'production' ||
+  process.env.SPECVERSE_ENV === 'staging' ||
+  process.env.SPECVERSE_ENV === 'production'
+
+const shouldTrustProxy =
+  isProdLike || process.env.BACKEND_TRUST_PROXY === 'true' || process.env.BACKEND_TRUST_PROXY === '1'
+
+if (shouldTrustProxy) {
   app.set('trust proxy', 1)
 }
 
@@ -131,6 +139,32 @@ app.use(cookieParser())
 app.use(helmet())
 app.use(compression())
 app.use(morgan('dev'))
+
+if (process.env.AUTH_DEBUG === '1') {
+  app.use((req, _res, next) => {
+    if (
+      req.path.startsWith('/api/backend/auth/session') ||
+      req.path.startsWith('/api/backend/auth/login')
+    ) {
+      const hasCookie = typeof req.headers.cookie === 'string' && req.headers.cookie.length > 0
+      const xfProto = req.headers['x-forwarded-proto']
+      const xfHost = req.headers['x-forwarded-host']
+      const host = req.headers.host
+      console.log(
+        JSON.stringify({
+          msg: 'auth_debug',
+          path: req.path,
+          method: req.method,
+          hasCookie,
+          xfProto,
+          xfHost,
+          host,
+        }),
+      )
+    }
+    next()
+  })
+}
 
 // Routes
 app.use('/api/backend/settings/users', usersRoutes)
@@ -353,6 +387,39 @@ if (process.env.NODE_ENV !== 'production') {
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', message: 'Backend server is running' })
+})
+
+// DB health: 200 if connected and dbo.AuthSessions exists, 503 otherwise
+function getHealthDbTimeoutMs(): number {
+  const v = process.env.HEALTH_DB_TIMEOUT_MS
+  if (v === undefined || v === '') return 3000
+  const n = parseInt(v, 10)
+  return Number.isInteger(n) && n > 0 ? n : 3000
+}
+
+app.get('/api/backend/health/db', async (_req: Request, res: Response) => {
+  const timeoutMs = getHealthDbTimeoutMs()
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  try {
+    const { poolPromise } = await import('./config/db')
+    const pool = await poolPromise
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('timeout')), timeoutMs)
+    })
+    await Promise.race([
+      pool.request().query(`SELECT 1 WHERE OBJECT_ID(N'dbo.AuthSessions', N'U') IS NOT NULL`),
+      timeout,
+    ])
+    clearTimeout(timeoutId)
+    res.status(200).json({ ok: true })
+  } catch (err) {
+    clearTimeout(timeoutId!)
+    const code = err instanceof Error && err.message === 'timeout' ? 'timeout' : 'unavailable'
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn(`[health/db] probe failed: ${code}`)
+    }
+    res.status(503).json({ ok: false, message: 'Database unavailable or AuthSessions table missing' })
+  }
 })
 
 // 404 fallback

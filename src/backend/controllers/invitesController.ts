@@ -12,6 +12,7 @@ import {
   declineInvite,
 } from '../services/invitesService'
 import { parseIntParam, asSingleString } from '../utils/requestParam'
+import { setAuthCookieForUser } from './authController'
 
 export const env = { isProdEnv: (): boolean => process.env.NODE_ENV === 'production' }
 
@@ -357,7 +358,13 @@ export const acceptPublic: RequestHandler = async (
       { token, firstName, lastName, password },
       { route: req.originalUrl, method: req.method, statusCode: 200 },
     )
-    res.status(200).json(result)
+
+    await setAuthCookieForUser(res, result.userId, result.accountId, result.email)
+
+    res.status(200).json({
+      accountId: result.accountId,
+      accountName: result.accountName,
+    })
   } catch (err) {
     const code = (err as Error & { statusCode?: number }).statusCode
     if (code === 400) {

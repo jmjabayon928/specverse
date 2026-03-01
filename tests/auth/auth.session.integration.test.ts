@@ -1,13 +1,11 @@
 /**
  * Integration test: login sets cookie, session requires it, logout clears it.
- * - POST /api/backend/auth/login sets Set-Cookie: token=... with expected flags
+ * - POST /api/backend/auth/login sets Set-Cookie: sid=... with expected flags
  * - GET /api/backend/auth/session returns 401 without cookie
  * - GET /api/backend/auth/session returns 200 with cookie from login
  * - POST /api/backend/auth/logout clears cookie; session returns 401 again
  */
 import request from 'supertest'
-
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
 
 const getAccountContextForUser = jest.fn().mockResolvedValue({
   accountId: 1,
@@ -69,13 +67,21 @@ jest.mock('../../src/backend/services/passwordHasher', () => ({
   hashPassword: jest.fn(),
 }))
 
+const loadSessionData = jest.fn()
+const revokeSession = jest.fn()
+jest.mock('../../src/backend/services/authSessionsService', () => ({
+  getSidFromRequest: (req: { cookies?: { sid?: string } }) => req.cookies?.sid ?? null,
+  loadSessionData: (...args: unknown[]) => loadSessionData(...args),
+  revokeSession: (...args: unknown[]) => revokeSession(...args),
+}))
+
 import app from '../../src/backend/app'
 import { assertUnauthenticated } from '../helpers/httpAsserts'
 
-function getTokenFromSetCookie(setCookie: string[] | undefined): string | null {
+function getSidFromSetCookie(setCookie: string[] | undefined): string | null {
   if (!setCookie || !Array.isArray(setCookie) || setCookie.length === 0) return null
   const first = setCookie[0]
-  const match = /token=([^;]+)/.exec(first)
+  const match = /sid=([^;]+)/.exec(first)
   return match ? match[1] : null
 }
 
@@ -98,10 +104,28 @@ beforeEach(() => {
     permissions: ['ACCOUNT_VIEW'],
   })
   bcryptCompare.mockResolvedValue(true)
+  revokeSession.mockResolvedValue(undefined)
+  loadSessionData.mockImplementation((sid: string) =>
+    Promise.resolve(
+      sid
+        ? {
+            userId: 1,
+            accountId: 1,
+            roleId: 1,
+            role: 'Admin',
+            email: 'session@example.com',
+            name: 'Test User',
+            profilePic: null,
+            permissions: ['ACCOUNT_VIEW'],
+            isSuperadmin: false,
+          }
+        : null,
+    ),
+  )
 })
 
 describe('auth session integration', () => {
-  it('POST /api/backend/auth/login sets Set-Cookie: token=... with expected flags', async () => {
+  it('POST /api/backend/auth/login sets Set-Cookie: sid=... with expected flags', async () => {
     const res = await request(app)
       .post('/api/backend/auth/login')
       .send({ email: 'session@example.com', password: 'secret123' })
@@ -112,7 +136,7 @@ describe('auth session integration', () => {
     expect(Array.isArray(setCookie)).toBe(true)
     expect(setCookie!.length).toBeGreaterThan(0)
     const cookieStr = setCookie![0]
-    expect(cookieStr).toMatch(/^token=[^;]+/)
+    expect(cookieStr).toMatch(/^sid=[^;]+/)
     expect(cookieStr).toContain('Path=/')
     expect(cookieStr).toContain('HttpOnly')
     expect(cookieStr).toContain('SameSite=Lax')
@@ -129,12 +153,12 @@ describe('auth session integration', () => {
       .send({ email: 'session@example.com', password: 'secret123' })
 
     expect(loginRes.status).toBe(200)
-    const token = getTokenFromSetCookie(loginRes.headers['set-cookie'])
-    expect(token).toBeTruthy()
+    const sid = getSidFromSetCookie(loginRes.headers['set-cookie'])
+    expect(sid).toBeTruthy()
 
     const sessionRes = await request(app)
       .get('/api/backend/auth/session')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(sessionRes.status).toBe(200)
     expect(sessionRes.body).toHaveProperty('userId', 1)
@@ -148,21 +172,21 @@ describe('auth session integration', () => {
       .send({ email: 'session@example.com', password: 'secret123' })
 
     expect(loginRes.status).toBe(200)
-    const token = getTokenFromSetCookie(loginRes.headers['set-cookie'])
-    expect(token).toBeTruthy()
+    const sid = getSidFromSetCookie(loginRes.headers['set-cookie'])
+    expect(sid).toBeTruthy()
 
     const sessionAfterLogin = await request(app)
       .get('/api/backend/auth/session')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
     expect(sessionAfterLogin.status).toBe(200)
 
     const logoutRes = await request(app)
       .post('/api/backend/auth/logout')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
     expect(logoutRes.status).toBe(200)
     expect(logoutRes.headers['set-cookie']).toBeDefined()
     const clearCookie = logoutRes.headers['set-cookie'] as string[]
-    expect(clearCookie.some((c) => c.includes('token=') && (c.includes('Max-Age=0') || c.includes('Expires=')))).toBe(true)
+    expect(clearCookie.some((c) => c.includes('sid=') && (c.includes('Max-Age=0') || c.includes('Expires=')))).toBe(true)
 
     const sessionAfterLogout = await request(app).get('/api/backend/auth/session')
     assertUnauthenticated(sessionAfterLogout)

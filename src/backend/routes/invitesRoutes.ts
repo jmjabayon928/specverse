@@ -18,6 +18,8 @@ const router = Router()
 
 // Public: by-token (no auth)
 router.get('/by-token', byToken)
+// Public: validate alias (same as by-token)
+router.get('/validate', byToken)
 
 // Accept requires auth only (no account context; user may have no account yet)
 router.post('/accept', verifyTokenOnly, accept)

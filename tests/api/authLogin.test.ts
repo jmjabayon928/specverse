@@ -3,8 +3,6 @@
  */
 import request from 'supertest'
 
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
-
 const getAccountContextForUser = jest.fn().mockResolvedValue({
   accountId: 1,
   roleId: 1,
@@ -46,6 +44,14 @@ jest.mock('../../src/backend/database/accountContextQueries', () => ({
   getActiveAccountId: jest.fn(),
 }))
 
+const createAuthSession = jest.fn().mockResolvedValue(undefined)
+jest.mock('../../src/backend/repositories/authSessionsRepository', () => ({
+  createAuthSession: (...args: unknown[]) => createAuthSession(...args),
+  findActiveSessionBySidHash: jest.fn(),
+  revokeSessionBySidHash: jest.fn(),
+  hashSid: jest.fn((sid: string) => Buffer.from(sid)),
+}))
+
 const bcryptCompare = jest.fn()
 jest.mock('bcryptjs', () => ({
   compare: (...args: unknown[]) => bcryptCompare(...args),
@@ -68,6 +74,7 @@ beforeEach(() => {
     roleName: 'Admin',
     permissions: ['ACCOUNT_VIEW'],
   })
+  createAuthSession.mockResolvedValue(undefined)
 })
 
 describe('POST /api/backend/auth/login', () => {
@@ -92,6 +99,8 @@ describe('POST /api/backend/auth/login', () => {
     expect(res.body).toHaveProperty('user')
     expect(res.body).toMatchObject({ message: 'Login successful' })
     expect(bcryptCompare).toHaveBeenCalledWith('secret123', mockUserRecord.PasswordHash)
+    expect(res.headers['set-cookie']).toBeDefined()
+    expect(createAuthSession).toHaveBeenCalled()
   })
 
   it('returns 200 when user has argon2 hash and password matches', async () => {
@@ -118,6 +127,8 @@ describe('POST /api/backend/auth/login', () => {
       mockUserRecord.PasswordHash,
       'SecurePass1!',
     )
+    expect(res.headers['set-cookie']).toBeDefined()
+    expect(createAuthSession).toHaveBeenCalled()
   })
 
   it('returns 401 when hash format is unknown', async () => {
@@ -162,5 +173,7 @@ describe('POST /api/backend/auth/login', () => {
     expect(res.status).toBe(200)
     expect(res.body).toHaveProperty('user')
     expect(res.body).toMatchObject({ message: 'Login successful' })
+    expect(res.headers['set-cookie']).toBeDefined()
+    expect(createAuthSession).toHaveBeenCalled()
   })
 })
