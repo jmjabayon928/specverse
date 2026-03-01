@@ -31,12 +31,13 @@ describe('useSessionMonitor', () => {
     expect(mockPush).not.toHaveBeenCalled()
   })
 
-  it('calls router.push(/login) when session returns 401 and not on login page', async () => {
+  it('does not redirect when session returns 401 (server gating handles redirects)', async () => {
     ;(globalThis.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 401 })
     render(<Wrapper />)
     await Promise.resolve()
     await Promise.resolve()
-    expect(mockPush).toHaveBeenCalledWith('/login?reason=session_401&from=useSessionMonitor&status=401')
+    expect(mockPush).not.toHaveBeenCalled()
+    expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 
   it('does not redirect when session returns 500', async () => {

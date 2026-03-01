@@ -3,10 +3,7 @@
  * when platform admin is DB-true.
  */
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
 import { assertUnauthenticated } from '../helpers/httpAsserts'
-
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
 
 const isUserPlatformAdminMock = jest.fn().mockResolvedValue(false)
 
@@ -31,23 +28,29 @@ jest.mock('../../src/backend/database/platformAdminPort', () => ({
   isUserPlatformAdmin: (...args: unknown[]) => isUserPlatformAdminMock(...args),
 }))
 
+const loadSessionData = jest.fn()
+jest.mock('../../src/backend/services/authSessionsService', () => ({
+  getSidFromRequest: jest.fn((req: { cookies?: { sid?: string } }) => req.cookies?.sid ?? null),
+  loadSessionData: (...args: unknown[]) => loadSessionData(...args),
+  revokeSession: jest.fn(),
+}))
+
 jest.mock('../../src/backend/middleware/authMiddleware', () => {
   const actual = jest.requireActual('../../src/backend/middleware/authMiddleware')
-  const { createAuthMiddlewareMock, parseTokenFromReq, makeUserFromToken } = jest.requireActual('../helpers/authMiddlewareMock')
   const { AppError } = jest.requireActual('../../src/backend/errors/AppError')
-  const mock = createAuthMiddlewareMock({ actual, mode: 'token' })
   
-  // Override verifyToken to set isSuperadmin based on platform admin check
+  // Override verifyToken to use session data
   const verifyTokenHandler = async (req: unknown, _res: unknown, next: (err?: unknown) => void): Promise<void> => {
-    const token = parseTokenFromReq(req as Parameters<typeof parseTokenFromReq>[0])
-    if (!token) {
-      next(new AppError('Unauthorized - No token', 401))
+    const { getSidFromRequest } = require('../../src/backend/services/authSessionsService')
+    const sid = getSidFromRequest(req as Parameters<typeof getSidFromRequest>[0])
+    if (!sid) {
+      next(new AppError('Unauthorized - No session', 401))
       return
     }
     
-    const claims = makeUserFromToken(token)
-    if (!claims) {
-      next(new AppError('Unauthorized - Invalid token', 401))
+    const sessionData = await loadSessionData(sid)
+    if (!sessionData) {
+      next(new AppError('Unauthorized - Invalid session', 401))
       return
     }
     
@@ -56,29 +59,30 @@ jest.mock('../../src/backend/middleware/authMiddleware', () => {
     const { getAccountContextForUser } = require('../../src/backend/database/accountContextQueries')
     
     // Check if user is platform admin
-    const isPlatformAdmin = await isUserPlatformAdmin(claims.userId)
+    const isPlatformAdmin = await isUserPlatformAdmin(sessionData.userId)
     
-    // Get account context (mocked)
-    const accountContext = await getAccountContextForUser(claims.userId)
+    // Get account context (mocked) - this simulates attachAccountContext behavior
+    const accountCtx = await getAccountContextForUser(sessionData.userId)
     
     const r = req as Record<string, unknown>
     ;(r as Record<string, unknown>)['user'] = {
-      userId: claims.userId,
-      accountId: accountContext?.accountId ?? claims.accountId,
-      roleId: accountContext?.roleId ?? claims.roleId,
-      role: accountContext?.roleName ?? claims.role,
-      permissions: accountContext?.permissions ?? claims.permissions ?? [],
-      isOwner: accountContext?.isOwner ?? claims.isOwner ?? false,
-      ownerUserId: accountContext?.ownerUserId ?? null,
-      email: 'admin@example.com',
-      name: 'Admin User',
+      userId: sessionData.userId,
+      accountId: accountCtx?.accountId ?? sessionData.accountId,
+      roleId: accountCtx?.roleId ?? sessionData.roleId,
+      role: accountCtx?.roleName ?? sessionData.role,
+      permissions: accountCtx?.permissions ?? sessionData.permissions ?? [],
+      isOwner: accountCtx?.isOwner ?? false,
+      ownerUserId: accountCtx?.ownerUserId ?? null,
+      email: sessionData.email,
+      name: sessionData.name,
+      profilePic: sessionData.profilePic ?? undefined,
       isSuperadmin: isPlatformAdmin,
     }
     
     next()
   }
   
-  return { ...mock, verifyToken: verifyTokenHandler }
+  return { ...actual, verifyToken: verifyTokenHandler }
 })
 
 jest.mock('../../src/backend/database/accountContextQueries', () => ({
@@ -88,6 +92,11 @@ jest.mock('../../src/backend/database/accountContextQueries', () => ({
   getActiveAccountId,
 }))
 
+const getUserById = jest.fn()
+jest.mock('../../src/backend/services/usersService', () => ({
+  getUserById: (...args: unknown[]) => getUserById(...args),
+}))
+
 jest.mock('../../src/backend/repositories/userActiveAccountRepository', () => ({
   getActiveAccountId: (...args: unknown[]) => getStoredActiveAccountId(...args),
   clearActiveAccount: (...args: unknown[]) => clearActiveAccount(...args),
@@ -95,8 +104,8 @@ jest.mock('../../src/backend/repositories/userActiveAccountRepository', () => ({
 
 import app from '../../src/backend/app'
 
-function makeToken(payload: Record<string, unknown>): string {
-  return jwt.sign(payload, process.env.JWT_SECRET ?? 'secret', { expiresIn: '1h' })
+function makeSid(): string {
+  return 'test-sid-' + Math.random().toString(36).substring(7)
 }
 
 beforeEach(() => {
@@ -104,6 +113,26 @@ beforeEach(() => {
   isUserPlatformAdminMock.mockResolvedValue(false)
   getAccountContextForUser.mockResolvedValue(defaultContext)
   getStoredActiveAccountId.mockResolvedValue(null)
+  getUserById.mockResolvedValue({
+    UserID: 1,
+    FirstName: 'Admin',
+    LastName: 'User',
+    Email: 'admin@example.com',
+    RoleID: 1,
+    RoleName: 'Admin',
+    ProfilePic: null,
+  })
+  loadSessionData.mockResolvedValue({
+    userId: 1,
+    accountId: 1,
+    roleId: 1,
+    role: 'Admin',
+    email: 'admin@example.com',
+    name: 'Admin User',
+    profilePic: null,
+    permissions: [],
+    isSuperadmin: false,
+  })
 })
 
 describe('GET /api/backend/auth/session', () => {
@@ -122,8 +151,18 @@ describe('GET /api/backend/auth/session', () => {
       isOwner: true,
       ownerUserId: 1,
     })
+    getUserById.mockResolvedValueOnce({
+      UserID: 1,
+      FirstName: 'Admin',
+      LastName: 'User',
+      Email: 'admin@example.com',
+      RoleID: 1,
+      RoleName: 'Admin',
+      ProfilePic: null,
+    })
 
-    const token = makeToken({
+    const sid = makeSid()
+    loadSessionData.mockResolvedValueOnce({
       userId: 1,
       accountId: 1,
       roleId: 1,
@@ -132,11 +171,12 @@ describe('GET /api/backend/auth/session', () => {
       name: 'Admin User',
       profilePic: null,
       permissions: [],
+      isSuperadmin: true,
     })
 
     const res = await request(app)
       .get('/api/backend/auth/session')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(200)
     expect(res.body).toHaveProperty('isSuperadmin', true)

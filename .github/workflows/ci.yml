@@ -12,6 +12,8 @@ concurrency:
 jobs:
   test-build:
     runs-on: ubuntu-latest
+    env:
+      HOST_ENVIRONMENT: render
     strategy:
       fail-fast: false
       matrix:
@@ -22,6 +24,78 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Guard - forbid tracked .env files
+        shell: bash
+        run: |
+          set -euo pipefail
+          tracked="$(git ls-files | grep -E '(^|/)\.env($|\.)' || true)"
+          if [ -n "$tracked" ]; then
+            forbidden="$(echo "$tracked" | grep -v '\.env\.example$' || true)"
+            if [ -n "$forbidden" ]; then
+              echo "::error::Forbidden: the following .env files are tracked by git (use runtime env and .env.example only):"
+              echo "$forbidden"
+              exit 1
+            fi
+          fi
+
+      - name: Guard - obvious secret patterns
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Private keys should never be committed (exclude workflow files to avoid self-match)
+          if git grep -n "BEGIN PRIVATE KEY" -- . ':!/.github/*' >/dev/null 2>&1; then
+            echo "Forbidden private key material found in repository."
+            exit 1
+          fi
+
+          # Helper: fail if a variable is present in tracked files with a non-placeholder value.
+          # Excludes docs/** and *.env.example.
+          check_var_placeholder() {
+            local name="$1"
+            local placeholder="$2"
+            local matches
+
+            matches="$(git grep -n "${name}=" -- . ':!:docs/*' ':!*.env.example' || true)"
+            if [ -z "$matches" ]; then
+              return 0
+            fi
+
+            if echo "$matches" | grep -v "${name}=${placeholder}" >/dev/null 2>&1; then
+              echo "Suspicious ${name} value found (non-placeholder)."
+              echo "$matches"
+              exit 1
+            fi
+          }
+
+          # Helper: same as above, but ONLY enforces if the var appears at all.
+          # (Useful during transitions when not all env names are standardized.)
+          check_var_placeholder_if_present() {
+            local name="$1"
+            local placeholder="$2"
+            local matches
+
+            matches="$(git grep -n "${name}=" -- . ':!:docs/*' ':!*.env.example' || true)"
+            if [ -z "$matches" ]; then
+              return 0
+            fi
+
+            if echo "$matches" | grep -v "${name}=${placeholder}" >/dev/null 2>&1; then
+              echo "Suspicious ${name} value found (non-placeholder)."
+              echo "$matches"
+              exit 1
+            fi
+          }
+
+          # DB secrets should never be real in tracked files
+          check_var_placeholder "DB_PASSWORD" "CHANGEME"
+
+          # You moved from JWT to server-side sessions.
+          # If any of these exist in tracked files, they MUST be placeholders.
+          check_var_placeholder_if_present "SESSION_SECRET" "CHANGEME"
+          check_var_placeholder_if_present "AUTH_SESSION_SECRET" "CHANGEME"
+          check_var_placeholder_if_present "COOKIE_SECRET" "CHANGEME"
 
       - uses: actions/setup-node@v4
         with:

@@ -7,6 +7,7 @@ import type {
   InventoryListEnvelope,
 } from "@/domain/inventory/inventoryTypes";
 import InventoryListTable from "./InventoryListTable";
+import { apiFetch } from "@/lib/apiClient";
 
 type RefOption = { id: number; name: string };
 
@@ -59,14 +60,11 @@ export default function InventoryPageClient({ onSelectItem }: Props) {
     if (suppId !== undefined) params.set("suppId", String(suppId));
     if (manuId !== undefined) params.set("manuId", String(manuId));
 
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    fetch(`/api/backend/inventory?${params.toString()}`, {
+    apiFetch(`/api/backend/inventory?${params.toString()}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      credentials: "include",
     })
       .then((res) => res.json())
       .then((data: InventoryListItem[] | InventoryListEnvelope) => {
@@ -93,11 +91,7 @@ export default function InventoryPageClient({ onSelectItem }: Props) {
   }, [load]);
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    fetch("/api/backend/inventory/reference-options", {
-      credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
+    apiFetch("/api/backend/inventory/reference-options", {})
       .then((res) => res.json())
       .then((data: {
         categories?: Array<{ categoryId: number; CategoryName: string }>;

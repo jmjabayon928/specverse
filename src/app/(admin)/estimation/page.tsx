@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import PageContextBanner from "@/components/demo/PageContextBanner";
 import dynamic from "next/dynamic";
 import EstimationTable from "@/components/estimation/EstimationTable";
+import { apiFetch } from "@/lib/apiClient";
 
 const Select = dynamic(() => import("react-select"), { ssr: false });
 
@@ -56,11 +57,10 @@ export default function EstimationDashboardPage() {
 
   useEffect(() => {
     async function fetchEstimations() {
-      const res = await fetch("/api/backend/estimation/filter", {
+      const res = await apiFetch("/api/backend/estimation/filter", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`
         },
         body: JSON.stringify({
           statuses: selectedStatuses.map(s => s.value),
@@ -151,11 +151,10 @@ export default function EstimationDashboardPage() {
             </Link>
             <button
               onClick={async () => {
-                const res = await fetch("/api/backend/estimation/export/filter/pdf", {
+                const res = await apiFetch("/api/backend/estimation/export/filter/pdf", {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${localStorage.getItem("token")}`
                   },
                   body: JSON.stringify({
                     statuses: selectedStatuses.map(s => s.value),

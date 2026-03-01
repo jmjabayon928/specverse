@@ -3,19 +3,26 @@ import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import type { UserSession } from '@/domain/auth/sessionTypes'
 
-type HeaderGetter = {
-  get(name: string): string | null
+type HeaderGetter = { get(name: string): string | null }
+
+function canonicalizeHost(host: string): string {
+  if (host.startsWith('127.0.0.1:')) {
+    return 'localhost:' + host.slice('127.0.0.1:'.length)
+  }
+  if (host === '127.0.0.1') {
+    return 'localhost'
+  }
+  return host
 }
 
-const buildSessionUrl = (hdrs: HeaderGetter): string => {
+export function buildSessionUrl(hdrs: HeaderGetter): string {
   const proto = hdrs.get('x-forwarded-proto') ?? 'http'
   const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host')
-
   if (!host) {
     throw new Error('Missing host header for session URL')
   }
-
-  return new URL('/api/backend/auth/session', `${proto}://${host}`).toString()
+  const canonicalHost = canonicalizeHost(host)
+  return new URL('/api/backend/auth/session', `${proto}://${canonicalHost}`).toString()
 }
 
 const loginUrl = (reason: string, from: string, status?: number): string => {
@@ -32,18 +39,18 @@ const AUTH_DEBUG = process.env.AUTH_DEBUG === '1'
 
 export async function requireAuth(): Promise<UserSession> {
   const cookieStore = await cookies()
-  const token = cookieStore.get('token')?.value
+  const sid = cookieStore.get('sid')?.value
 
   if (AUTH_DEBUG) {
-    console.log('[AUTH_DEBUG] requireAuth token=', token ? 'present' : 'missing')
+    console.log('[AUTH_DEBUG] requireAuth sid=', sid ? 'present' : 'missing')
   }
 
-  if (!token) {
+  if (!sid) {
     if (AUTH_DEBUG) {
-      console.log('[AUTH_DEBUG] requireAuth redirect: missing token')
+      console.log('[AUTH_DEBUG] requireAuth redirect: missing session')
     }
-    redirect(loginUrl('missing_token', 'requireAuth'))
-    throw new Error('Redirected due to missing token')
+    redirect(loginUrl('missing_session', 'requireAuth'))
+    throw new Error('Redirected due to missing session')
   }
 
   try {
@@ -94,13 +101,13 @@ export async function requireAuth(): Promise<UserSession> {
  */
 export default async function getUserSession(): Promise<UserSession | null> {
   const cookieStore = await cookies()
-  const token = cookieStore.get('token')?.value
+  const sid = cookieStore.get('sid')?.value
 
   if (AUTH_DEBUG) {
-    console.log('[AUTH_DEBUG] getUserSession token=', token ? 'present' : 'missing')
+    console.log('[AUTH_DEBUG] getUserSession sid=', sid ? 'present' : 'missing')
   }
 
-  if (!token) {
+  if (!sid) {
     return null
   }
 

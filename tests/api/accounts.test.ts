@@ -1,5 +1,4 @@
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
 
 import router from '../../src/backend/routes/accountsRoutes'
 import { requireAdmin } from '../../src/backend/middleware/requireAdmin'
@@ -9,7 +8,13 @@ import * as accountContextQueries from '../../src/backend/database/accountContex
 import * as userActiveAccountRepository from '../../src/backend/repositories/userActiveAccountRepository'
 import * as accountsRepository from '../../src/backend/repositories/accountsRepository'
 
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
+const loadSessionData = jest.fn()
+const revokeSession = jest.fn()
+jest.mock('../../src/backend/services/authSessionsService', () => ({
+  getSidFromRequest: (req: { cookies?: { sid?: string } }) => req.cookies?.sid ?? null,
+  loadSessionData: (...args: unknown[]) => loadSessionData(...args),
+  revokeSession: (...args: unknown[]) => revokeSession(...args),
+}))
 
 jest.mock('../../src/backend/database/accountContextQueries', () => ({
   __esModule: true,
@@ -34,8 +39,20 @@ jest.mock('../../src/backend/repositories/accountsRepository', () => ({
   updateAccount: jest.fn(),
 }))
 
-function makeToken(payload: Record<string, unknown>): string {
-  return jwt.sign(payload, process.env.JWT_SECRET ?? 'secret', { expiresIn: '1h' })
+function makeSid(): string {
+  return 'test-sid-' + Math.random().toString(36).slice(2)
+}
+
+const defaultSessionData = {
+  userId: 1,
+  accountId: 1,
+  roleId: 1,
+  role: 'Admin',
+  email: 'u@example.com',
+  name: 'User',
+  profilePic: null as string | null,
+  permissions: [] as string[],
+  isSuperadmin: false,
 }
 
 function getApp(): any {
@@ -53,6 +70,7 @@ const defaultContext = {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  loadSessionData.mockResolvedValue(defaultSessionData)
   ;(accountContextQueries.getAccountContextForUser as unknown as jest.Mock).mockResolvedValue(defaultContext)
   ;(accountContextQueries.getAccountContextForUserAndAccount as unknown as jest.Mock).mockResolvedValue(null)
   ;(accountContextQueries.getDefaultAccountId as unknown as jest.Mock).mockResolvedValue(1)
@@ -137,26 +155,28 @@ describe('accountsService validation', () => {
 })
 
 describe('accounts API (admin-only)', () => {
-  test('GET /api/backend/accounts returns my accounts + activeAccountId', async () => {
-    const app = getApp()
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'u@example.com',
-      name: 'User',
-      profilePic: null,
-      permissions: [],
-    })
+  test(
+    'GET /api/backend/accounts returns my accounts + activeAccountId',
+    async () => {
+      const app = getApp()
+      const sid = makeSid()
 
-    const res = await request(app).get('/api/backend/accounts').set('Cookie', [`token=${token}`])
+      const res = await request(app).get('/api/backend/accounts').set('Cookie', [`sid=${sid}`])
 
-    expect(res.status).toBe(200)
-    expect(res.body.accounts).toHaveLength(2)
-    expect(res.body.activeAccountId).toBe(1)
-  })
+      expect(res.status).toBe(200)
+      expect(res.body.accounts).toHaveLength(2)
+      expect(res.body.activeAccountId).toBe(1)
+    },
+    10000,
+  )
 
   test('GET /api/backend/accounts is forbidden for non-admin', async () => {
+    loadSessionData.mockResolvedValue({
+      ...defaultSessionData,
+      roleId: 2,
+      role: 'Viewer',
+      permissions: [],
+    })
     const app = getApp()
     ;(accountContextQueries.getAccountContextForUser as unknown as jest.Mock).mockResolvedValueOnce({
       accountId: 1,
@@ -165,17 +185,9 @@ describe('accounts API (admin-only)', () => {
       permissions: [],
     })
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 2,
-      role: 'Viewer',
-      email: 'u@example.com',
-      name: 'User',
-      profilePic: null,
-      permissions: [],
-    })
+    const sid = makeSid()
 
-    const res = await request(app).get('/api/backend/accounts').set('Cookie', [`token=${token}`])
+    const res = await request(app).get('/api/backend/accounts').set('Cookie', [`sid=${sid}`])
     expect(res.status).toBe(403)
   })
 
@@ -188,36 +200,20 @@ describe('accounts API (admin-only)', () => {
       isActive: true,
     })
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'u@example.com',
-      name: 'User',
-      profilePic: null,
-      permissions: [],
-    })
+    const sid = makeSid()
 
-    const res = await request(app).get('/api/backend/accounts/5').set('Cookie', [`token=${token}`])
+    const res = await request(app).get('/api/backend/accounts/5').set('Cookie', [`sid=${sid}`])
     expect(res.status).toBe(200)
     expect(res.body).toMatchObject({ accountId: 5, accountName: 'Acme', slug: 'acme', isActive: true })
   })
 
   test('POST /api/backend/accounts creates account (validates + trims)', async () => {
     const app = getApp()
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'u@example.com',
-      name: 'User',
-      profilePic: null,
-      permissions: [],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/accounts')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ accountName: '  New Account  ', slug: 'new-account' })
 
     expect(res.status).toBe(201)
@@ -227,15 +223,7 @@ describe('accounts API (admin-only)', () => {
 
   test('POST /api/backend/accounts returns 409 on duplicate slug', async () => {
     const app = getApp()
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'u@example.com',
-      name: 'User',
-      profilePic: null,
-      permissions: [],
-    })
+    const sid = makeSid()
 
     const dupErr: any = new Error('Violation of UNIQUE KEY constraint')
     dupErr.number = 2627
@@ -246,13 +234,13 @@ describe('accounts API (admin-only)', () => {
 
     const r1 = await request(app)
       .post('/api/backend/accounts')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ accountName: 'One', slug: 'dup-slug' })
     expect(r1.status).toBe(201)
 
     const r2 = await request(app)
       .post('/api/backend/accounts')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ accountName: 'Two', slug: 'dup-slug' })
     expect(r2.status).toBe(409)
     expect(r2.body).toMatchObject({ message: expect.stringContaining('slug') })
@@ -260,19 +248,11 @@ describe('accounts API (admin-only)', () => {
 
   test('PATCH /api/backend/accounts/:id updates account', async () => {
     const app = getApp()
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'u@example.com',
-      name: 'User',
-      profilePic: null,
-      permissions: [],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/accounts/10')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ accountName: '  Updated  ', isActive: false })
 
     expect(res.status).toBe(200)
@@ -282,19 +262,11 @@ describe('accounts API (admin-only)', () => {
 
   test('PATCH /api/backend/accounts/:id returns 400 for empty body', async () => {
     const app = getApp()
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'u@example.com',
-      name: 'User',
-      profilePic: null,
-      permissions: [],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .patch('/api/backend/accounts/10')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({})
 
     expect(res.status).toBe(400)
@@ -303,15 +275,7 @@ describe('accounts API (admin-only)', () => {
 
   test('PATCH /api/backend/accounts/:id returns 409 on duplicate slug', async () => {
     const app = getApp()
-    const token = makeToken({
-      userId: 1,
-      roleId: 1,
-      role: 'Admin',
-      email: 'u@example.com',
-      name: 'User',
-      profilePic: null,
-      permissions: [],
-    })
+    const sid = makeSid()
 
     const dupErr: any = new Error('Cannot insert duplicate key row')
     dupErr.number = 2601
@@ -319,7 +283,7 @@ describe('accounts API (admin-only)', () => {
 
     const res = await request(app)
       .patch('/api/backend/accounts/10')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ slug: 'dup-slug' })
 
     expect(res.status).toBe(409)
@@ -327,6 +291,12 @@ describe('accounts API (admin-only)', () => {
   })
 
   test('POST /api/backend/accounts is forbidden for non-admin', async () => {
+    loadSessionData.mockResolvedValueOnce({
+      ...defaultSessionData,
+      roleId: 2,
+      role: 'Viewer',
+      permissions: [],
+    })
     const app = getApp()
     ;(accountContextQueries.getAccountContextForUser as unknown as jest.Mock).mockResolvedValueOnce({
       accountId: 1,
@@ -335,19 +305,11 @@ describe('accounts API (admin-only)', () => {
       permissions: [],
     })
 
-    const token = makeToken({
-      userId: 1,
-      roleId: 2,
-      role: 'Viewer',
-      email: 'u@example.com',
-      name: 'User',
-      profilePic: null,
-      permissions: [],
-    })
+    const sid = makeSid()
 
     const res = await request(app)
       .post('/api/backend/accounts')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
       .send({ accountName: 'Name', slug: 'name-123' })
 
     expect(res.status).toBe(403)

@@ -2,6 +2,10 @@
 import type { Request, Response } from 'express'
 import type { JwtPayload as CustomJwtPayload } from '../../domain/auth/JwtTypes'
 import { loginWithEmailAndPassword } from '../services/authService'
+import { getUserById } from '../services/usersService'
+import { getAccountContextForUser } from '../database/accountContextQueries'
+import { generateSid, setSidCookie, clearSidCookie, getSessionExpiresAt } from '../utils/sessionCookie'
+import { createAuthSession, hashSid } from '../repositories/authSessionsRepository'
 
 // POST /login
 export const loginHandler = async (req: Request, res: Response): Promise<void> => {
@@ -15,20 +19,25 @@ export const loginHandler = async (req: Request, res: Response): Promise<void> =
       return
     }
 
-    res
-      .cookie('token', result.token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 1000 * 60 * 60, // 60 minutes
-      })
-      .status(200)
-      .json({
-        user: result.payload,
-        message: 'Login successful',
-        token: result.token,
-      })
+    const userId = result.payload.userId
+    const accountId = result.payload.accountId ?? null
+
+    // Get active account context for session storage
+    const ctx = await getAccountContextForUser(userId)
+    const sessionAccountId = ctx?.accountId ?? accountId ?? null
+
+    const sid = generateSid()
+    const sidHash = hashSid(sid)
+    const expiresAt = getSessionExpiresAt()
+
+    await createAuthSession(sidHash, userId, sessionAccountId, expiresAt)
+
+    setSidCookie(res, sid, req.secure)
+
+    res.status(200).json({
+      user: result.payload,
+      message: 'Login successful',
+    })
   } catch (error) {
     console.error('❌ Login error:', error)
     const isProduction = process.env.NODE_ENV === 'production'
@@ -52,13 +61,41 @@ export const loginHandler = async (req: Request, res: Response): Promise<void> =
   }
 }
 
+/**
+ * Helper: Creates an auth session and sets sid cookie for a user by userId and accountId.
+ */
+export async function setAuthCookieForUser(
+  res: Response,
+  userId: number,
+  accountId: number,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for API compatibility with invitesController
+  _email?: string,
+): Promise<void> {
+  const user = await getUserById(userId)
+  if (!user) {
+    throw new Error('User not found')
+  }
+
+  const sid = generateSid()
+  const sidHash = hashSid(sid)
+  const expiresAt = getSessionExpiresAt()
+
+  await createAuthSession(sidHash, userId, accountId, expiresAt)
+
+  setSidCookie(res, sid, undefined)
+}
+
 // POST /logout
-export const logoutHandler = (req: Request, res: Response): void => {
-  res.clearCookie('token', {
-    path: '/',
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-  })
+export const logoutHandler = async (req: Request, res: Response): Promise<void> => {
+  const sid = req.cookies?.sid
+  if (sid) {
+    const { revokeSession } = await import('../services/authSessionsService')
+    await revokeSession(sid).catch(() => {
+      // Ignore errors during revocation (session may already be revoked/expired)
+    })
+  }
+
+  clearSidCookie(res, req.secure)
 
   res.status(200).json({ message: 'Logout successful' })
 }

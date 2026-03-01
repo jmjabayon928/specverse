@@ -2,9 +2,6 @@
  * DEV-only endpoint: POST /api/backend/invites/:id/dev-accept-link
  */
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
-
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'secret'
 
 const defaultContext = {
   accountId: 1,
@@ -35,6 +32,14 @@ const getAccountNameById = jest.fn().mockResolvedValue('Test Account')
 const logAuditAction = jest.fn().mockResolvedValue(undefined)
 const createUser = jest.fn().mockResolvedValue(999)
 const updateUser = jest.fn().mockResolvedValue(undefined)
+
+jest.mock('../../src/backend/controllers/authController', () => {
+  const actual = jest.requireActual('../../src/backend/controllers/authController')
+  return {
+    ...actual,
+    setAuthCookieForUser: jest.fn().mockResolvedValue(undefined),
+  }
+})
 
 jest.mock('../../src/backend/database/accountContextQueries', () => ({
   getAccountContextForUser,
@@ -99,13 +104,29 @@ jest.mock('../../src/backend/services/email/emailSenderFactory', () => ({
 jest.mock('../../src/backend/services/usersService', () => ({
   createUser: (...args: unknown[]) => createUser(...args),
   updateUser: (...args: unknown[]) => updateUser(...args),
+  getUserById: jest.fn().mockResolvedValue({
+    UserID: 1,
+    FirstName: 'Admin',
+    LastName: 'User',
+    Email: 'admin@example.com',
+    RoleID: 1,
+    RoleName: 'Admin',
+    ProfilePic: null,
+  }),
+}))
+
+const loadSessionData = jest.fn()
+jest.mock('../../src/backend/services/authSessionsService', () => ({
+  getSidFromRequest: jest.fn((req: { cookies?: { sid?: string } }) => req.cookies?.sid ?? null),
+  loadSessionData: (...args: unknown[]) => loadSessionData(...args),
+  revokeSession: jest.fn(),
 }))
 
 import app from '../../src/backend/app'
 import * as invitesController from '../../src/backend/controllers/invitesController'
 
-function makeToken(payload: Record<string, unknown>): string {
-  return jwt.sign(payload, process.env.JWT_SECRET ?? 'secret', { expiresIn: '1h' })
+function makeSid(): string {
+  return 'test-sid-' + Math.random().toString(36).substring(7)
 }
 
 const pendingInviteRow = {
@@ -143,6 +164,17 @@ beforeEach(() => {
   setStatusAcceptedIfPending.mockResolvedValue(true)
   createUser.mockResolvedValue(999)
   getAccountNameById.mockResolvedValue('Test Account')
+  loadSessionData.mockResolvedValue({
+    userId: 1,
+    accountId: 1,
+    roleId: 1,
+    role: 'Admin',
+    email: 'admin@example.com',
+    name: 'Admin',
+    profilePic: null,
+    permissions: ['ACCOUNT_USER_MANAGE'],
+    isSuperadmin: false,
+  })
 })
 
 afterEach(() => {
@@ -153,19 +185,22 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
   it('returns 404 when NODE_ENV is production', async () => {
     jest.spyOn(invitesController.env, 'isProdEnv').mockReturnValue(true)
     getByIdAndAccount.mockResolvedValueOnce(pendingInviteRow)
-    const token = makeToken({
+    const sid = makeSid()
+    loadSessionData.mockResolvedValueOnce({
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
       email: 'admin@example.com',
       name: 'Admin',
       profilePic: null,
       permissions: ['ACCOUNT_USER_MANAGE'],
+      isSuperadmin: false,
     })
 
     const res = await request(app)
       .post('/api/backend/invites/1/dev-accept-link')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(404)
     expect(res.body).toMatchObject({ message: 'Not found' })
@@ -189,19 +224,22 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
       return Promise.resolve(null)
     })
 
-    const adminToken = makeToken({
+    const adminSid = makeSid()
+    loadSessionData.mockResolvedValueOnce({
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
       email: 'admin@example.com',
       name: 'Admin',
       profilePic: null,
       permissions: ['ACCOUNT_USER_MANAGE'],
+      isSuperadmin: false,
     })
 
     const linkRes = await request(app)
       .post('/api/backend/invites/1/dev-accept-link')
-      .set('Cookie', [`token=${adminToken}`])
+      .set('Cookie', [`sid=${adminSid}`])
 
     expect(linkRes.status).toBe(200)
     expect(linkRes.body).toHaveProperty('acceptUrl')
@@ -249,19 +287,22 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
 
   it('returns 404 when invite not found (development)', async () => {
     getByIdAndAccount.mockResolvedValue(null)
-    const token = makeToken({
+    const sid = makeSid()
+    loadSessionData.mockResolvedValueOnce({
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
       email: 'admin@example.com',
       name: 'Admin',
       profilePic: null,
       permissions: ['ACCOUNT_USER_MANAGE'],
+      isSuperadmin: false,
     })
 
     const res = await request(app)
       .post('/api/backend/invites/999/dev-accept-link')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(404)
     expect(res.body.message).toMatch(/not found/i)
@@ -270,19 +311,22 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
 
   it('returns 410 when invite is not Pending (development)', async () => {
     getByIdAndAccount.mockResolvedValue({ ...pendingInviteRow, status: 'Accepted' })
-    const token = makeToken({
+    const sid = makeSid()
+    loadSessionData.mockResolvedValueOnce({
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
       email: 'admin@example.com',
       name: 'Admin',
       profilePic: null,
       permissions: ['ACCOUNT_USER_MANAGE'],
+      isSuperadmin: false,
     })
 
     const res = await request(app)
       .post('/api/backend/invites/1/dev-accept-link')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(410)
     expect(res.body.message).toMatch(/no longer valid/i)
@@ -290,23 +334,26 @@ describe('POST /api/backend/invites/:id/dev-accept-link', () => {
   })
 
   it('returns 410 when invite is expired (development)', async () => {
-    getByIdAndAccount.mockResolvedValue({
-      ...pendingInviteRow,
-      expiresAt: new Date(Date.now() - 86400000),
-    })
-    const token = makeToken({
+    const sid = makeSid()
+    loadSessionData.mockResolvedValueOnce({
       userId: 1,
+      accountId: 1,
       roleId: 1,
       role: 'Admin',
       email: 'admin@example.com',
       name: 'Admin',
       profilePic: null,
       permissions: ['ACCOUNT_USER_MANAGE'],
+      isSuperadmin: false,
+    })
+    getByIdAndAccount.mockResolvedValue({
+      ...pendingInviteRow,
+      expiresAt: new Date(Date.now() - 86400000),
     })
 
     const res = await request(app)
       .post('/api/backend/invites/1/dev-accept-link')
-      .set('Cookie', [`token=${token}`])
+      .set('Cookie', [`sid=${sid}`])
 
     expect(res.status).toBe(410)
     expect(res.body.message).toMatch(/expired/i)

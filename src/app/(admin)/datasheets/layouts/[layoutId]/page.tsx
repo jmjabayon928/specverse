@@ -26,13 +26,11 @@ export default async function LayoutDetailPage({ params }: Readonly<PageProps>) 
     notFound();
   }
 
-  // Forward auth headers to backend (supports cookie/session or Authorization)
+  // Forward cookies to backend (cookie-based auth)
   const incoming = await headers();
   const cookie = incoming.get("cookie") ?? "";
-  const auth = incoming.get("authorization") ?? "";
   const forwardHeaders: HeadersInit = {};
   if (cookie) forwardHeaders["cookie"] = cookie;
-  if (auth) forwardHeaders["authorization"] = auth;
 
   const url = `/api/backend/layouts/${id}`;
   const res = await fetch(url, {

@@ -7,51 +7,64 @@ dotenv.config()
 const MAX_DB_CONNECT_ATTEMPTS = 3
 const DB_RETRY_DELAY_MS = 2000
 
-// Decide trustServerCertificate based on the current environment.
-// In production, HOST_ENVIRONMENT must be explicitly set.
-const getTrustServerCertificate = (): boolean => {
-  const env = process.env.HOST_ENVIRONMENT
+let cachedConfig: sql.config | null = null
 
-  if (env === 'local') {
+/**
+ * Builds and validates DB config from env. Called only on first pool creation.
+ * Throws if required env is missing or HOST_ENVIRONMENT is invalid in production.
+ */
+function getDbConfig(): sql.config {
+  if (cachedConfig) return cachedConfig
+
+  const nodeEnv = process.env.NODE_ENV
+  const getTrustServerCertificate = (): boolean => {
+    const env = process.env.HOST_ENVIRONMENT
+
+    if (env === 'local') return true
+    if (env === 'render' || env === 'vercel') return false
+
+    if (nodeEnv === 'production') {
+      throw new Error(
+        'HOST_ENVIRONMENT must be set to "local", "render", or "vercel" when NODE_ENV=production',
+      )
+    }
+
+    console.warn(
+      '⚠️ HOST_ENVIRONMENT is not set or unknown, defaulting trustServerCertificate to true',
+    )
     return true
   }
 
-  if (env === 'render' || env === 'vercel') {
-    return false
-  }
-
-  const nodeEnv = process.env.NODE_ENV
-
-  if (nodeEnv === 'production') {
+  const required = ['DB_USER', 'DB_PASSWORD', 'DB_SERVER', 'DB_DATABASE'] as const
+  const missing = required.filter((key) => {
+    const v = process.env[key]
+    return v === undefined || (typeof v === 'string' && v.trim() === '')
+  })
+  if (missing.length > 0) {
     throw new Error(
-      'HOST_ENVIRONMENT must be set to "local", "render", or "vercel" when NODE_ENV=production',
+      `Missing required database environment variables: ${missing.join(', ')}. Check your .env file.`,
     )
   }
 
-  console.warn(
-    '⚠️ HOST_ENVIRONMENT is not set or unknown, defaulting trustServerCertificate to true',
-  )
+  const user = process.env.DB_USER ?? ''
+  const password = process.env.DB_PASSWORD ?? ''
+  const server = process.env.DB_SERVER ?? ''
+  const database = process.env.DB_DATABASE ?? ''
 
-  return true
-}
-
-// Strongly typed config using mssql's config interface
-const dbConfig: sql.config = {
-  user: process.env.DB_USER ?? '',
-  password: process.env.DB_PASSWORD ?? '',
-  server: process.env.DB_SERVER ?? '',
-  database: process.env.DB_DATABASE ?? '',
-  connectionTimeout: 30000,
-  requestTimeout: 30000,
-  options: {
-    encrypt: true,
-    enableArithAbort: true,
-    trustServerCertificate: getTrustServerCertificate(),
-  },
-}
-
-if (!dbConfig.user || !dbConfig.password || !dbConfig.server || !dbConfig.database) {
-  throw new Error('⛔ Missing required database environment variables. Check your .env file.')
+  cachedConfig = {
+    user,
+    password,
+    server,
+    database,
+    connectionTimeout: 30000,
+    requestTimeout: 30000,
+    options: {
+      encrypt: true,
+      enableArithAbort: true,
+      trustServerCertificate: getTrustServerCertificate(),
+    },
+  }
+  return cachedConfig
 }
 
 const wait = (ms: number): Promise<void> =>
@@ -77,8 +90,8 @@ const connectWithRetry = async (
         const effectivePoolMax = config.pool?.max ?? '(default)'
         console.log(
           `[db.ts] Pool config: encrypt=${config.options?.encrypt} trustServerCertificate=${config.options?.trustServerCertificate} ` +
-          `connectionTimeout=${effectiveConnectionTimeout} requestTimeout=${effectiveRequestTimeout} ` +
-          `pool.max=${effectivePoolMax}`
+            `connectionTimeout=${effectiveConnectionTimeout} requestTimeout=${effectiveRequestTimeout} ` +
+            `pool.max=${effectivePoolMax}`,
         )
       }
     }
@@ -104,7 +117,7 @@ let cachedPool: Promise<sql.ConnectionPool> | null = null
 
 function getPool(): Promise<sql.ConnectionPool> {
   if (!cachedPool) {
-    cachedPool = connectWithRetry(dbConfig, MAX_DB_CONNECT_ATTEMPTS)
+    cachedPool = connectWithRetry(getDbConfig(), MAX_DB_CONNECT_ATTEMPTS)
   }
   return cachedPool
 }
@@ -126,6 +139,13 @@ const poolPromise: Promise<sql.ConnectionPool> = new Proxy(
     },
   },
 )
+
+// Lazy proxy: first property access triggers getDbConfig() (validates env, may throw). Stable API for sql.connect(dbConfig).
+const dbConfig = new Proxy({} as sql.config, {
+  get(_, prop: string | symbol) {
+    return (getDbConfig() as unknown as Record<string | symbol, unknown>)[prop]
+  },
+})
 
 export { poolPromise, dbConfig }
 
