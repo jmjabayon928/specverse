@@ -1,9 +1,18 @@
 ## Principles
 
-- **One origin per environment**: the browser only calls relative paths under `/api/backend/*`. A single origin (the Next.js app) fronts all traffic, and proxies backend requests to Express.
-- **Runtime secrets only**: secrets are provided via environment variables at runtime (PM2/systemd/Render/etc.), not committed `.env` files in the build directory. `.env.example` documents required keys without values.
-- **Cookie-based auth authority**: authentication is enforced by an HttpOnly cookie session. Cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` in production.
-- **Required `/api/backend` proxy**: every environment must ensure `/api/backend/*` requests reach the Express backend (either via Next’s route handler proxy in local dev or via nginx/other reverse proxies in staging/production).
+- **Cloud-first (one origin)**: the frontend calls **only** relative URLs under `/api/backend/*`. Do **not** set `NEXT_PUBLIC_API_BASE_URL`; one browser origin per environment.
+- **Runtime secrets only**: no `.env` or `.env.local` in the VPS/build directory. Secrets are injected at runtime via PM2, systemd, or Render env vars. `.env.example` documents keys only (no values).
+- **Cookie-based auth**: session is an HttpOnly cookie (`sid`). `HttpOnly`, `SameSite=Lax`, `Secure` in production.
+- **Reverse proxy required**: nginx (or Next.js rewrites when not using nginx) must route `/api/backend/*` to the Express backend.
+
+## Backend required env (names only)
+
+`NODE_ENV`, `SPECVERSE_ENV`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`. Next/server proxy: `BACKEND_INTERNAL_ORIGIN`. See `.env.example` and sections below for meaning.
+
+## Optional env
+
+- `AUTH_DEBUG=1` — enable auth request logging (session/login paths). Leave unset in production.
+- `BACKEND_TRUST_PROXY` — set to `1` to trust upstream proxy when not auto-detected.
 
 ## Required runtime env (Backend)
 

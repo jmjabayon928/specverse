@@ -6,6 +6,7 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 
 const isProd = process.env.NODE_ENV === 'production'
+const TIMEOUT_MS = 15000
 
 type InviteStatus = 'pending' | 'expired' | 'accepted' | 'revoked' | 'declined'
 
@@ -83,6 +84,12 @@ export default function InviteAcceptClient() {
     }
 
     let cancelled = false
+    const timeoutId = setTimeout(() => {
+      if (cancelled) return
+      cancelled = true
+      setState((prev) => (prev.kind === 'loading' ? { kind: 'error' } : prev))
+    }, TIMEOUT_MS)
+
     const run = async () => {
       try {
         const data = await fetchByToken(token.trim())
@@ -119,9 +126,12 @@ export default function InviteAcceptClient() {
         }
       }
     }
-    run()
+    void run().finally(() => {
+      clearTimeout(timeoutId)
+    })
     return () => {
       cancelled = true
+      clearTimeout(timeoutId)
     }
   }, [token, fetchByToken, checkSession])
 

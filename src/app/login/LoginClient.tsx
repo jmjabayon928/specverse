@@ -23,6 +23,14 @@ import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from '@/icons'
 import Link from 'next/link'
 import { useSession } from '@/hooks/useSession'
 
+function isSafeReturnUrl(returnUrl: string | null): returnUrl is string {
+  if (returnUrl == null || returnUrl === '') return false
+  if (!returnUrl.startsWith('/')) return false
+  if (returnUrl.startsWith('//')) return false
+  if (returnUrl.includes('://')) return false
+  return true
+}
+
 const getReasonMessage = (reason: string): string | null => {
   if (reason === 'missing_token' || reason === 'missing_session') {
     return 'Your session cookie was missing. Please sign in again.'
@@ -47,6 +55,7 @@ export default function LoginClient() {
   const searchParams = useSearchParams()
   const reason = searchParams.get('reason') ?? ''
   const status = searchParams.get('status') ?? ''
+  const returnUrl = searchParams.get('returnUrl')
   const bannerMessage = getReasonMessage(reason)
 
   const [email, setEmail] = useState('')
@@ -79,7 +88,8 @@ export default function LoginClient() {
       const isAuthenticated = await refetchSession()
 
       if (isAuthenticated) {
-        window.location.replace('/dashboard')
+        const target = isSafeReturnUrl(returnUrl) ? returnUrl : '/dashboard'
+        window.location.replace(target)
       } else {
         setError('Login successful but session verification failed. Please try again.')
       }

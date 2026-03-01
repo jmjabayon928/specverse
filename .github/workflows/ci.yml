@@ -25,30 +25,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Guard - forbid committed env files
+      - name: Guard - forbid tracked .env files
         shell: bash
         run: |
           set -euo pipefail
-          forbidden_files=""
-
-          # Explicit well-known env filenames
-          for f in .env .env.local .env.production .env.development .env.staging .env.test; do
-            if [ -f "$f" ]; then
-              forbidden_files="$forbidden_files $f"
+          tracked="$(git ls-files | grep -E '(^|/)\.env($|\.)' || true)"
+          if [ -n "$tracked" ]; then
+            forbidden="$(echo "$tracked" | grep -v '\.env\.example$' || true)"
+            if [ -n "$forbidden" ]; then
+              echo "::error::Forbidden: the following .env files are tracked by git (use runtime env and .env.example only):"
+              echo "$forbidden"
+              exit 1
             fi
-          done
-
-          # Any other .env.* files except .env.example
-          extra_env="$(ls -1 .env.* 2>/dev/null | grep -v '^\.env\.example$' || true)"
-          if [ -n "$extra_env" ]; then
-            forbidden_files="$forbidden_files $extra_env"
-          fi
-
-          if [ -n "${forbidden_files// /}" ]; then
-            echo "Forbidden env file(s) committed:"
-            echo "$forbidden_files"
-            echo "Use runtime env and .env.example only."
-            exit 1
           fi
 
       - name: Guard - obvious secret patterns
