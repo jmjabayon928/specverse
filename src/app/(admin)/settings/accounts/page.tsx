@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { requireAuth } from '@/utils/sessionUtils.server'
+import { backendFetch } from '@/utils/backendFetch.server'
 import type { AccountRow } from './AccountsTable'
 import AccountsTable from './AccountsTable'
 
@@ -18,7 +19,7 @@ export default async function AccountsPage() {
   const accountsUrl = '/api/backend/accounts'
 
   const headers = { Cookie: `sid=${sid}` } as const
-  const res = await fetch(accountsUrl, { headers, cache: 'no-store' })
+  const res = await backendFetch(accountsUrl, { headers, cache: 'no-store' })
 
   if (res.status === 401) {
     redirect('/login')

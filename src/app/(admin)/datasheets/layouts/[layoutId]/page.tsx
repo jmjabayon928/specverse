@@ -1,7 +1,7 @@
 // src/app/(admin)/datasheets/layouts/[layoutId]/page.tsx
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { headers } from "next/headers";
+import { backendFetch } from "@/utils/backendFetch.server";
 import type { LayoutBundle } from "@/domain/layouts/layoutTypes";
 
 interface PageProps {
@@ -26,17 +26,8 @@ export default async function LayoutDetailPage({ params }: Readonly<PageProps>) 
     notFound();
   }
 
-  // Forward cookies to backend (cookie-based auth)
-  const incoming = await headers();
-  const cookie = incoming.get("cookie") ?? "";
-  const forwardHeaders: HeadersInit = {};
-  if (cookie) forwardHeaders["cookie"] = cookie;
-
-  const url = `/api/backend/layouts/${id}`;
-  const res = await fetch(url, {
-    cache: "no-store",
-    headers: forwardHeaders,
-  });
+  const path = `/api/backend/layouts/${id}`;
+  const res = await backendFetch(path, { cache: "no-store" });
 
   if (res.status === 404) {
     notFound();
@@ -46,7 +37,7 @@ export default async function LayoutDetailPage({ params }: Readonly<PageProps>) 
       <div className="container max-w-5xl py-6">
         <h1 className="text-2xl font-semibold mb-4">Layout #{id}</h1>
         <p className="text-red-600">Failed to load layout details. Status {res.status}.</p>
-        <p className="text-xs text-gray-500 mt-2">Tried: {url}</p>
+        <p className="text-xs text-gray-500 mt-2">Tried: {path}</p>
       </div>
     );
   }

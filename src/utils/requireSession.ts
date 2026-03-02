@@ -1,6 +1,7 @@
 // src/utils/requireSession.ts
 
 import { AppError } from '@/backend/errors/AppError'
+import { backendFetch } from '@/utils/backendFetch.server'
 
 type SessionInfo = {
   id: number
@@ -30,9 +31,8 @@ const handleSessionError = (error: unknown, base: string): never => {
 
 const fetchSessionOnce = async (): Promise<SessionInfo> => {
   try {
-    const res = await fetch('/api/backend/auth/session', {
+    const res = await backendFetch('/api/backend/auth/session', {
       method: 'GET',
-      credentials: 'include',                      // required so cookies are sent
       headers: { 'Content-Type': 'application/json' },
     })
 
