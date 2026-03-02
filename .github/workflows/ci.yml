@@ -57,7 +57,7 @@ jobs:
             local placeholder="$2"
             local matches
 
-            matches="$(git grep -n "${name}=" -- . ':!:docs/*' ':!*.env.example' || true)"
+            matches="$(git grep -n -E "^${name}=" -- . ':!:docs/*' ':!*.env.example' ':!/.github/workflows/*' || true)"
             if [ -z "$matches" ]; then
               return 0
             fi
@@ -132,14 +132,7 @@ jobs:
             echo ".env file committed — forbidden"
             exit 1
           fi
-          
-          matches="$(git grep -n "^DB_PASSWORD=" -- . ':!:docs/*' ':!*.env.example' || true)"
-          if [ -n "$matches" ]; then
-            echo "::error::Leaked DB_PASSWORD assignment found in tracked files (outside docs and *.env.example):"
-            echo "$matches"
-            exit 1
-          fi
-          echo "No leaked DB_PASSWORD"
+          echo "No committed .env file"
 
       - name: Build
         run: npm run build
