@@ -114,6 +114,26 @@ jobs:
       - name: Test
         run: npm test -- --runInBand --no-cache
 
+      - name: Guard - Architecture Regression
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rg -n "http://127\.0\.0\.1" src && exit 1 || echo "No localhost backend references"
+          rg -n "NEXT_PUBLIC_APP_URL" src && exit 1 || echo "No NEXT_PUBLIC_APP_URL usage"
+          rg -n "NEXT_PUBLIC_API_BASE_URL" src && exit 1 || echo "No NEXT_PUBLIC_API_BASE_URL usage"
+          rg -n --glob "src/app/**/*.{ts,tsx}" "@/backend/database" src && exit 1 || echo "No Next->DB imports"
+
+      - name: Guard - Committed .env files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f ".env" ]; then
+            echo ".env file committed — forbidden"
+            exit 1
+          fi
+          rg -n "^DB_PASSWORD=" . && exit 1 || echo "No leaked DB_PASSWORD"
+
       - name: Build
         run: npm run build
 

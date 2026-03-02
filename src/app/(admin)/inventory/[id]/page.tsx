@@ -1,17 +1,86 @@
 // src/app/(admin)/inventory/[id]/page.tsx
 import { notFound } from "next/navigation";
 import { LayoutDashboard, FileText, Wrench, ClipboardList } from "lucide-react";
-import { getInventoryItemById } from "@/backend/database/inventoryQueries";
-import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
 import InventoryDetails from "@/components/inventory/InventoryDetails";
 import InventoryTabLink from "@/components/inventory/InventoryTabLink";
 import InventoryTabContent from "@/components/inventory/InventoryTabContent";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import { PERMISSIONS } from "@/constants/permissions";
+import { apiJson } from "@/utils/apiJson.server";
+import type { InventoryItemDB } from "@/domain/inventory/inventoryTypes";
 
 interface InventoryPageProps {
   params: Promise<{ id?: string }>;
   searchParams: Promise<{ tab?: string }>;
+}
+
+type ReferenceOption = { id: number; name: string };
+
+function isReferenceOption(obj: unknown): obj is ReferenceOption {
+  if (obj == null || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
+  const id = typeof o.id === 'number' ? o.id : typeof o.categoryId === 'number' ? o.categoryId : typeof o.suppId === 'number' ? o.suppId : typeof o.manuId === 'number' ? o.manuId : typeof o.warehouseId === 'number' ? o.warehouseId : null;
+  const name = typeof o.name === 'string' ? o.name : typeof o.CategoryName === 'string' ? o.CategoryName : typeof o.suppName === 'string' ? o.suppName : typeof o.manuName === 'string' ? o.manuName : typeof o.warehouseName === 'string' ? o.warehouseName : null;
+  return id != null && name != null;
+}
+
+function mapToReferenceOption(obj: unknown): ReferenceOption | null {
+  if (!isReferenceOption(obj)) {
+    const o = obj as Record<string, unknown>;
+    const id = typeof o.categoryId === 'number' ? o.categoryId : typeof o.suppId === 'number' ? o.suppId : typeof o.manuId === 'number' ? o.manuId : typeof o.warehouseId === 'number' ? o.warehouseId : null;
+    const name = typeof o.CategoryName === 'string' ? o.CategoryName : typeof o.suppName === 'string' ? o.suppName : typeof o.manuName === 'string' ? o.manuName : typeof o.warehouseName === 'string' ? o.warehouseName : null;
+    if (id != null && name != null) {
+      return { id, name };
+    }
+    return null;
+  }
+  return obj;
+}
+
+function mapToReferenceOptions(arr: unknown): ReferenceOption[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(mapToReferenceOption).filter((item): item is ReferenceOption => item != null);
+}
+
+async function fetchInventoryItem(itemId: number): Promise<InventoryItemDB | null> {
+  try {
+    const data = await apiJson<InventoryItemDB>(
+      `/api/backend/inventory/${itemId}`,
+      { cache: 'no-store' }
+    );
+    
+    if (typeof data.inventoryId !== 'number' || typeof data.quantityOnHand !== 'number') {
+      return null;
+    }
+    
+    return data;
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Not found') {
+      return null;
+    }
+    throw err;
+  }
+}
+
+async function fetchReferenceOptions(): Promise<{
+  categories: ReferenceOption[];
+  suppliers: ReferenceOption[];
+  manufacturers: ReferenceOption[];
+}> {
+  const data = await apiJson<{
+    categories?: unknown;
+    suppliers?: unknown;
+    manufacturers?: unknown;
+  }>(
+    '/api/backend/inventory/reference-options',
+    { cache: 'no-store' }
+  );
+  
+  return {
+    categories: mapToReferenceOptions(data.categories),
+    suppliers: mapToReferenceOptions(data.suppliers),
+    manufacturers: mapToReferenceOptions(data.manufacturers),
+  };
 }
 
 export default async function InventoryDetailPage(
@@ -25,10 +94,10 @@ export default async function InventoryDetailPage(
   const accountId = session.accountId;
   if (accountId == null) return notFound();
 
-  const item = await getInventoryItemById(itemId);
+  const item = await fetchInventoryItem(itemId);
   if (!item) return notFound();
 
-  const { categories, suppliers, manufacturers } = await fetchReferenceOptions(accountId);
+  const { categories, suppliers, manufacturers } = await fetchReferenceOptions();
   const resolvedSearchParams = await searchParams;
   const INVENTORY_TABS = ["overview", "transactions", "audit", "maintenance"] as const;
   type InventoryTab = (typeof INVENTORY_TABS)[number];

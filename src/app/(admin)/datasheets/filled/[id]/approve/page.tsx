@@ -1,11 +1,13 @@
 // src/app/(admin)/datasheets/filled/[id]/approve/page.tsx
 import { notFound, redirect } from "next/navigation";
-import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
+import { apiJson } from "@/utils/apiJson.server";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import { canSeeApproveUI } from "@/utils/approveGating";
 import { Metadata } from "next";
 import FilledSheetViewer from "../../FilledSheetViewer";
 import ApproveButton from "./ApproveButton";
+import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
+import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 
 export const metadata: Metadata = {
   title: "Approve Filled Sheet",
@@ -27,7 +29,10 @@ export default async function FilledApprovePage({ params }: Readonly<PageProps>)
   const accountId = sessionUser.accountId;
   if (accountId == null) return notFound();
 
-  const rawData = await getFilledSheetDetailsById(sheetId, "eng", "SI", accountId);
+  const rawData = await apiJson<{ datasheet: UnifiedSheet; translations: SheetTranslations | null }>(
+    `/api/backend/filledsheets/${sheetId}?lang=eng`,
+    { cache: 'no-store' }
+  ).catch(() => null);
   if (!rawData?.datasheet) return notFound();
 
   return (

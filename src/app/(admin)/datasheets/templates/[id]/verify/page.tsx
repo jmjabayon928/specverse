@@ -3,10 +3,11 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { PERMISSIONS } from '@/constants/permissions'
-import { getTemplateDetailsById } from '@/backend/services/templateService'
+import { apiJson } from '@/utils/apiJson.server'
 import { requireAuth } from '@/utils/sessionUtils.server'
 import TemplateViewer from '../TemplateViewer'
 import VerifyForm from './VerifyForm'
+import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
 
 export const metadata: Metadata = {
   title: 'Verify Template',
@@ -49,7 +50,10 @@ const TemplateVerifyPage = async (props: TemplateVerifyPageProps) => {
   const accountId = sessionUser.accountId
   if (accountId == null) notFound()
 
-  const rawData = await getTemplateDetailsById(templateId, 'eng', 'SI', accountId)
+  const rawData = await apiJson<{ datasheet: UnifiedSheet; translations: unknown }>(
+    `/api/backend/templates/${templateId}?lang=eng`,
+    { cache: 'no-store' }
+  ).catch(() => null)
 
   if (rawData == null) {
     notFound()

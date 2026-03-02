@@ -1,12 +1,12 @@
 // src/app/(admin)/datasheets/filled/create/page.tsx
 
 import React from "react";
-import { getTemplateDetailsById } from "@/backend/services/templateService";
+import { apiJson } from "@/utils/apiJson.server";
 import FilledSheetForm from "./FilledSheetForm";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import { notFound } from "next/navigation";
-import { getSheetTranslations } from "@/backend/services/translationService";
 import type { SheetTranslations } from "@/domain/i18n/translationTypes";
+import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -26,13 +26,20 @@ export default async function FilledSheetCreatePage(props: Readonly<PageProps>) 
 
   if (!templateId || isNaN(templateId)) return notFound();
 
-  const rawData = await getTemplateDetailsById(templateId, lang, "SI", accountId);
+  const rawData = await apiJson<{ datasheet: UnifiedSheet; translations: unknown }>(
+    `/api/backend/templates/${templateId}?lang=${encodeURIComponent(lang)}`,
+    { cache: 'no-store' }
+  ).catch(() => null);
   if (!rawData) return notFound();
 
   // 👇 Fetch translations only if lang is not English
   let translations: SheetTranslations | null = null;
   if (lang !== "eng") {
-    translations = await getSheetTranslations(templateId, lang);
+    const translationsData = await apiJson<unknown>(
+      `/api/backend/datasheets/templates/${templateId}/translations?lang=${encodeURIComponent(lang)}`,
+      { cache: 'no-store' }
+    ).catch(() => null);
+    translations = translationsData as SheetTranslations | null;
   }
 
   return (

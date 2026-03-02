@@ -6,10 +6,10 @@ import { cookies } from "next/headers";
 import SecurePage from "@/components/security/SecurePage";
 import { PERMISSIONS } from "@/constants/permissions";
 import FilledSheetClonerForm from "./FilledSheetClonerForm";
-import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
-import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
+import { apiJson } from "@/utils/apiJson.server";
 import { mapToUnifiedSheet } from "@/utils/templateViewMapper";
 import { requireAuth } from "@/utils/sessionUtils.server";
+import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
 
 interface PageProps {
   readonly params: Promise<Readonly<{ id: string }>>;
@@ -28,8 +28,14 @@ export default async function FilledClonePage(
 
   const [sessionCookie, referenceData, filledData] = await Promise.all([
     cookies(),
-    fetchReferenceOptions(accountId),
-    getFilledSheetDetailsById(sheetId, "eng", "SI", accountId),
+    apiJson<{ areas: Array<{ id: number; name: string }>; manufacturers: Array<{ id: number; name: string }>; suppliers: Array<{ id: number; name: string }>; categories: Array<{ id: number; name: string }>; clients: Array<{ id: number; name: string }>; projects: Array<{ id: number; name: string }> }>(
+      '/api/backend/filledsheets/reference-options',
+      { cache: 'no-store' }
+    ),
+    apiJson<{ datasheet: UnifiedSheet; translations: unknown }>(
+      `/api/backend/filledsheets/${sheetId}?lang=eng`,
+      { cache: 'no-store' }
+    ),
   ]);
 
   const token = sessionCookie.get("token")?.value;

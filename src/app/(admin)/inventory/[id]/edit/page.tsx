@@ -1,6 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getInventoryItemById } from '@/backend/database/inventoryQueries';
-import { fetchReferenceOptions } from '@/backend/database/ReferenceQueries';
+import { apiJson } from '@/utils/apiJson.server';
 import InventoryFormClient from '@/components/inventory/InventoryFormClient';
 import { requireAuth } from '@/utils/sessionUtils.server';
 
@@ -17,10 +16,21 @@ export default async function InventoryEditPage({ params }: Readonly<InventoryEd
   const accountId = session.accountId;
   if (accountId == null) return notFound();
 
-  const item = await getInventoryItemById(itemId);
+  const [item, referenceData] = await Promise.all([
+    apiJson<{ inventoryId: number; itemCode: string; itemName: string; description: string | null; categoryId: number | null; supplierId: number | null; manufacturerId: number | null; location: string | null; reorderLevel: number; uom: string | null }>(
+      `/api/backend/inventory/${itemId}`,
+      { cache: 'no-store' }
+    ).catch(() => null),
+    apiJson<{ categories: Array<{ categoryId: number; CategoryName: string }>; suppliers: Array<{ suppId: number; suppName: string }>; manufacturers: Array<{ manuId: number; manuName: string }> }>(
+      '/api/backend/inventory/reference-options',
+      { cache: 'no-store' }
+    ),
+  ]);
   if (!item) return notFound();
 
-  const { categories, suppliers, manufacturers } = await fetchReferenceOptions(accountId);
+  const categories = referenceData.categories.map(c => ({ id: c.categoryId, name: c.CategoryName }));
+  const suppliers = referenceData.suppliers.map(s => ({ id: s.suppId, name: s.suppName }));
+  const manufacturers = referenceData.manufacturers.map(m => ({ id: m.manuId, name: m.manuName }));
 
   const initialValues = {
     itemCode: item.itemCode,

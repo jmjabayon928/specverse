@@ -2,11 +2,12 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { PERMISSIONS } from "@/constants/permissions";
-import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
+import { apiJson } from "@/utils/apiJson.server";
 import FilledSheetPageClient from "./FilledSheetPageClient";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import SecurePage from "@/components/security/SecurePage";
 import type { SheetTranslations } from "@/domain/i18n/translationTypes";
+import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
 
 type FilledParams = Readonly<{ id: string }>;
 type SearchParamsRecord = Readonly<Record<string, string | string[] | undefined>>;
@@ -74,7 +75,10 @@ export default async function FilledSheetDetailPage({
   const accountId = session.accountId;
   if (accountId == null) return notFound();
 
-  const result = await getFilledSheetDetailsById(sheetId, defaultLanguage, defaultUnitSystem, accountId);
+  const result = await apiJson<{ datasheet: UnifiedSheet; translations: unknown }>(
+    `/api/backend/filledsheets/${sheetId}?lang=${encodeURIComponent(defaultLanguage)}`,
+    { cache: 'no-store' }
+  ).catch(() => null);
   if (!result) notFound();
 
   const { datasheet: filledSheet, translations } = result;

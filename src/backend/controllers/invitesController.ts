@@ -61,11 +61,11 @@ export const create: RequestHandler = async (
   }
 
   try {
-    const originFromRequest = `${req.protocol}://${req.get('host')}`
+    const requestOrigin = `${req.protocol}://${req.get('host')}`
     const result = await createOrResendInvite(accountId, userId, email, roleId, {
       route: req.originalUrl,
       method: req.method,
-    }, originFromRequest)
+    }, { requestOrigin })
     const status = result.resent ? 200 : 201
     res.status(status).json(result)
   } catch (err) {
@@ -139,8 +139,8 @@ export const devAcceptLinkHandler: RequestHandler = async (
   }
 
   try {
-    const originFromRequest = `${req.protocol}://${req.get('host')}`
-    const result = await devAcceptLink(accountId, inviteId, originFromRequest)
+    const requestOrigin = `${req.protocol}://${req.get('host')}`
+    const result = await devAcceptLink(accountId, inviteId, { requestOrigin })
     res.status(200).json(result)
   } catch (err) {
     const code = (err as Error & { statusCode?: number }).statusCode
@@ -183,12 +183,12 @@ export const resend: RequestHandler = async (
   }
 
   try {
-    const originFromRequest = `${req.protocol}://${req.get('host')}`
+    const requestOrigin = `${req.protocol}://${req.get('host')}`
     const invite = await resendInvite(accountId, inviteId, userId, {
       route: req.originalUrl,
       method: req.method,
       statusCode: 200,
-    }, originFromRequest)
+    }, { requestOrigin })
     res.status(200).json(invite)
   } catch (err) {
     const code = (err as Error & { statusCode?: number }).statusCode

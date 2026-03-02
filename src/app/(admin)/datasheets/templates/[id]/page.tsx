@@ -3,11 +3,12 @@
 import { cookies } from 'next/headers'
 import SecurePage from '@/components/security/SecurePage'
 import { PERMISSIONS } from '@/constants/permissions'
-import { getTemplateDetailsById } from '@/backend/services/templateService'
+import { apiJson } from '@/utils/apiJson.server'
 import { requireAuth } from '@/utils/sessionUtils.server'
 import TemplatePageClient from './TemplatePageClient'
 import { notFound } from 'next/navigation'
 import type { SheetTranslations } from '@/domain/i18n/translationTypes'
+import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
 
 type TemplateParams = Readonly<{
   id: string
@@ -98,7 +99,10 @@ const TemplateDetailPage = async (props: TemplateDetailPageProps) => {
   const initialLang = cookieLang ?? defaultLanguage
   const initialUnitSystem = cookieUnit ?? defaultUnitSystem
 
-  const result = await getTemplateDetailsById(sheetId, defaultLanguage, defaultUnitSystem, accountId)
+  const result = await apiJson<{ datasheet: UnifiedSheet; translations: unknown }>(
+    `/api/backend/templates/${sheetId}?lang=${encodeURIComponent(defaultLanguage)}`,
+    { cache: 'no-store' }
+  ).catch(() => null)
 
   if (result == null) {
     notFound()

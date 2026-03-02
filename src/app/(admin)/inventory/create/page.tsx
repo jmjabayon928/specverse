@@ -1,7 +1,7 @@
 // src/app/(admin)/inventory/create/page.tsx
 
 import { notFound } from "next/navigation";
-import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
+import { apiJson } from "@/utils/apiJson.server";
 import InventoryFormClient from "@/components/inventory/InventoryFormClient";
 import type { InventoryFormValues } from "@/validation/inventorySchema";
 import { requireAuth } from "@/utils/sessionUtils.server";
@@ -11,7 +11,10 @@ export default async function CreateInventoryItemPage() {
   const accountId = session.accountId;
   if (accountId == null) return notFound();
 
-  const referenceData = await fetchReferenceOptions(accountId);
+  const referenceData = await apiJson<{ categories: Array<{ id: number; name: string }>; suppliers: Array<{ id: number; name: string }>; manufacturers: Array<{ id: number; name: string }> }>(
+    '/api/backend/inventory/reference-options',
+    { cache: 'no-store' }
+  );
 
   const initialValues: InventoryFormValues = {
     itemCode: "",

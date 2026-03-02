@@ -6,10 +6,10 @@ import { notFound } from 'next/navigation'
 import SecurePage from '@/components/security/SecurePage'
 import { PERMISSIONS } from '@/constants/permissions'
 import TemplateClonerForm from './TemplateClonerForm'
-import { fetchReferenceOptions } from '@/backend/database/ReferenceQueries'
-import { getTemplateDetailsById } from '@/backend/services/templateService'
+import { apiJson } from '@/utils/apiJson.server'
 import { mapToUnifiedSheet } from '@/utils/templateViewMapper'
 import { requireAuth } from '@/utils/sessionUtils.server'
+import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
 
 type TemplateClonePageParams = Readonly<{
   id: string
@@ -43,8 +43,14 @@ const TemplateClonePage = async (props: TemplateClonePageProps) => {
 
   const [sessionCookies, referenceData, templateData] = await Promise.all([
     cookies(),
-    fetchReferenceOptions(accountId),
-    getTemplateDetailsById(templateId, 'eng', 'SI', accountId),
+    apiJson<{ areas: Array<{ id: number; name: string }>; manufacturers: Array<{ id: number; name: string }>; suppliers: Array<{ id: number; name: string }>; categories: Array<{ id: number; name: string }>; clients: Array<{ id: number; name: string }>; projects: Array<{ id: number; name: string }> }>(
+      '/api/backend/templates/reference-options',
+      { cache: 'no-store' }
+    ),
+    apiJson<{ datasheet: UnifiedSheet; translations: unknown }>(
+      `/api/backend/templates/${templateId}?lang=eng`,
+      { cache: 'no-store' }
+    ),
   ])
 
   if (templateData == null) {
