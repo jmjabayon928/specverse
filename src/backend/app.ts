@@ -86,14 +86,6 @@ const getCorsOrigin = (): string | string[] | boolean | ((origin: string | undef
       .filter(origin => origin.length > 0)
   }
 
-  // Fallback to NEXT_PUBLIC_APP_URL (single origin)
-  if (allowedOrigins.length === 0) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL
-    if (appUrl) {
-      allowedOrigins = [appUrl.trim()]
-    }
-  }
-
   // Non-production: default to localhost origins if no env set
   if (allowedOrigins.length === 0 && !isProduction) {
     allowedOrigins = ['http://localhost:3000', 'http://localhost:3001']

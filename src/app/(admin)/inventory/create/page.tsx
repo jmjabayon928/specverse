@@ -11,23 +11,10 @@ export default async function CreateInventoryItemPage() {
   const accountId = session.accountId;
   if (accountId == null) return notFound();
 
-  const refUrl = '/api/backend/inventory/reference-options'
-  type RefData = { categories?: Array<{ categoryId: number; CategoryName: string }>; suppliers?: Array<{ suppId: number; suppName: string }>; manufacturers?: Array<{ manuId: number; manuName: string }> }
-  const refData = await apiJson<RefData>(refUrl, { cache: 'no-store' });
-  const referenceData = {
-    categories: refData.categories?.map((c: { categoryId: number; CategoryName: string }) => ({
-      id: c.categoryId,
-      name: c.CategoryName,
-    })) ?? [],
-    suppliers: refData.suppliers?.map((s: { suppId: number; suppName: string }) => ({
-      id: s.suppId,
-      name: s.suppName,
-    })) ?? [],
-    manufacturers: refData.manufacturers?.map((m: { manuId: number; manuName: string }) => ({
-      id: m.manuId,
-      name: m.manuName,
-    })) ?? [],
-  };
+  const referenceData = await apiJson<{ categories: Array<{ id: number; name: string }>; suppliers: Array<{ id: number; name: string }>; manufacturers: Array<{ id: number; name: string }> }>(
+    '/api/backend/inventory/reference-options',
+    { cache: 'no-store' }
+  );
 
   const initialValues: InventoryFormValues = {
     itemCode: "",

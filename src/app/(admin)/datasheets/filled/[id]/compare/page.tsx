@@ -33,16 +33,15 @@ export default async function FilledComparePage({
   const offeredPartyIdFinal = Number.isFinite(offeredPartyId) ? offeredPartyId : undefined
 
   const compareUrl = `/api/backend/sheets/${sheetId}/compare${offeredPartyIdFinal != null ? `?offeredPartyId=${offeredPartyIdFinal}` : ''}`
-  const valueSetsUrl = `/api/backend/sheets/${sheetId}/valuesets`
-  type ValueSetsResponse = Array<{ ValueSetID: number; SheetID: number; ContextID: number; Code: string; PartyID: number | null; Status: string }>
-  const [compareData, valueSets] = await Promise.all([
-    apiJson<CompareResponse>(compareUrl, { cache: 'no-store' }, {
-      assert: (v): v is CompareResponse => typeof v === 'object' && v != null && Array.isArray((v as { subsheets?: unknown }).subsheets)
-    }),
-    apiJson<ValueSetsResponse>(valueSetsUrl, { cache: 'no-store' }),
+  const [compareData, valueSetsResponse] = await Promise.all([
+    apiJson<CompareResponse>(compareUrl, { cache: 'no-store' }),
+    apiJson<{ items: Array<{ ValueSetID: number; SheetID: number; ContextID: number; Code: string; PartyID: number | null; Status: string }> }>(
+      `/api/backend/sheets/${sheetId}/valuesets`,
+      { cache: 'no-store' }
+    ),
   ])
 
-  const valueSetsList: ValueSetListItem[] = valueSets.map((vs: { ValueSetID: number; SheetID: number; ContextID: number; Code: string; PartyID: number | null; Status: string }) => ({
+  const valueSetsList: ValueSetListItem[] = (valueSetsResponse.items || []).map((vs) => ({
     ValueSetID: vs.ValueSetID,
     SheetID: vs.SheetID,
     ContextID: vs.ContextID,

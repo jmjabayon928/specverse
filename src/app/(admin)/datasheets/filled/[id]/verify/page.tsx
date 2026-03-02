@@ -32,10 +32,11 @@ export default async function FilledVerifyPage({ params }: Readonly<PageProps>) 
   const accountId = sessionUser.accountId;
   if (accountId == null) return notFound();
 
-  const url = `/api/backend/filledsheets/${sheetId}?lang=eng&uom=SI`
-  const rawData = await apiJson<{ datasheet: UnifiedSheet; translations?: SheetTranslations | null }>(url, { cache: 'no-store' }, {
-    assert: (v): v is { datasheet: UnifiedSheet; translations?: SheetTranslations | null } => typeof v === 'object' && v != null && typeof (v as { datasheet?: unknown }).datasheet === 'object' && (v as { datasheet?: unknown }).datasheet != null
-  })
+  const rawData = await apiJson<{ datasheet: UnifiedSheet; translations: SheetTranslations | null }>(
+    `/api/backend/filledsheets/${sheetId}?lang=eng`,
+    { cache: 'no-store' }
+  ).catch(() => null);
+  if (!rawData?.datasheet) return notFound();
 
   return (
     <div className="container max-w-6xl py-6">

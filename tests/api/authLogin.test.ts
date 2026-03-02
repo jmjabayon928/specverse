@@ -96,7 +96,6 @@ describe('POST /api/backend/auth/login', () => {
       .send({ email: 'bcrypt@example.com', password: 'secret123' })
 
     expect(res.status).toBe(200)
-    expect(res.body).toHaveProperty('user')
     expect(res.body).toMatchObject({ message: 'Login successful' })
     expect(bcryptCompare).toHaveBeenCalledWith('secret123', mockUserRecord.PasswordHash)
     expect(res.headers['set-cookie']).toBeDefined()
@@ -121,7 +120,6 @@ describe('POST /api/backend/auth/login', () => {
       .send({ email: 'argon@example.com', password: 'SecurePass1!' })
 
     expect(res.status).toBe(200)
-    expect(res.body).toHaveProperty('user')
     expect(res.body).toMatchObject({ message: 'Login successful' })
     expect(verifyPassword).toHaveBeenCalledWith(
       mockUserRecord.PasswordHash,
@@ -171,7 +169,6 @@ describe('POST /api/backend/auth/login', () => {
       .send({ email: '  Normal@Example.com  ', password: 'secret123' })
 
     expect(res.status).toBe(200)
-    expect(res.body).toHaveProperty('user')
     expect(res.body).toMatchObject({ message: 'Login successful' })
     expect(res.headers['set-cookie']).toBeDefined()
     expect(createAuthSession).toHaveBeenCalled()

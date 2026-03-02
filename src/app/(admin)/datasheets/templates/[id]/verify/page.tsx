@@ -50,10 +50,14 @@ const TemplateVerifyPage = async (props: TemplateVerifyPageProps) => {
   const accountId = sessionUser.accountId
   if (accountId == null) notFound()
 
-  const url = `/api/backend/templates/${templateId}?lang=eng&uom=SI`
-  const rawData = await apiJson<{ datasheet: UnifiedSheet; translations?: unknown }>(url, { cache: 'no-store' }, {
-    assert: (v): v is { datasheet: UnifiedSheet; translations?: unknown } => typeof v === 'object' && v != null && typeof (v as { datasheet?: unknown }).datasheet === 'object' && (v as { datasheet?: unknown }).datasheet != null
-  })
+  const rawData = await apiJson<{ datasheet: UnifiedSheet; translations: unknown }>(
+    `/api/backend/templates/${templateId}?lang=eng`,
+    { cache: 'no-store' }
+  ).catch(() => null)
+
+  if (rawData == null) {
+    notFound()
+  }
 
   return (
     <div className='container max-w-6xl py-6'>

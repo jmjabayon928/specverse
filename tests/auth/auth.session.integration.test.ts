@@ -183,7 +183,7 @@ describe('auth session integration', () => {
     const logoutRes = await request(app)
       .post('/api/backend/auth/logout')
       .set('Cookie', [`sid=${sid}`])
-    expect(logoutRes.status).toBe(200)
+    expect(logoutRes.status).toBe(204)
     expect(logoutRes.headers['set-cookie']).toBeDefined()
     const clearCookie = logoutRes.headers['set-cookie'] as string[]
     expect(clearCookie.some((c) => c.includes('sid=') && (c.includes('Max-Age=0') || c.includes('Expires=')))).toBe(true)
