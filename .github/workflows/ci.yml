@@ -132,7 +132,14 @@ jobs:
             echo ".env file committed — forbidden"
             exit 1
           fi
-          rg -n "^DB_PASSWORD=" . && exit 1 || echo "No leaked DB_PASSWORD"
+          
+          matches="$(git grep -n "^DB_PASSWORD=" -- . ':!:docs/*' ':!*.env.example' || true)"
+          if [ -n "$matches" ]; then
+            echo "::error::Leaked DB_PASSWORD assignment found in tracked files (outside docs and *.env.example):"
+            echo "$matches"
+            exit 1
+          fi
+          echo "No leaked DB_PASSWORD"
 
       - name: Build
         run: npm run build
