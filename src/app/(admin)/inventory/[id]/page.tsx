@@ -1,13 +1,13 @@
 // src/app/(admin)/inventory/[id]/page.tsx
 import { notFound } from "next/navigation";
 import { LayoutDashboard, FileText, Wrench, ClipboardList } from "lucide-react";
-import { getInventoryItemById } from "@/backend/database/inventoryQueries";
-import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
+import { apiJson } from "@/utils/apiJson.server";
 import InventoryDetails from "@/components/inventory/InventoryDetails";
 import InventoryTabLink from "@/components/inventory/InventoryTabLink";
 import InventoryTabContent from "@/components/inventory/InventoryTabContent";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import { PERMISSIONS } from "@/constants/permissions";
+import type { InventoryItemDB } from "@/domain/inventory/inventoryTypes";
 
 interface InventoryPageProps {
   params: Promise<{ id?: string }>;
@@ -25,10 +25,28 @@ export default async function InventoryDetailPage(
   const accountId = session.accountId;
   if (accountId == null) return notFound();
 
-  const item = await getInventoryItemById(itemId);
-  if (!item) return notFound();
+  const itemUrl = `/api/backend/inventory/${itemId}`
+  const refUrl = '/api/backend/inventory/reference-options'
+  type RefData = { categories?: Array<{ categoryId: number; CategoryName: string }>; suppliers?: Array<{ suppId: number; suppName: string }>; manufacturers?: Array<{ manuId: number; manuName: string }> }
+  const [item, refData] = await Promise.all([
+    apiJson<InventoryItemDB>(itemUrl, { cache: 'no-store' }, {
+      assert: (v): v is InventoryItemDB => typeof v === 'object' && v != null && typeof (v as { inventoryId?: unknown }).inventoryId === 'number' && (typeof (v as { itemName?: unknown }).itemName === 'string' || typeof (v as { itemCode?: unknown }).itemCode === 'string')
+    }),
+    apiJson<RefData>(refUrl, { cache: 'no-store' }),
+  ]);
 
-  const { categories, suppliers, manufacturers } = await fetchReferenceOptions(accountId);
+  const categories = refData.categories?.map((c: { categoryId: number; CategoryName: string }) => ({
+    id: c.categoryId,
+    name: c.CategoryName,
+  })) ?? [];
+  const suppliers = refData.suppliers?.map((s: { suppId: number; suppName: string }) => ({
+    id: s.suppId,
+    name: s.suppName,
+  })) ?? [];
+  const manufacturers = refData.manufacturers?.map((m: { manuId: number; manuName: string }) => ({
+    id: m.manuId,
+    name: m.manuName,
+  })) ?? [];
   const resolvedSearchParams = await searchParams;
   const INVENTORY_TABS = ["overview", "transactions", "audit", "maintenance"] as const;
   type InventoryTab = (typeof INVENTORY_TABS)[number];

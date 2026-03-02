@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { PERMISSIONS } from '@/constants/permissions'
 import { requireAuth } from '@/utils/sessionUtils.server'
-import { backendFetch } from '@/utils/backendFetch.server'
+import { apiJson } from '@/utils/apiJson.server'
 import type { MemberRow } from './MembersTable'
 import MembersTable from './MembersTable'
 
@@ -24,22 +24,21 @@ export default async function MembersPage() {
   const membersUrl = '/api/backend/account-members'
   const rolesUrl = '/api/backend/roles'
 
-  const headers = { Cookie: `sid=${sid}` } as const
-  const [membersRes, rolesRes] = await Promise.all([
-    backendFetch(membersUrl, { headers, cache: 'no-store' }),
-    backendFetch(rolesUrl, { headers }),
-  ])
-
   let members: MemberRow[] = []
   let roles: { roleId: number; roleName: string }[] = []
 
-  if (membersRes.ok) {
-    const data: MembersRes = await membersRes.json()
-    members = Array.isArray(data.members) ? data.members : []
+  try {
+    const membersData = await apiJson<MembersRes>(membersUrl, { cache: 'no-store' })
+    members = Array.isArray(membersData.members) ? membersData.members : []
+  } catch {
+    // Silently handle errors to preserve existing behavior
   }
-  if (rolesRes.ok) {
-    const data: RolesRes = await rolesRes.json()
-    roles = Array.isArray(data.roles) ? data.roles : []
+
+  try {
+    const rolesData = await apiJson<RolesRes>(rolesUrl, { cache: 'no-store' })
+    roles = Array.isArray(rolesData.roles) ? rolesData.roles : []
+  } catch {
+    // Silently handle errors to preserve existing behavior
   }
 
   return (

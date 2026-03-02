@@ -2,11 +2,12 @@
 
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
-import { getTemplateDetailsById } from '@/backend/services/templateService'
+import { apiJson } from '@/utils/apiJson.server'
 import { requireAuth } from '@/utils/sessionUtils.server'
 import { canSeeApproveUI } from '@/utils/approveGating'
 import TemplateViewer from '../TemplateViewer'
 import ApproveButton from './ApproveButton'
+import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
 
 export const metadata: Metadata = {
   title: 'Approve Template',
@@ -46,11 +47,10 @@ const TemplateApprovePage = async (props: TemplateApprovePageProps) => {
   const accountId = sessionUser.accountId
   if (accountId == null) notFound()
 
-  const rawData = await getTemplateDetailsById(templateId, 'eng', 'SI', accountId)
-
-  if (rawData == null) {
-    notFound()
-  }
+  const url = `/api/backend/templates/${templateId}?lang=eng&uom=SI`
+  const rawData = await apiJson<{ datasheet: UnifiedSheet; translations?: unknown }>(url, { cache: 'no-store' }, {
+    assert: (v): v is { datasheet: UnifiedSheet; translations?: unknown } => typeof v === 'object' && v != null && typeof (v as { datasheet?: unknown }).datasheet === 'object' && (v as { datasheet?: unknown }).datasheet != null
+  })
 
   return (
     <div className='container max-w-6xl py-6'>

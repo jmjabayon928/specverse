@@ -3,11 +3,12 @@
 import { cookies } from 'next/headers'
 import SecurePage from '@/components/security/SecurePage'
 import { PERMISSIONS } from '@/constants/permissions'
-import { getTemplateDetailsById } from '@/backend/services/templateService'
+import { apiJson } from '@/utils/apiJson.server'
 import { requireAuth } from '@/utils/sessionUtils.server'
 import TemplatePageClient from './TemplatePageClient'
 import { notFound } from 'next/navigation'
 import type { SheetTranslations } from '@/domain/i18n/translationTypes'
+import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
 
 type TemplateParams = Readonly<{
   id: string
@@ -98,13 +99,12 @@ const TemplateDetailPage = async (props: TemplateDetailPageProps) => {
   const initialLang = cookieLang ?? defaultLanguage
   const initialUnitSystem = cookieUnit ?? defaultUnitSystem
 
-  const result = await getTemplateDetailsById(sheetId, defaultLanguage, defaultUnitSystem, accountId)
-
-  if (result == null) {
-    notFound()
-  }
-
-  const { datasheet: template, translations } = result
+  const url = `/api/backend/templates/${sheetId}?lang=${encodeURIComponent(defaultLanguage)}&uom=${encodeURIComponent(defaultUnitSystem)}`
+  const result = await apiJson<{ datasheet: UnifiedSheet; translations?: unknown }>(url, { cache: 'no-store' }, {
+    assert: (v): v is { datasheet: UnifiedSheet; translations?: unknown } => typeof v === 'object' && v != null && typeof (v as { datasheet?: unknown }).datasheet === 'object' && (v as { datasheet?: unknown }).datasheet != null
+  })
+  const template = result.datasheet
+  const translations = result.translations ?? null
   const safeTranslations: SheetTranslations | null = isSheetTranslations(translations)
     ? translations
     : null

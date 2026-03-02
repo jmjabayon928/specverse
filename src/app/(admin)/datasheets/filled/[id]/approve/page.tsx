@@ -1,11 +1,13 @@
 // src/app/(admin)/datasheets/filled/[id]/approve/page.tsx
 import { notFound, redirect } from "next/navigation";
-import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
+import { apiJson } from "@/utils/apiJson.server";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import { canSeeApproveUI } from "@/utils/approveGating";
 import { Metadata } from "next";
 import FilledSheetViewer from "../../FilledSheetViewer";
 import ApproveButton from "./ApproveButton";
+import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
+import type { SheetTranslations } from "@/domain/i18n/translationTypes";
 
 export const metadata: Metadata = {
   title: "Approve Filled Sheet",
@@ -27,8 +29,10 @@ export default async function FilledApprovePage({ params }: Readonly<PageProps>)
   const accountId = sessionUser.accountId;
   if (accountId == null) return notFound();
 
-  const rawData = await getFilledSheetDetailsById(sheetId, "eng", "SI", accountId);
-  if (!rawData?.datasheet) return notFound();
+  const url = `/api/backend/filledsheets/${sheetId}?lang=eng&uom=SI`
+  const rawData = await apiJson<{ datasheet: UnifiedSheet; translations?: SheetTranslations | null }>(url, { cache: 'no-store' }, {
+    assert: (v): v is { datasheet: UnifiedSheet; translations?: SheetTranslations | null } => typeof v === 'object' && v != null && typeof (v as { datasheet?: unknown }).datasheet === 'object' && (v as { datasheet?: unknown }).datasheet != null
+  })
 
   return (
     <div className="container max-w-6xl py-6">
