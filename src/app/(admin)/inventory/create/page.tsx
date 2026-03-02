@@ -1,7 +1,7 @@
 // src/app/(admin)/inventory/create/page.tsx
 
 import { notFound } from "next/navigation";
-import { fetchReferenceOptions } from "@/backend/database/ReferenceQueries";
+import { apiJson } from "@/utils/apiJson.server";
 import InventoryFormClient from "@/components/inventory/InventoryFormClient";
 import type { InventoryFormValues } from "@/validation/inventorySchema";
 import { requireAuth } from "@/utils/sessionUtils.server";
@@ -11,7 +11,23 @@ export default async function CreateInventoryItemPage() {
   const accountId = session.accountId;
   if (accountId == null) return notFound();
 
-  const referenceData = await fetchReferenceOptions(accountId);
+  const refUrl = '/api/backend/inventory/reference-options'
+  type RefData = { categories?: Array<{ categoryId: number; CategoryName: string }>; suppliers?: Array<{ suppId: number; suppName: string }>; manufacturers?: Array<{ manuId: number; manuName: string }> }
+  const refData = await apiJson<RefData>(refUrl, { cache: 'no-store' });
+  const referenceData = {
+    categories: refData.categories?.map((c: { categoryId: number; CategoryName: string }) => ({
+      id: c.categoryId,
+      name: c.CategoryName,
+    })) ?? [],
+    suppliers: refData.suppliers?.map((s: { suppId: number; suppName: string }) => ({
+      id: s.suppId,
+      name: s.suppName,
+    })) ?? [],
+    manufacturers: refData.manufacturers?.map((m: { manuId: number; manuName: string }) => ({
+      id: m.manuId,
+      name: m.manuName,
+    })) ?? [],
+  };
 
   const initialValues: InventoryFormValues = {
     itemCode: "",

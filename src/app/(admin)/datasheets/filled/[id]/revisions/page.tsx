@@ -4,9 +4,10 @@ import { cookies } from 'next/headers'
 import { PERMISSIONS } from '@/constants/permissions'
 import { requireAuth } from '@/utils/sessionUtils.server'
 import SecurePage from '@/components/security/SecurePage'
-import { getFilledSheetDetailsById } from '@/backend/services/filledSheetService'
+import { apiJson } from '@/utils/apiJson.server'
 import type { SheetTranslations } from '@/domain/i18n/translationTypes'
 import RevisionsListClient from './RevisionsListClient'
+import type { UnifiedSheet } from '@/domain/datasheets/sheetTypes'
 
 type PageProps = Readonly<{
   params: Promise<{ id: string }>
@@ -44,7 +45,10 @@ export default async function RevisionsPage({ params }: PageProps) {
   const accountId = session.accountId
   if (accountId == null) return notFound()
 
-  const result = await getFilledSheetDetailsById(sheetId, defaultLanguage, defaultUnitSystem, accountId)
+  const url = `/api/backend/filledsheets/${sheetId}?lang=${encodeURIComponent(defaultLanguage)}&uom=${encodeURIComponent(defaultUnitSystem)}`
+  const result = await apiJson<{ datasheet: UnifiedSheet; translations?: unknown }>(url, { cache: 'no-store' }, {
+    assert: (v): v is { datasheet: UnifiedSheet; translations?: unknown } => typeof v === 'object' && v != null && typeof (v as { datasheet?: unknown }).datasheet === 'object' && (v as { datasheet?: unknown }).datasheet != null
+  })
   const initialTranslations: SheetTranslations | null =
     result && isSheetTranslations(result.translations) ? result.translations : null
 

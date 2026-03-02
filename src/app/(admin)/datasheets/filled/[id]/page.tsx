@@ -2,11 +2,12 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { PERMISSIONS } from "@/constants/permissions";
-import { getFilledSheetDetailsById } from "@/backend/services/filledSheetService";
+import { apiJson } from "@/utils/apiJson.server";
 import FilledSheetPageClient from "./FilledSheetPageClient";
 import { requireAuth } from "@/utils/sessionUtils.server";
 import SecurePage from "@/components/security/SecurePage";
 import type { SheetTranslations } from "@/domain/i18n/translationTypes";
+import type { UnifiedSheet } from "@/domain/datasheets/sheetTypes";
 
 type FilledParams = Readonly<{ id: string }>;
 type SearchParamsRecord = Readonly<Record<string, string | string[] | undefined>>;
@@ -74,10 +75,12 @@ export default async function FilledSheetDetailPage({
   const accountId = session.accountId;
   if (accountId == null) return notFound();
 
-  const result = await getFilledSheetDetailsById(sheetId, defaultLanguage, defaultUnitSystem, accountId);
-  if (!result) notFound();
-
-  const { datasheet: filledSheet, translations } = result;
+  const url = `/api/backend/filledsheets/${sheetId}?lang=${encodeURIComponent(defaultLanguage)}&uom=${encodeURIComponent(defaultUnitSystem)}`
+  const result = await apiJson<{ datasheet: UnifiedSheet; translations?: unknown }>(url, { cache: 'no-store' }, {
+    assert: (v): v is { datasheet: UnifiedSheet; translations?: unknown } => typeof v === 'object' && v != null && typeof (v as { datasheet?: unknown }).datasheet === 'object' && (v as { datasheet?: unknown }).datasheet != null
+  })
+  const filledSheet = result.datasheet
+  const translations = result.translations ?? null
   const initialTranslations: SheetTranslations | null = isSheetTranslations(translations)
     ? translations
     : null;
