@@ -3,9 +3,9 @@ import { notFound } from 'next/navigation'
 import SecurePage from '@/components/security/SecurePage'
 import { PERMISSIONS } from '@/constants/permissions'
 import { requireAuth } from '@/utils/sessionUtils.server'
-import { getCompareData, listValueSets } from '@/backend/services/valueSetService'
+import { apiJson } from '@/utils/apiJson.server'
 import ComparePageClient from './ComparePageClient'
-import type { ValueSetListItem } from '@/domain/datasheets/compareTypes'
+import type { ValueSetListItem, CompareResponse } from '@/domain/datasheets/compareTypes'
 
 type Params = Readonly<{ id: string }>
 type SearchParams = Readonly<Record<string, string | string[] | undefined>>
@@ -32,12 +32,17 @@ export default async function FilledComparePage({
       : undefined
   const offeredPartyIdFinal = Number.isFinite(offeredPartyId) ? offeredPartyId : undefined
 
+  const compareUrl = `/api/backend/sheets/${sheetId}/compare${offeredPartyIdFinal != null ? `?offeredPartyId=${offeredPartyIdFinal}` : ''}`
+  const valueSetsUrl = `/api/backend/sheets/${sheetId}/valuesets`
+  type ValueSetsResponse = Array<{ ValueSetID: number; SheetID: number; ContextID: number; Code: string; PartyID: number | null; Status: string }>
   const [compareData, valueSets] = await Promise.all([
-    getCompareData(sheetId, offeredPartyIdFinal ?? undefined),
-    listValueSets(sheetId),
+    apiJson<CompareResponse>(compareUrl, { cache: 'no-store' }, {
+      assert: (v): v is CompareResponse => typeof v === 'object' && v != null && Array.isArray((v as { subsheets?: unknown }).subsheets)
+    }),
+    apiJson<ValueSetsResponse>(valueSetsUrl, { cache: 'no-store' }),
   ])
 
-  const valueSetsList: ValueSetListItem[] = valueSets.map((vs) => ({
+  const valueSetsList: ValueSetListItem[] = valueSets.map((vs: { ValueSetID: number; SheetID: number; ContextID: number; Code: string; PartyID: number | null; Status: string }) => ({
     ValueSetID: vs.ValueSetID,
     SheetID: vs.SheetID,
     ContextID: vs.ContextID,
