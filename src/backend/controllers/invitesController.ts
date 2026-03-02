@@ -257,11 +257,29 @@ export const byToken: RequestHandler = async (
     return
   }
 
+  const isDevOrStage = process.env.NODE_ENV !== 'production'
+
   try {
     const result = await getByToken(token.trim())
     if (!result) {
+      if (isDevOrStage) {
+        console.info(JSON.stringify({
+          event: 'invite.byToken',
+          tokenPresent: true,
+          found: false,
+          status: null,
+        }))
+      }
       res.status(404).json({ message: 'Invite not found' })
       return
+    }
+    if (isDevOrStage) {
+      console.info(JSON.stringify({
+        event: 'invite.byToken',
+        tokenPresent: true,
+        found: true,
+        status: result.status,
+      }))
     }
     res.status(200).json(result)
   } catch (err) {

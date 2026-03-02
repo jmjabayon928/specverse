@@ -50,6 +50,12 @@ export async function apiJson<T>(path: string, options?: ApiJsonOptions): Promis
   if (!res.ok) {
     const snippet = await safeTextSnippet(res)
     const suffix = reqId ? ` [requestId: ${reqId}]` : ''
+    if (res.status === 401) {
+      throw new Error(`HTTP_401: API error 401 from ${path}${suffix}: ${snippet}`)
+    }
+    if (res.status === 403) {
+      throw new Error(`HTTP_403: API error 403 from ${path}${suffix}: ${snippet}`)
+    }
     throw new Error(`API error ${res.status} from ${path}${suffix}: ${snippet}`)
   }
 
