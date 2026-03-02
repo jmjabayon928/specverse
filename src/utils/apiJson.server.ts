@@ -1,77 +1,87 @@
-// Server-only: uses next/headers via backendFetch; .server.ts suffix prevents client bundling
 import 'server-only'
-import { notFound } from 'next/navigation'
-import { backendFetch } from './backendFetch.server'
 
-export interface ApiJsonOptions<T> {
-  /**
-   * If true, calls notFound() when response status is 404.
-   * Default: true
-   */
-  notFoundOn404?: boolean
-  /**
-   * Type guard to assert payload shape. If provided and fails, throws Error.
-   */
-  assert?: (value: unknown) => value is T
-  /**
-   * Custom error message when assertion fails. Default: `Bad API payload from ${path}`
-   */
-  badPayloadMessage?: string
+import { headers } from 'next/headers'
+import { notFound } from 'next/navigation'
+
+type ApiJsonOptions = {
+  cache?: RequestCache
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
+  headers?: Record<string, string>
+  body?: string
 }
 
 /**
- * Fetches JSON from a backend API endpoint with standardized error handling.
- * 
- * @param path - API endpoint path (e.g., '/api/backend/inventory/123')
- * @param init - RequestInit passed to backendFetch (must include cache: 'no-store')
- * @param opts - Options for error handling and payload validation
- * @returns Parsed JSON response, typed as T
- * @throws Error with endpoint path, status code, response text (first 300 chars), and requestId if present
+ * Server-side API fetch helper for same-origin calls to /api/backend/*.
+ * - Automatically forwards incoming cookies
+ * - Builds absolute URL from request headers
+ * - 404 => notFound()
+ * - Non-JSON / invalid JSON => throws with a snippet for easier debugging
  */
-export async function apiJson<T>(
-  path: string,
-  init: RequestInit,
-  opts: ApiJsonOptions<T> = {}
-): Promise<T> {
-  const { notFoundOn404 = true, assert, badPayloadMessage } = opts
+export async function apiJson<T>(path: string, options?: ApiJsonOptions): Promise<T> {
+  const hdrs = await headers()
 
-  const res = await backendFetch(path, init)
+  const cookieHeader = hdrs.get('cookie') ?? ''
+  const proto = hdrs.get('x-forwarded-proto') ?? 'http'
+  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host') ?? 'localhost:3000'
 
-  if (res.status === 404 && notFoundOn404) {
+  const fullUrl = path.startsWith('http') ? path : `${proto}://${host}${path}`
+
+  const reqId =
+    hdrs.get('x-request-id') ??
+    hdrs.get('request-id') ??
+    null
+
+  const res = await fetch(fullUrl, {
+    method: options?.method ?? 'GET',
+    cache: options?.cache ?? 'no-store',
+    headers: {
+      ...(cookieHeader ? { cookie: cookieHeader } : {}),
+      ...(options?.headers ?? {}),
+      ...(options?.body ? { 'content-type': 'application/json' } : {}),
+    },
+    body: options?.body,
+  })
+
+  if (res.status === 404) {
+    // Standard SSR behavior: surface Next.js 404 page
     notFound()
   }
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    const requestId = res.headers.get('x-request-id') ?? res.headers.get('request-id') ?? null
-    const requestIdPart = requestId ? ` [requestId: ${requestId}]` : ''
-    throw new Error(`API error ${res.status} from ${path}${requestIdPart}: ${text.slice(0, 300)}`)
+    const snippet = await safeTextSnippet(res)
+    const suffix = reqId ? ` [requestId: ${reqId}]` : ''
+    if (res.status === 401) {
+      throw new Error(`HTTP_401: API error 401 from ${path}${suffix}: ${snippet}`)
+    }
+    if (res.status === 403) {
+      throw new Error(`HTTP_403: API error 403 from ${path}${suffix}: ${snippet}`)
+    }
+    throw new Error(`API error ${res.status} from ${path}${suffix}: ${snippet}`)
   }
 
   const contentType = res.headers.get('content-type') ?? ''
   if (!contentType.includes('application/json')) {
-    const text = await res.text().catch(() => '')
-    const requestId = res.headers.get('x-request-id') ?? res.headers.get('request-id') ?? null
-    const requestIdPart = requestId ? ` [requestId: ${requestId}]` : ''
-    const snippet = text.slice(0, 300)
-    throw new Error(`API error ${res.status} from ${path}${requestIdPart}: Non-JSON response: ${snippet}`)
+    const snippet = await safeTextSnippet(res)
+    const suffix = reqId ? ` [requestId: ${reqId}]` : ''
+    throw new Error(`API error 200 from ${path}${suffix}: Non-JSON response: ${snippet}`)
   }
 
-  const resClone = res.clone()
-  let json: unknown
+  const cloned = res.clone()
   try {
-    json = await res.json()
+    const json = (await res.json()) as unknown
+    return json as T
   } catch {
-    const text = await resClone.text().catch(() => '')
-    const requestId = res.headers.get('x-request-id') ?? res.headers.get('request-id') ?? null
-    const requestIdPart = requestId ? ` [requestId: ${requestId}]` : ''
-    const snippet = text.slice(0, 300)
-    throw new Error(`API error ${res.status} from ${path}${requestIdPart}: Invalid JSON: ${snippet}`)
+    const snippet = await safeTextSnippet(cloned)
+    const suffix = reqId ? ` [requestId: ${reqId}]` : ''
+    throw new Error(`API error 200 from ${path}${suffix}: Invalid JSON: ${snippet}`)
   }
+}
 
-  if (assert && !assert(json)) {
-    throw new Error(badPayloadMessage ?? `Bad API payload from ${path}`)
+async function safeTextSnippet(res: Response): Promise<string> {
+  try {
+    const text = await res.text()
+    return text.length > 300 ? `${text.slice(0, 300)}…` : text
+  } catch {
+    return '[unable to read response body]'
   }
-
-  return json as T
 }

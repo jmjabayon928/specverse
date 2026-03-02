@@ -99,12 +99,16 @@ const TemplateDetailPage = async (props: TemplateDetailPageProps) => {
   const initialLang = cookieLang ?? defaultLanguage
   const initialUnitSystem = cookieUnit ?? defaultUnitSystem
 
-  const url = `/api/backend/templates/${sheetId}?lang=${encodeURIComponent(defaultLanguage)}&uom=${encodeURIComponent(defaultUnitSystem)}`
-  const result = await apiJson<{ datasheet: UnifiedSheet; translations?: unknown }>(url, { cache: 'no-store' }, {
-    assert: (v): v is { datasheet: UnifiedSheet; translations?: unknown } => typeof v === 'object' && v != null && typeof (v as { datasheet?: unknown }).datasheet === 'object' && (v as { datasheet?: unknown }).datasheet != null
-  })
-  const template = result.datasheet
-  const translations = result.translations ?? null
+  const result = await apiJson<{ datasheet: UnifiedSheet; translations: unknown }>(
+    `/api/backend/templates/${sheetId}?lang=${encodeURIComponent(defaultLanguage)}`,
+    { cache: 'no-store' }
+  ).catch(() => null)
+
+  if (result == null) {
+    notFound()
+  }
+
+  const { datasheet: template, translations } = result
   const safeTranslations: SheetTranslations | null = isSheetTranslations(translations)
     ? translations
     : null

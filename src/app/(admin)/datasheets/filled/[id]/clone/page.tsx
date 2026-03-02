@@ -26,19 +26,20 @@ export default async function FilledClonePage(
   const accountId = session.accountId;
   if (accountId == null) return notFound();
 
-  const refUrl = '/api/backend/references/references'
-  const filledUrl = `/api/backend/filledsheets/${sheetId}?lang=eng&uom=SI`
-  type RefData = { areas?: Array<{ id: number; name: string }>; manufacturers?: Array<{ id: number; name: string }>; suppliers?: Array<{ id: number; name: string }>; categories?: Array<{ id: number; name: string }>; clients?: Array<{ id: number; name: string }>; projects?: Array<{ id: number; name: string }> }
   const [sessionCookie, referenceData, filledData] = await Promise.all([
     cookies(),
-    apiJson<RefData>(refUrl, { cache: 'no-store' }),
-    apiJson<{ datasheet: UnifiedSheet; translations?: unknown }>(filledUrl, { cache: 'no-store' }, {
-      assert: (v): v is { datasheet: UnifiedSheet; translations?: unknown } => typeof v === 'object' && v != null && typeof (v as { datasheet?: unknown }).datasheet === 'object' && (v as { datasheet?: unknown }).datasheet != null
-    }),
+    apiJson<{ areas: Array<{ id: number; name: string }>; manufacturers: Array<{ id: number; name: string }>; suppliers: Array<{ id: number; name: string }>; categories: Array<{ id: number; name: string }>; clients: Array<{ id: number; name: string }>; projects: Array<{ id: number; name: string }> }>(
+      '/api/backend/filledsheets/reference-options',
+      { cache: 'no-store' }
+    ),
+    apiJson<{ datasheet: UnifiedSheet; translations: unknown }>(
+      `/api/backend/filledsheets/${sheetId}?lang=eng`,
+      { cache: 'no-store' }
+    ),
   ]);
 
   const token = sessionCookie.get("token")?.value;
-  if (!token) return notFound();
+  if (!token || !filledData) return notFound();
 
   // Build default values from existing (same as edit), but we’ll tweak a couple of fields in the cloner form.
   const defaultValues = mapToUnifiedSheet({
@@ -52,27 +53,27 @@ export default async function FilledClonePage(
       <FilledSheetClonerForm
         sourceSheetId={sheetId}
         defaultValues={defaultValues}
-        areas={referenceData.areas?.map((a: { id: number; name: string }) => ({ label: a.name, value: a.id })) ?? []}
-        manufacturers={referenceData.manufacturers?.map((m: { id: number; name: string }) => ({
+        areas={referenceData.areas.map((a) => ({ label: a.name, value: a.id }))}
+        manufacturers={referenceData.manufacturers.map((m) => ({
           label: m.name,
           value: m.id,
-        })) ?? []}
-        suppliers={referenceData.suppliers?.map((s: { id: number; name: string }) => ({
+        }))}
+        suppliers={referenceData.suppliers.map((s) => ({
           label: s.name,
           value: s.id,
-        })) ?? []}
-        categories={referenceData.categories?.map((c: { id: number; name: string }) => ({
+        }))}
+        categories={referenceData.categories.map((c) => ({
           label: c.name,
           value: c.id,
-        })) ?? []}
-        clients={referenceData.clients?.map((c: { id: number; name: string }) => ({
+        }))}
+        clients={referenceData.clients.map((c) => ({
           label: c.name,
           value: c.id,
-        })) ?? []}
-        projects={referenceData.projects?.map((p: { id: number; name: string }) => ({
+        }))}
+        projects={referenceData.projects.map((p) => ({
           label: p.name,
           value: p.id,
-        })) ?? []}
+        }))}
       />
     </SecurePage>
   );

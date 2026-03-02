@@ -1,16 +1,9 @@
 // src/backend/services/authService.ts
 import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
 import { verifyPassword } from './passwordHasher'
 import { poolPromise, sql } from '../config/db'
 import { getAccountContextForUser } from '../database/accountContextQueries'
 import type { JwtPayload as CustomJwtPayload } from '../../domain/auth/JwtTypes'
-
-const JWT_SECRET = process.env.JWT_SECRET
-
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET is not defined in environment variables')
-}
 
 interface DbUser {
   UserID: number
@@ -23,8 +16,7 @@ interface DbUser {
   RoleName: string
 }
 
-export interface AuthTokenResult {
-  token: string
+export interface AuthLoginResult {
   payload: CustomJwtPayload
 }
 
@@ -82,17 +74,11 @@ const buildTokenPayload = async (user: DbUser): Promise<CustomJwtPayload> => {
   }
 }
 
-const signToken = (payload: CustomJwtPayload): string => {
-  return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: '60m',
-  })
-}
-
-// Returns null if email/password is invalid, otherwise token + payload.
+// Returns null if email/password is invalid, otherwise payload.
 export const loginWithEmailAndPassword = async (
   email: string,
   password: string,
-): Promise<AuthTokenResult | null> => {
+): Promise<AuthLoginResult | null> => {
   const normalizedEmail = (email ?? '').trim().toLowerCase()
   if (!normalizedEmail) return null
   const user = await findUserByEmail(normalizedEmail)
@@ -117,7 +103,6 @@ export const loginWithEmailAndPassword = async (
   }
 
   const payload = await buildTokenPayload(user)
-  const token = signToken(payload)
 
-  return { token, payload }
+  return { payload }
 }

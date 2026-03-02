@@ -63,7 +63,7 @@ export default function InviteAcceptClient() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const fetchByToken = useCallback(async (t: string): Promise<ByTokenData | null> => {
-    const res = await fetch(`/api/backend/invites/validate?token=${encodeURIComponent(t)}`, {
+    const res = await fetch(`/api/backend/invites/by-token?token=${encodeURIComponent(t)}`, {
       credentials: 'include',
     })
     if (!res.ok) return null

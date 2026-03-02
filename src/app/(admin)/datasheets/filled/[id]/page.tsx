@@ -75,12 +75,13 @@ export default async function FilledSheetDetailPage({
   const accountId = session.accountId;
   if (accountId == null) return notFound();
 
-  const url = `/api/backend/filledsheets/${sheetId}?lang=${encodeURIComponent(defaultLanguage)}&uom=${encodeURIComponent(defaultUnitSystem)}`
-  const result = await apiJson<{ datasheet: UnifiedSheet; translations?: unknown }>(url, { cache: 'no-store' }, {
-    assert: (v): v is { datasheet: UnifiedSheet; translations?: unknown } => typeof v === 'object' && v != null && typeof (v as { datasheet?: unknown }).datasheet === 'object' && (v as { datasheet?: unknown }).datasheet != null
-  })
-  const filledSheet = result.datasheet
-  const translations = result.translations ?? null
+  const result = await apiJson<{ datasheet: UnifiedSheet; translations: unknown }>(
+    `/api/backend/filledsheets/${sheetId}?lang=${encodeURIComponent(defaultLanguage)}`,
+    { cache: 'no-store' }
+  ).catch(() => null);
+  if (!result) notFound();
+
+  const { datasheet: filledSheet, translations } = result;
   const initialTranslations: SheetTranslations | null = isSheetTranslations(translations)
     ? translations
     : null;

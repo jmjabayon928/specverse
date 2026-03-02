@@ -7,7 +7,7 @@
 
 ## Backend required env (names only)
 
-`NODE_ENV`, `SPECVERSE_ENV`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`. Next/server proxy: `BACKEND_INTERNAL_ORIGIN`. See `.env.example` and sections below for meaning.
+`NODE_ENV`, `SPECVERSE_ENV`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`. Next/server proxy (local dev): `BACKEND_ORIGIN`. Invite links: `INVITE_BASE_URL` (optional; falls back to request origin). See `.env.example` and sections below for meaning.
 
 ## Optional env
 
@@ -24,6 +24,7 @@ Backend (Express) expects the following environment variables at runtime:
 - **`JWT_EXPIRES_IN`**: JWT lifetime (e.g. `60m`). Controls how long issued tokens are valid.
 - **Database connection env**: the backend reads its database connection settings from environment variables (host, port, user, password, database name). These values are deployment-specific and must be provided by your process manager or hosting platform. See `.env.example` for placeholder names; do not commit real credentials.
 - **`BACKEND_TRUST_PROXY`** (optional override): when set to `1`/`true`, forces Express to trust the upstream proxy even if `SPECVERSE_ENV` is not `staging`/`production`. In staging/production, trust is enabled automatically based on `NODE_ENV`/`SPECVERSE_ENV`.
+- **`INVITE_BASE_URL`** (optional): base URL used to construct invite accept links. If not set, the backend falls back to the request origin (requires trusted proxy). Set this in staging/production to ensure invite links use the correct public origin (e.g., `https://app.example.com`).
 
 Backend must run with these values injected by the runtime (e.g. PM2 `--env`, systemd unit `Environment=`, Render/Heroku config vars). `.env.local` or `.env` files should not be committed.
 
@@ -31,10 +32,10 @@ Backend must run with these values injected by the runtime (e.g. PM2 `--env`, sy
 
 The Next.js app server needs to know how to reach the backend internally:
 
-- **`BACKEND_INTERNAL_ORIGIN`** (server-only)
-  - **Local development**: `http://localhost:4000`
-  - **Staging/production**: an internal-only URL such as `http://127.0.0.1:4000` or whatever port your Express backend listens on inside the container/VM.
-  - This value is used by `src/app/api/backend/[...path]/route.ts` to proxy `/api/backend/*` calls to the Express backend.
+- **`BACKEND_ORIGIN`** (server-only, used by Next.js rewrites in local dev)
+  - **Local development**: `http://localhost:4000` (defaults to `http://127.0.0.1:4000` if not set)
+  - **Staging/production**: Not used (nginx handles proxying; set `USE_NGINX_PROXY=true` to disable rewrites)
+  - This value is used by Next.js rewrites in `next.config.ts` to proxy `/api/backend/*` calls to the Express backend during local development.
   - It must **not** be exposed directly to the browser (no `NEXT_PUBLIC_` prefix).
 
 Other Next.js runtime envs (feature flags, analytics, etc.) should be managed the same way: set at runtime, never committed with real values, and only prefixed with `NEXT_PUBLIC_` when they are intentionally safe for the browser.
@@ -63,7 +64,7 @@ The Express app is configured to **trust the proxy** in production/staging so th
 
 ### Local development
 
-In local dev, the Next.js route handler at `src/app/api/backend/[...path]/route.ts` proxies browser requests under `/api/backend/*` to the backend defined by `BACKEND_INTERNAL_ORIGIN`. No extra nginx configuration is required; both the app and backend can run on localhost.
+In local dev, Next.js rewrites (configured in `next.config.ts`) proxy requests under `/api/backend/*` to the Express backend using `BACKEND_ORIGIN` (defaults to `http://127.0.0.1:4000`). No extra nginx configuration is required; both the app and backend can run on localhost. The rewrites are automatically disabled when `USE_NGINX_PROXY=true` is set (for staging/production deployments).
 
 ## Verification checklist
 

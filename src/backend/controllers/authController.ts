@@ -11,10 +11,19 @@ import { createAuthSession, hashSid } from '../repositories/authSessionsReposito
 export const loginHandler = async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body
 
+  const isDevOrStage = process.env.NODE_ENV !== 'production'
+
   try {
     const result = await loginWithEmailAndPassword(email, password)
 
     if (!result) {
+      if (isDevOrStage) {
+        console.info(JSON.stringify({
+          event: 'auth.login',
+          success: false,
+          reason: 'Invalid email or password',
+        }))
+      }
       res.status(401).json({ message: 'Invalid email or password' })
       return
     }
@@ -34,12 +43,16 @@ export const loginHandler = async (req: Request, res: Response): Promise<void> =
 
     setSidCookie(res, sid, req.secure)
 
-    res.status(200).json({
-      user: result.payload,
-      message: 'Login successful',
-    })
+    if (isDevOrStage) {
+      console.info(JSON.stringify({
+        event: 'auth.login',
+        success: true,
+        userId,
+      }))
+    }
+
+    res.status(200).json({ message: 'Login successful' })
   } catch (error) {
-    console.error('❌ Login error:', error)
     const isProduction = process.env.NODE_ENV === 'production'
     if (isProduction) {
       res.status(500).json({ message: 'Internal server error' })
@@ -87,6 +100,9 @@ export async function setAuthCookieForUser(
 
 // POST /logout
 export const logoutHandler = async (req: Request, res: Response): Promise<void> => {
+  const isDevOrStage = process.env.NODE_ENV !== 'production'
+  const userId = req.user?.userId
+
   const sid = req.cookies?.sid
   if (sid) {
     const { revokeSession } = await import('../services/authSessionsService')
@@ -97,14 +113,39 @@ export const logoutHandler = async (req: Request, res: Response): Promise<void> 
 
   clearSidCookie(res, req.secure)
 
-  res.status(200).json({ message: 'Logout successful' })
+  if (isDevOrStage && userId) {
+    console.info(JSON.stringify({
+      event: 'auth.logout',
+      userId,
+    }))
+  }
+
+  res.status(204).send()
 }
 
 // GET /session (verifyToken already ran)
 export const getSession = async (req: Request, res: Response): Promise<void> => {
+  const isDevOrStage = process.env.NODE_ENV !== 'production'
+  const cookiePresent = Boolean(req.cookies?.sid)
+
   if (!req.user) {
+    if (isDevOrStage) {
+      console.info(JSON.stringify({
+        event: 'auth.session',
+        cookiePresent,
+        sessionFound: false,
+      }))
+    }
     res.status(401).json({ message: 'No session' })
     return
+  }
+
+  if (isDevOrStage) {
+    console.info(JSON.stringify({
+      event: 'auth.session',
+      cookiePresent,
+      sessionFound: true,
+    }))
   }
 
   const user = req.user as CustomJwtPayload

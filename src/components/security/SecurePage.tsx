@@ -2,7 +2,6 @@
 
 import type React from 'react'
 import { useEffect } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
 
 interface SecurePageProps {
@@ -17,8 +16,6 @@ export default function SecurePage({
   children,
 }: SecurePageProps) {
   const { user, loading } = useSession()
-  const router = useRouter()
-  const pathname = usePathname()
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -26,31 +23,44 @@ export default function SecurePage({
     }
   }, [])
 
-  useEffect(() => {
-    if (loading) return
-    // Server-side requireAuth() handles auth redirects - do not redirect here
-    // If user is null, render nothing and let server gating handle it
-    if (user == null) return
+  if (loading) {
+    return (
+      <div aria-busy="true" className="py-8">
+        <div className="text-sm text-gray-500">Loading…</div>
+      </div>
+    )
+  }
 
-    if (requiredRole != null && requiredRole !== '') {
-      const userRoleLower = user.role?.toLowerCase() ?? ''
-      const requiredRoleLower = requiredRole.toLowerCase()
-      if (userRoleLower !== requiredRoleLower) {
-        router.replace('/unauthorized')
-      }
-      return
+  if (user == null) {
+    return (
+      <div className="py-8">
+        <div className="text-sm text-gray-700 dark:text-gray-300">Authentication required.</div>
+      </div>
+    )
+  }
+
+  if (requiredRole != null && requiredRole !== '') {
+    const userRoleLower = user.role?.toLowerCase() ?? ''
+    const requiredRoleLower = requiredRole.toLowerCase()
+    if (userRoleLower !== requiredRoleLower) {
+      return (
+        <div className="py-8">
+          <div className="text-sm text-gray-700 dark:text-gray-300">Unauthorized: role required.</div>
+        </div>
+      )
     }
+  }
 
-    if (requiredPermission != null && requiredPermission !== '') {
-      const hasPermission = user.permissions.includes(requiredPermission)
-      if (!hasPermission && user.role?.toLowerCase() !== 'admin') {
-        router.replace(`/unauthorized?reason=missing_permission&perm=${encodeURIComponent(requiredPermission)}`)
-      }
+  if (requiredPermission != null && requiredPermission !== '') {
+    const hasPermission = user.permissions.includes(requiredPermission)
+    if (!hasPermission && user.role?.toLowerCase() !== 'admin') {
+      return (
+        <div className="py-8">
+          <div className="text-sm text-gray-700 dark:text-gray-300">Unauthorized: insufficient permission.</div>
+        </div>
+      )
     }
-  }, [user, loading, requiredPermission, requiredRole, router, pathname])
-
-  if (loading) return null
-  if (user == null) return null
+  }
 
   return <>{children}</>
 }

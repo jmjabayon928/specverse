@@ -40,8 +40,9 @@ describe('SecurePage gating', () => {
       </SecurePage>
     )
 
-    expect(mockReplace).toHaveBeenCalledWith('/unauthorized?reason=missing_permission&perm=DATASHEET_APPROVE')
-    expect(screen.getByText('Protected content')).toBeInTheDocument()
+    expect(mockReplace).not.toHaveBeenCalled()
+    expect(screen.getByText('Unauthorized: insufficient permission.')).toBeInTheDocument()
+    expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
   })
 
   it('does not redirect when user has required permission', () => {
@@ -67,8 +68,9 @@ describe('SecurePage gating', () => {
       </SecurePage>
     )
 
-    expect(mockReplace).toHaveBeenCalledWith('/unauthorized')
-    expect(screen.getByText('Admin content')).toBeInTheDocument()
+    expect(mockReplace).not.toHaveBeenCalled()
+    expect(screen.getByText('Unauthorized: role required.')).toBeInTheDocument()
+    expect(screen.queryByText('Admin content')).not.toBeInTheDocument()
   })
 
   it('does not redirect when requiredRole matches (case-insensitive)', () => {

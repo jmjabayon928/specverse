@@ -41,16 +41,21 @@ const TemplateClonePage = async (props: TemplateClonePageProps) => {
   const accountId = session.accountId
   if (accountId == null) notFound()
 
-  const refUrl = '/api/backend/references/references'
-  const templateUrl = `/api/backend/templates/${templateId}?lang=eng&uom=SI`
-  type RefData = { areas?: Array<{ id: number; name: string }>; manufacturers?: Array<{ id: number; name: string }>; suppliers?: Array<{ id: number; name: string }>; categories?: Array<{ id: number; name: string }>; clients?: Array<{ id: number; name: string }>; projects?: Array<{ id: number; name: string }> }
   const [sessionCookies, referenceData, templateData] = await Promise.all([
     cookies(),
-    apiJson<RefData>(refUrl, { cache: 'no-store' }),
-    apiJson<{ datasheet: UnifiedSheet; translations?: unknown }>(templateUrl, { cache: 'no-store' }, {
-      assert: (v): v is { datasheet: UnifiedSheet; translations?: unknown } => typeof v === 'object' && v != null && typeof (v as { datasheet?: unknown }).datasheet === 'object' && (v as { datasheet?: unknown }).datasheet != null
-    }),
+    apiJson<{ areas: Array<{ id: number; name: string }>; manufacturers: Array<{ id: number; name: string }>; suppliers: Array<{ id: number; name: string }>; categories: Array<{ id: number; name: string }>; clients: Array<{ id: number; name: string }>; projects: Array<{ id: number; name: string }> }>(
+      '/api/backend/templates/reference-options',
+      { cache: 'no-store' }
+    ),
+    apiJson<{ datasheet: UnifiedSheet; translations: unknown }>(
+      `/api/backend/templates/${templateId}?lang=eng`,
+      { cache: 'no-store' }
+    ),
   ])
+
+  if (templateData == null) {
+    notFound()
+  }
 
   const token = sessionCookies.get('token')?.value ?? ''
   if (token.length === 0) {
@@ -67,27 +72,27 @@ const TemplateClonePage = async (props: TemplateClonePageProps) => {
     <SecurePage requiredPermission={PERMISSIONS.DATASHEET_EDIT}>
       <TemplateClonerForm
         defaultValues={defaultValues}
-        areas={referenceData.areas?.map((area: { id: number; name: string }) => ({ label: area.name, value: area.id })) ?? []}
-        manufacturers={referenceData.manufacturers?.map((manufacturer: { id: number; name: string }) => ({
+        areas={referenceData.areas.map((area) => ({ label: area.name, value: area.id }))}
+        manufacturers={referenceData.manufacturers.map((manufacturer) => ({
           label: manufacturer.name,
           value: manufacturer.id,
-        })) ?? []}
-        suppliers={referenceData.suppliers?.map((supplier: { id: number; name: string }) => ({
+        }))}
+        suppliers={referenceData.suppliers.map((supplier) => ({
           label: supplier.name,
           value: supplier.id,
-        })) ?? []}
-        categories={referenceData.categories?.map((category: { id: number; name: string }) => ({
+        }))}
+        categories={referenceData.categories.map((category) => ({
           label: category.name,
           value: category.id,
-        })) ?? []}
-        clients={referenceData.clients?.map((client: { id: number; name: string }) => ({
+        }))}
+        clients={referenceData.clients.map((client) => ({
           label: client.name,
           value: client.id,
-        })) ?? []}
-        projects={referenceData.projects?.map((project: { id: number; name: string }) => ({
+        }))}
+        projects={referenceData.projects.map((project) => ({
           label: project.name,
           value: project.id,
-        })) ?? []}
+        }))}
         session={token}
       />
     </SecurePage>
