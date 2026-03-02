@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { PERMISSIONS } from '@/constants/permissions'
 import { requireAuth } from '@/utils/sessionUtils.server'
+import { backendFetch } from '@/utils/backendFetch.server'
 import type { MemberRow } from './MembersTable'
 import MembersTable from './MembersTable'
 
@@ -25,8 +26,8 @@ export default async function MembersPage() {
 
   const headers = { Cookie: `sid=${sid}` } as const
   const [membersRes, rolesRes] = await Promise.all([
-    fetch(membersUrl, { headers, cache: 'no-store' }),
-    fetch(rolesUrl, { headers, next: { revalidate: 60 } }),
+    backendFetch(membersUrl, { headers, cache: 'no-store' }),
+    backendFetch(rolesUrl, { headers }),
   ])
 
   let members: MemberRow[] = []
