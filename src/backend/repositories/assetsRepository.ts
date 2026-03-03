@@ -76,3 +76,121 @@ export async function assetBelongsToAccount(
     )
   return (result.recordset?.length ?? 0) > 0
 }
+
+export interface UpsertAssetInput {
+  accountId: number
+  assetTag: string
+  assetTagNorm: string
+  assetName?: string | null
+  location?: string | null
+  system?: string | null
+  service?: string | null
+  criticality?: string | null
+  disciplineId?: number | null
+  subtypeId?: number | null
+  clientId?: number | null
+  projectId?: number | null
+}
+
+export interface UpsertAssetResult {
+  assetId: number
+  action: 'created' | 'updated'
+}
+
+export async function upsertAsset(
+  input: UpsertAssetInput,
+  transaction?: sql.Transaction
+): Promise<UpsertAssetResult> {
+  const request = transaction ? transaction.request() : (await poolPromise).request()
+  
+  // Check if exists using AssetTagNorm (idempotency constraint)
+  const existing = await request
+    .input('AccountID', sql.Int, input.accountId)
+    .input('AssetTagNorm', sql.NVarChar(255), input.assetTagNorm)
+    .query<{ AssetID: number }>(`
+      SELECT AssetID FROM dbo.Assets WITH (UPDLOCK, HOLDLOCK)
+      WHERE AccountID = @AccountID AND AssetTagNorm = @AssetTagNorm
+    `)
+
+  if (existing.recordset.length > 0) {
+    // Update existing
+    const assetId = existing.recordset[0].AssetID
+    const updateRequest = transaction ? transaction.request() : (await poolPromise).request()
+    await updateRequest
+      .input('AssetID', sql.Int, assetId)
+      .input('AssetTag', sql.NVarChar(255), input.assetTag)
+      .input('AssetName', sql.NVarChar(255), input.assetName ?? null)
+      .input('Location', sql.NVarChar(255), input.location ?? null)
+      .input('System', sql.NVarChar(255), input.system ?? null)
+      .input('Service', sql.NVarChar(255), input.service ?? null)
+      .input('Criticality', sql.NVarChar(50), input.criticality ?? null)
+      .input('DisciplineID', sql.Int, input.disciplineId ?? null)
+      .input('SubtypeID', sql.Int, input.subtypeId ?? null)
+      .input('ClientID', sql.Int, input.clientId ?? null)
+      .input('ProjectID', sql.Int, input.projectId ?? null)
+      .query(`
+        UPDATE dbo.Assets
+        SET AssetTag = @AssetTag,
+            AssetName = @AssetName,
+            Location = @Location,
+            System = @System,
+            Service = @Service,
+            Criticality = @Criticality,
+            DisciplineID = @DisciplineID,
+            SubtypeID = @SubtypeID,
+            ClientID = @ClientID,
+            ProjectID = @ProjectID
+        WHERE AssetID = @AssetID
+      `)
+    return { assetId, action: 'updated' }
+  } else {
+    // Insert new
+    const insertRequest = transaction ? transaction.request() : (await poolPromise).request()
+    const result = await insertRequest
+      .input('AccountID', sql.Int, input.accountId)
+      .input('AssetTag', sql.NVarChar(255), input.assetTag)
+      .input('AssetTagNorm', sql.NVarChar(255), input.assetTagNorm)
+      .input('AssetName', sql.NVarChar(255), input.assetName ?? null)
+      .input('Location', sql.NVarChar(255), input.location ?? null)
+      .input('System', sql.NVarChar(255), input.system ?? null)
+      .input('Service', sql.NVarChar(255), input.service ?? null)
+      .input('Criticality', sql.NVarChar(50), input.criticality ?? null)
+      .input('DisciplineID', sql.Int, input.disciplineId ?? null)
+      .input('SubtypeID', sql.Int, input.subtypeId ?? null)
+      .input('ClientID', sql.Int, input.clientId ?? null)
+      .input('ProjectID', sql.Int, input.projectId ?? null)
+      .query<{ AssetID: number }>(`
+        INSERT INTO dbo.Assets (AccountID, AssetTag, AssetTagNorm, AssetName, Location, System, Service, Criticality, DisciplineID, SubtypeID, ClientID, ProjectID)
+        OUTPUT INSERTED.AssetID
+        VALUES (@AccountID, @AssetTag, @AssetTagNorm, @AssetName, @Location, @System, @Service, @Criticality, @DisciplineID, @SubtypeID, @ClientID, @ProjectID)
+      `)
+    const assetId = result.recordset[0].AssetID
+    return { assetId, action: 'created' }
+  }
+}
+
+export async function getAssetsByTagNorms(
+  accountId: number,
+  tagNorms: string[]
+): Promise<Map<string, number>> {
+  if (tagNorms.length === 0) return new Map()
+  const pool = await poolPromise
+  // Build IN clause safely (limit to 1000 items for safety)
+  const limitedNorms = tagNorms.slice(0, 1000)
+  const placeholders = limitedNorms.map((_, i) => `@TagNorm${i}`).join(',')
+  const request = pool.request().input('AccountID', sql.Int, accountId)
+  limitedNorms.forEach((norm, i) => {
+    request.input(`TagNorm${i}`, sql.NVarChar(255), norm)
+  })
+  const result = await request.query<{ AssetTagNorm: string; AssetID: number }>(`
+    SELECT AssetTagNorm, AssetID
+    FROM dbo.Assets
+    WHERE AccountID = @AccountID
+      AND AssetTagNorm IN (${placeholders})
+  `)
+  const map = new Map<string, number>()
+  for (const row of result.recordset) {
+    map.set(row.AssetTagNorm, row.AssetID)
+  }
+  return map
+}
