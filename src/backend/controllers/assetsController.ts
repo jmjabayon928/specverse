@@ -3,7 +3,7 @@ import type { RequestHandler } from 'express'
 import { z } from 'zod'
 import { AppError } from '../errors/AppError'
 import { mustGetAccountId } from '@/backend/utils/authGuards'
-import { listAssets as serviceListAssets } from '../services/assetsService'
+import { listAssets as serviceListAssets, getAssetById as serviceGetAssetById, getAssetCustomFields as serviceGetAssetCustomFields } from '../services/assetsService'
 
 const querySchema = z.object({
   clientId: z
@@ -29,6 +29,13 @@ const querySchema = z.object({
   q: z.string().optional(),
 })
 
+const paramsSchema = z.object({
+  id: z
+    .string()
+    .transform(s => Number(s))
+    .pipe(z.number().int().positive()),
+})
+
 export const listAssets: RequestHandler = async (req, res, next) => {
   try {
     const accountId = mustGetAccountId(req, next)
@@ -48,6 +55,44 @@ export const listAssets: RequestHandler = async (req, res, next) => {
     }
     const list = await serviceListAssets(accountId, filters)
     res.status(200).json(list)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const getAssetCustomFields: RequestHandler = async (req, res, next) => {
+  try {
+    const accountId = mustGetAccountId(req, next)
+    if (accountId == null) return
+
+    const parsedParams = paramsSchema.safeParse(req.params)
+    if (!parsedParams.success) {
+      throw new AppError('Invalid asset id', 400)
+    }
+
+    const fields = await serviceGetAssetCustomFields(accountId, parsedParams.data.id)
+    res.status(200).json(fields)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const getAssetById: RequestHandler = async (req, res, next) => {
+  try {
+    const accountId = mustGetAccountId(req, next)
+    if (accountId == null) return
+
+    const parsedParams = paramsSchema.safeParse(req.params)
+    if (!parsedParams.success) {
+      throw new AppError('Invalid asset id', 400)
+    }
+
+    const asset = await serviceGetAssetById(accountId, parsedParams.data.id)
+    if (asset == null) {
+      throw new AppError('Asset not found', 404)
+    }
+
+    res.status(200).json(asset)
   } catch (error) {
     next(error)
   }

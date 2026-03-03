@@ -10,6 +10,69 @@ export type AssetsListFilters = {
   q?: string
 }
 
+export type AssetDetail = {
+  assetId: number
+  assetTag: string
+  assetName: string | null
+  location: string | null
+  system: string | null
+  service: string | null
+  criticality: string | null
+  disciplineId: number | null
+  subtypeId: number | null
+  clientId: number | null
+  projectId: number | null
+}
+
+export type AssetCustomFieldValue = {
+  customFieldId: number
+  fieldKey: string
+  displayLabel: string
+  dataType: string
+  sortOrder: number
+  valueString: string | null
+  valueNumber: number | null
+  valueBool: boolean | null
+  valueDate: Date | null
+  valueJson: string | null
+}
+
+export async function getAssetCustomFields(
+  accountId: number,
+  assetId: number
+): Promise<AssetCustomFieldValue[]> {
+  const pool = await poolPromise
+
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('AssetID', sql.Int, assetId)
+    .query<AssetCustomFieldValue>(`
+      SELECT
+        d.CustomFieldID AS customFieldId,
+        d.FieldKey AS fieldKey,
+        d.DisplayLabel AS displayLabel,
+        d.DataType AS dataType,
+        d.SortOrder AS sortOrder,
+        v.ValueString AS valueString,
+        v.ValueNumber AS valueNumber,
+        v.ValueBool AS valueBool,
+        v.ValueDate AS valueDate,
+        v.ValueJson AS valueJson
+      FROM dbo.CustomFieldDefinitions d
+      LEFT JOIN dbo.CustomFieldValues v
+        ON v.AccountID = d.AccountID
+        AND v.EntityType = 'asset'
+        AND v.EntityID = @AssetID
+        AND v.CustomFieldID = d.CustomFieldID
+      WHERE d.AccountID = @AccountID
+        AND d.EntityType = 'asset'
+      ORDER BY d.SortOrder
+    `)
+
+  return result.recordset ?? []
+}
+
 export async function listAssets(
   accountId: number,
   filters: AssetsListFilters
@@ -60,6 +123,36 @@ export async function listAssets(
 
   const result = await request.query(query)
   return (result.recordset ?? []) as AssetListItem[]
+}
+
+export async function getAssetById(
+  accountId: number,
+  assetId: number
+): Promise<AssetDetail | null> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('AssetID', sql.Int, assetId)
+    .query<AssetDetail>(`
+      SELECT TOP 1
+        a.AssetID AS assetId,
+        a.AssetTag AS assetTag,
+        a.AssetName AS assetName,
+        a.Location AS location,
+        a.System AS system,
+        a.Service AS service,
+        a.Criticality AS criticality,
+        a.DisciplineID AS disciplineId,
+        a.SubtypeID AS subtypeId,
+        a.ClientID AS clientId,
+        a.ProjectID AS projectId
+      FROM dbo.Assets a
+      WHERE a.AccountID = @AccountID
+        AND a.AssetID = @AssetID
+    `)
+
+  return result.recordset?.[0] ?? null
 }
 
 export async function assetBelongsToAccount(
