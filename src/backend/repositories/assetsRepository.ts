@@ -7,6 +7,10 @@ export type AssetsListFilters = {
   projectId?: number
   disciplineId?: number
   subtypeId?: number
+  location?: string
+  system?: string
+  service?: string
+  criticality?: string
   q?: string
 }
 
@@ -90,8 +94,62 @@ export async function listAssets(
       a.DisciplineID AS disciplineId,
       a.SubtypeID AS subtypeId,
       a.ClientID AS clientId,
-      a.ProjectID AS projectId
+      a.ProjectID AS projectId,
+      CASE
+        WHEN (core.coreTotalRequired + ISNULL(cfr.customTotalRequired, 0)) = 0 THEN 100
+        ELSE FLOOR(
+          100.0 * (core.coreTotalFilled + ISNULL(cf.customFilled, 0))
+          / (core.coreTotalRequired + ISNULL(cfr.customTotalRequired, 0))
+        )
+      END AS completenessScore,
+      (core.coreTotalFilled + ISNULL(cf.customFilled, 0)) AS completenessFilled,
+      (core.coreTotalRequired + ISNULL(cfr.customTotalRequired, 0)) AS completenessRequired
     FROM dbo.Assets a
+    LEFT JOIN (
+      SELECT
+        v.EntityID AS AssetID,
+        COUNT(
+          CASE
+            WHEN v.ValueString IS NOT NULL AND LTRIM(RTRIM(v.ValueString)) <> '' THEN 1
+            WHEN v.ValueNumber IS NOT NULL THEN 1
+            WHEN v.ValueBool IS NOT NULL THEN 1
+            WHEN v.ValueDate IS NOT NULL THEN 1
+            WHEN v.ValueJson IS NOT NULL THEN 1
+            ELSE NULL
+          END
+        ) AS customFilled
+      FROM dbo.CustomFieldDefinitions d
+      LEFT JOIN dbo.CustomFieldValues v
+        ON v.AccountID = d.AccountID
+        AND v.EntityType = d.EntityType
+        AND v.CustomFieldID = d.CustomFieldID
+      WHERE d.AccountID = @AccountID
+        AND d.EntityType = 'asset'
+        AND d.IsRequired = 1
+      GROUP BY v.EntityID
+    ) cf ON cf.AssetID = a.AssetID
+    CROSS APPLY (
+      SELECT
+        (CASE WHEN a.AssetName IS NOT NULL AND LTRIM(RTRIM(a.AssetName)) <> '' THEN 1 ELSE 0 END
+         + CASE WHEN a.Location IS NOT NULL AND LTRIM(RTRIM(a.Location)) <> '' THEN 1 ELSE 0 END
+         + CASE WHEN a.System IS NOT NULL AND LTRIM(RTRIM(a.System)) <> '' THEN 1 ELSE 0 END
+         + CASE WHEN a.Service IS NOT NULL AND LTRIM(RTRIM(a.Service)) <> '' THEN 1 ELSE 0 END
+         + CASE WHEN a.Criticality IS NOT NULL AND LTRIM(RTRIM(a.Criticality)) <> '' THEN 1 ELSE 0 END
+         + CASE WHEN a.DisciplineID IS NOT NULL THEN 1 ELSE 0 END
+         + CASE WHEN a.SubtypeID IS NOT NULL THEN 1 ELSE 0 END
+         + CASE WHEN a.ClientID IS NOT NULL THEN 1 ELSE 0 END
+         + CASE WHEN a.ProjectID IS NOT NULL THEN 1 ELSE 0 END
+        ) AS coreTotalFilled,
+        9 AS coreTotalRequired
+    ) core
+    CROSS JOIN (
+      SELECT
+        COUNT(*) AS customTotalRequired
+      FROM dbo.CustomFieldDefinitions d2
+      WHERE d2.AccountID = @AccountID
+        AND d2.EntityType = 'asset'
+        AND d2.IsRequired = 1
+    ) cfr
     WHERE a.AccountID = @AccountID
   `
   const request = pool.request().input('AccountID', sql.Int, accountId)
@@ -111,6 +169,22 @@ export async function listAssets(
   if (filters.subtypeId != null) {
     query += ' AND a.SubtypeID = @SubtypeID'
     request.input('SubtypeID', sql.Int, filters.subtypeId)
+  }
+  if (filters.location != null) {
+    query += ' AND a.Location = @Location'
+    request.input('Location', sql.NVarChar(400), filters.location)
+  }
+  if (filters.system != null) {
+    query += ' AND a.System = @System'
+    request.input('System', sql.NVarChar(400), filters.system)
+  }
+  if (filters.service != null) {
+    query += ' AND a.Service = @Service'
+    request.input('Service', sql.NVarChar(400), filters.service)
+  }
+  if (filters.criticality != null) {
+    query += ' AND a.Criticality = @Criticality'
+    request.input('Criticality', sql.VarChar(20), filters.criticality)
   }
   if (filters.q != null && filters.q.trim() !== '') {
     query += ' AND (a.AssetTag LIKE @Q OR a.AssetTagNorm LIKE @QNorm OR a.AssetName LIKE @Q)'

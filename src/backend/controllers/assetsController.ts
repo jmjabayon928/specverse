@@ -26,6 +26,38 @@ const querySchema = z.object({
     .optional()
     .transform(s => (s ? Number(s) : undefined))
     .pipe(z.number().int().positive().optional()),
+  location: z
+    .string()
+    .optional()
+    .transform(s => {
+      if (s == null) return undefined
+      const trimmed = s.trim()
+      return trimmed === '' ? undefined : trimmed
+    }),
+  system: z
+    .string()
+    .optional()
+    .transform(s => {
+      if (s == null) return undefined
+      const trimmed = s.trim()
+      return trimmed === '' ? undefined : trimmed
+    }),
+  service: z
+    .string()
+    .optional()
+    .transform(s => {
+      if (s == null) return undefined
+      const trimmed = s.trim()
+      return trimmed === '' ? undefined : trimmed
+    }),
+  criticality: z
+    .string()
+    .optional()
+    .transform(s => {
+      if (s == null) return undefined
+      const trimmed = s.trim()
+      return trimmed === '' ? undefined : trimmed
+    }),
   q: z.string().optional(),
 })
 
@@ -51,6 +83,10 @@ export const listAssets: RequestHandler = async (req, res, next) => {
       projectId: parsed.data.projectId,
       disciplineId: parsed.data.disciplineId,
       subtypeId: parsed.data.subtypeId,
+      location: parsed.data.location,
+      system: parsed.data.system,
+      service: parsed.data.service,
+      criticality: parsed.data.criticality,
       q: parsed.data.q,
     }
     const list = await serviceListAssets(accountId, filters)

@@ -12,6 +12,9 @@ export type AssetListItem = {
   subtypeId: number | null
   clientId: number | null
   projectId: number | null
+  completenessScore: number
+  completenessFilled: number
+  completenessRequired: number
 }
 
 export type ScheduleHeader = {
