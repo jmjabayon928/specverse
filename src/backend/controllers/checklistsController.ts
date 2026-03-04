@@ -1,0 +1,339 @@
+import type { Request, Response, NextFunction, RequestHandler } from 'express'
+import { AppError } from '@/backend/errors/AppError'
+import {
+  createChecklistRun,
+  getChecklistRun,
+  patchChecklistRunEntry,
+  uploadChecklistRunEntryEvidence,
+} from '@/backend/services/checklistsService'
+import type { ChecklistEvidenceFileMeta } from '@/backend/services/checklistsService'
+import type {
+  ChecklistRunEntryPatchInput,
+  ChecklistRunEntryResult,
+  CreateChecklistRunInput,
+} from '@/domain/checklists/checklistTypes'
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  return true
+}
+
+const isNumber = (value: unknown): value is number => {
+  if (typeof value !== 'number') {
+    return false
+  }
+
+  if (!Number.isFinite(value)) {
+    return false
+  }
+
+  return true
+}
+
+const isOptionalNumber = (value: unknown): value is number | undefined => {
+  if (value === undefined || value === null) {
+    return true
+  }
+
+  return isNumber(value)
+}
+
+const isStringOrNull = (value: unknown): value is string | null | undefined => {
+  if (value === undefined) {
+    return true
+  }
+
+  if (value === null) {
+    return true
+  }
+
+  return typeof value === 'string'
+}
+
+const isValidRunEntryResult = (value: unknown): value is ChecklistRunEntryResult => {
+  if (typeof value !== 'string') {
+    return false
+  }
+
+  return value === 'PENDING' || value === 'PASS' || value === 'FAIL' || value === 'NA'
+}
+
+const getAuthContext = (req: Request): { accountId: number; userId: number } => {
+  const maybeUser = (req as Request & { user?: unknown }).user
+
+  if (maybeUser === undefined || maybeUser === null) {
+    throw new AppError('Unauthorized', 401)
+  }
+
+  if (typeof maybeUser !== 'object') {
+    throw new AppError('Unauthorized', 401)
+  }
+
+  const candidate = maybeUser as { accountId?: unknown; userId?: unknown }
+  const { accountId, userId } = candidate
+
+  if (!isNumber(accountId) || !isNumber(userId)) {
+    throw new AppError('Unauthorized', 401)
+  }
+
+  return { accountId, userId }
+}
+
+const getUploadedFile = (req: Request): Express.Multer.File | undefined => {
+  const maybeFile = (req as Request & { file?: unknown }).file
+
+  if (maybeFile === undefined || maybeFile === null) {
+    return undefined
+  }
+
+  if (typeof maybeFile !== 'object') {
+    return undefined
+  }
+
+  const file = maybeFile as Partial<Express.Multer.File>
+
+  if (
+    typeof file.originalname !== 'string' ||
+    typeof file.filename !== 'string' ||
+    typeof file.mimetype !== 'string' ||
+    typeof file.size !== 'number' ||
+    typeof file.path !== 'string'
+  ) {
+    return undefined
+  }
+
+  return maybeFile as Express.Multer.File
+}
+
+export const createChecklistRunHandler: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { accountId, userId } = getAuthContext(req)
+
+    const body = req.body as unknown
+
+    if (!isRecord(body)) {
+      throw new AppError('Invalid request body', 400)
+    }
+
+    const {
+      checklistTemplateId,
+      runName,
+      notes,
+      projectId,
+      facilityId,
+      systemId,
+      assetId,
+    } = body
+
+    if (!isNumber(checklistTemplateId)) {
+      throw new AppError('checklistTemplateId must be a number', 400)
+    }
+
+    if (typeof runName !== 'string' || runName.trim().length === 0) {
+      throw new AppError('runName is required', 400)
+    }
+
+    if (!isOptionalNumber(projectId)) {
+      throw new AppError('projectId must be a number', 400)
+    }
+
+    if (!isOptionalNumber(facilityId)) {
+      throw new AppError('facilityId must be a number', 400)
+    }
+
+    if (!isOptionalNumber(systemId)) {
+      throw new AppError('systemId must be a number', 400)
+    }
+
+    if (!isOptionalNumber(assetId)) {
+      throw new AppError('assetId must be a number', 400)
+    }
+
+    const input: CreateChecklistRunInput = {
+      checklistTemplateId,
+      runName: runName.trim(),
+    }
+
+    if (typeof notes === 'string' && notes.trim().length > 0) {
+      input.notes = notes
+    }
+
+    if (isNumber(projectId)) {
+      input.projectId = projectId
+    }
+
+    if (isNumber(facilityId)) {
+      input.facilityId = facilityId
+    }
+
+    if (isNumber(systemId)) {
+      input.systemId = systemId
+    }
+
+    if (isNumber(assetId)) {
+      input.assetId = assetId
+    }
+
+    const result = await createChecklistRun(accountId, userId, input)
+
+    res.status(200).json(result)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const uploadChecklistEvidenceHandler: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { accountId, userId } = getAuthContext(req)
+
+    const { runEntryId } = req.params
+    const runEntryIdNumber = Number(runEntryId)
+
+    if (!Number.isInteger(runEntryIdNumber) || runEntryIdNumber <= 0) {
+      throw new AppError('Invalid runEntryId', 400)
+    }
+
+    const file = getUploadedFile(req)
+
+    if (!file) {
+      throw new AppError('File is required', 400)
+    }
+
+    const meta: ChecklistEvidenceFileMeta = {
+      originalName: file.originalname,
+      storedName: file.filename,
+      contentType: file.mimetype,
+      fileSizeBytes: file.size,
+      storageProvider: 'local',
+      storagePath: file.path,
+      sha256: null,
+    }
+
+    const result = await uploadChecklistRunEntryEvidence(
+      accountId,
+      userId,
+      runEntryIdNumber,
+      meta,
+    )
+
+    res.status(200).json(result)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const getChecklistRunHandler: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { accountId } = getAuthContext(req)
+
+    const { runId } = req.params
+    const runIdNumber = Number(runId)
+
+    if (!Number.isInteger(runIdNumber) || runIdNumber <= 0) {
+      throw new AppError('Invalid runId', 400)
+    }
+
+    const run = await getChecklistRun(accountId, runIdNumber)
+
+    res.status(200).json(run)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const patchChecklistRunEntryHandler: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { accountId, userId } = getAuthContext(req)
+
+    const { runEntryId } = req.params
+    const runEntryIdNumber = Number(runEntryId)
+
+    if (!Number.isInteger(runEntryIdNumber) || runEntryIdNumber <= 0) {
+      throw new AppError('Invalid runEntryId', 400)
+    }
+
+    const body = req.body as unknown
+
+    if (!isRecord(body)) {
+      throw new AppError('Invalid request body', 400)
+    }
+
+    const { result, notes, measuredValue, uom, expectedRowVersionBase64 } = body
+
+    if (typeof expectedRowVersionBase64 !== 'string' || expectedRowVersionBase64.length === 0) {
+      throw new AppError('expectedRowVersionBase64 is required', 400)
+    }
+
+    if (result !== undefined && !isValidRunEntryResult(result)) {
+      throw new AppError('Invalid result value', 400)
+    }
+
+    if (!isStringOrNull(notes)) {
+      throw new AppError('notes must be a string or null', 400)
+    }
+
+    if (!isStringOrNull(measuredValue)) {
+      throw new AppError('measuredValue must be a string or null', 400)
+    }
+
+    if (!isStringOrNull(uom)) {
+      throw new AppError('uom must be a string or null', 400)
+    }
+
+    const input: ChecklistRunEntryPatchInput = {
+      expectedRowVersionBase64,
+    }
+
+    if (result !== undefined) {
+      input.result = result
+    }
+
+    if (body.hasOwnProperty('notes')) {
+      input.notes = notes ?? null
+    }
+
+    if (body.hasOwnProperty('measuredValue')) {
+      input.measuredValue = measuredValue ?? null
+    }
+
+    if (body.hasOwnProperty('uom')) {
+      input.uom = uom ?? null
+    }
+
+    const hasAnyField =
+      input.result !== undefined ||
+      input.notes !== undefined ||
+      input.measuredValue !== undefined ||
+      input.uom !== undefined
+
+    if (!hasAnyField) {
+      throw new AppError('No valid fields to update', 400)
+    }
+
+    await patchChecklistRunEntry(accountId, userId, runEntryIdNumber, input)
+
+    res.status(200).json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+}
+
