@@ -114,7 +114,7 @@ describe('getChecklistRun', () => {
     MockRequest.nextQueryHandlers = []
   })
 
-  it('uses account-scoped queries for run, entries, and attachments', async () => {
+  it('uses account-scoped, paged queries for run, entries, and attachments', async () => {
     const headerHandler = jest.fn<Promise<QueryResult>, [string]>().mockResolvedValue({
       recordset: [
         {
@@ -127,6 +127,7 @@ describe('getChecklistRun', () => {
           SystemID: null,
           AssetID: null,
           Status: 'DRAFT',
+          TotalEntries: 1,
         },
       ],
     })
@@ -141,15 +142,7 @@ describe('getChecklistRun', () => {
           Notes: null,
           MeasuredValue: null,
           Uom: null,
-        },
-      ],
-    })
-
-    const attachmentsHandler = jest.fn<Promise<QueryResult>, [string]>().mockResolvedValue({
-      recordset: [
-        {
-          ChecklistRunEntryID: 200,
-          AttachmentID: 500,
+          RowVersion: Buffer.from('rv'),
         },
       ],
     })
@@ -171,14 +164,13 @@ describe('getChecklistRun', () => {
       ],
     })
 
-    MockRequest.nextQueryHandlers.push(
-      headerHandler,
-      entriesHandler,
-      attachmentsHandler,
-      attachmentsMetaHandler,
-    )
+    MockRequest.nextQueryHandlers.push(headerHandler, entriesHandler, attachmentsMetaHandler)
 
-    const result = await getChecklistRun(accountId, runId)
+    const result = await getChecklistRun(accountId, runId, {
+      page: 2,
+      pageSize: 10,
+      evidenceMode: 'full',
+    })
 
     expect(result).not.toBeNull()
     expect(result?.runId).toBe(runId)
@@ -187,7 +179,7 @@ describe('getChecklistRun', () => {
     expect(firstEntry?.evidenceAttachments[0]?.attachmentId).toBe(500)
     expect(firstEntry?.evidenceAttachments[0]?.uploadedBy?.userId).toBe(7)
 
-    expect(allRequests.length).toBeGreaterThanOrEqual(4)
+    expect(allRequests.length).toBeGreaterThanOrEqual(3)
 
     const allSql = allRequests
       .flatMap(request => request.queries)
@@ -201,12 +193,16 @@ describe('getChecklistRun', () => {
     expect(allSql).toContain('FROM dbo.ChecklistRunEntries')
     expect(allSql).toContain('WHERE AccountID = @AccountID')
     expect(allSql).toContain('AND ChecklistRunID = @ChecklistRunID')
+    expect(allSql).toContain('ORDER BY SortOrder, ChecklistRunEntryID')
+    expect(allSql).toContain('OFFSET @Offset ROWS')
+    expect(allSql).toContain('FETCH NEXT @PageSize ROWS ONLY')
 
     expect(allSql).toContain('FROM dbo.ChecklistRunEntryAttachments')
     expect(allSql).toContain('INNER JOIN dbo.ChecklistRunEntries cre')
     expect(allSql).toContain('cre.AccountID = @AccountID')
     expect(allSql).toContain('INNER JOIN dbo.Attachments a')
     expect(allSql).toContain('a.AccountID = @AccountID')
+    expect(allSql).toContain('IN (@EntryID0')
   })
 })
 

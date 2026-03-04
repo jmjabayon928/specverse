@@ -2,7 +2,7 @@ import request from 'supertest'
 import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import app from '@/backend/app'
 import { getChecklistRun } from '@/backend/services/checklistsService'
-import type { ChecklistRunDTO } from '@/domain/checklists/checklistTypes'
+import type { ChecklistRunDTO, ChecklistRunPagination } from '@/domain/checklists/checklistTypes'
 
 interface AuthenticatedUser {
   accountId?: number
@@ -63,7 +63,7 @@ describe('GET /api/backend/checklists/runs/:runId', () => {
     jest.clearAllMocks()
   })
 
-  it('returns checklist run DTO from service', async () => {
+  it('returns checklist run DTO from service with pagination and evidence shaping options', async () => {
     const runId = 42
 
     const dto: ChecklistRunDTO = {
@@ -106,20 +106,37 @@ describe('GET /api/backend/checklists/runs/:runId', () => {
       ],
     }
 
-    getChecklistRunMock.mockResolvedValueOnce(dto)
+    const pagination: ChecklistRunPagination = {
+      page: 2,
+      pageSize: 10,
+      totalEntries: 100,
+    }
+
+    const responsePayload = {
+      ...dto,
+      pagination,
+    }
+
+    getChecklistRunMock.mockResolvedValueOnce(responsePayload)
 
     const response = await request(app)
       .get(`/api/backend/checklists/runs/${runId}`)
+      .query({ page: '2', pageSize: '10', evidence: 'ids' })
       .expect(200)
 
     expect(getChecklistRunMock).toHaveBeenCalledTimes(1)
-    const [accountIdArg, runIdArg] = getChecklistRunMock.mock
-      .calls[0] as [number, number]
+    const [accountIdArg, runIdArg, optionsArg] = getChecklistRunMock.mock
+      .calls[0] as [number, number, { page: number; pageSize: number; evidenceMode: string }]
 
     expect(accountIdArg).toBe(123)
     expect(runIdArg).toBe(runId)
+    expect(optionsArg).toEqual({
+      page: 2,
+      pageSize: 10,
+      evidenceMode: 'ids',
+    })
 
-    expect(response.body).toEqual(dto)
+    expect(response.body).toEqual(responsePayload)
   })
 })
 

@@ -15,6 +15,8 @@ export interface CreateChecklistRunResult {
 
 export type ChecklistRunEntryResult = 'PENDING' | 'PASS' | 'FAIL' | 'NA'
 
+export type EvidenceMode = 'none' | 'ids' | 'full'
+
 export interface ChecklistRunEntryPatchInput {
   result?: ChecklistRunEntryResult
   notes?: string | null
@@ -49,6 +51,12 @@ export interface ChecklistRunEntryDTO {
   uom: string | null
   evidenceAttachmentIds: number[]
   evidenceAttachments: ChecklistEvidenceAttachmentDTO[]
+}
+
+export interface ChecklistRunPagination {
+  page: number
+  pageSize: number
+  totalEntries: number
 }
 
 export interface ChecklistRunDTO {

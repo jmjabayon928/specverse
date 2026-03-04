@@ -21,6 +21,7 @@ interface FileLike {
   mimetype: string
   size: number
   path: string
+  buffer: Buffer
 }
 
 interface RequestWithFile extends AuthenticatedRequest {
@@ -39,8 +40,18 @@ jest.mock('@/backend/middleware/authMiddleware', () => {
     next: NextFunction,
   ): void => {
     const authReq = req as AuthenticatedRequest
+
+    const headerValue = req.headers['x-test-account-id']
+    let accountId: number | undefined
+    if (typeof headerValue === 'string' && headerValue.trim().length > 0) {
+      const parsed = Number.parseInt(headerValue, 10)
+      if (Number.isFinite(parsed)) {
+        accountId = parsed
+      }
+    }
+
     authReq.user = {
-      accountId: 123,
+      accountId: accountId ?? 123,
       userId: 456,
     }
     next()
@@ -71,18 +82,57 @@ jest.mock('@/backend/utils/attachmentUpload', () => {
     single:
       (_field: string): RequestHandler =>
       (req: Request, _res: Response, next: NextFunction): void => {
-        const headerValue = req.headers['x-test-no-file']
+        const noFileHeader = req.headers['x-test-no-file']
         const shouldAttachFile =
-          typeof headerValue !== 'string' || headerValue.trim().length === 0
+          typeof noFileHeader !== 'string' || noFileHeader.trim().length === 0
 
         if (shouldAttachFile) {
+          const mimetypeHeader = req.headers['x-test-mimetype']
+          const sizeHeader = req.headers['x-test-size']
+          const badSignatureHeader = req.headers['x-test-bad-signature']
+
+          const mimetype =
+            typeof mimetypeHeader === 'string' && mimetypeHeader.trim().length > 0
+              ? mimetypeHeader
+              : 'application/pdf'
+
+          let size = 1234
+          if (typeof sizeHeader === 'string' && sizeHeader.trim().length > 0) {
+            const parsed = Number.parseInt(sizeHeader, 10)
+            if (Number.isFinite(parsed) && parsed > 0) {
+              size = parsed
+            }
+          }
+
+          let buffer: Buffer
+          const forceBadSignature =
+            typeof badSignatureHeader === 'string' && badSignatureHeader.trim().length > 0
+
+          if (forceBadSignature) {
+            buffer = Buffer.from('hello world', 'utf8')
+          } else if (mimetype === 'application/pdf') {
+            buffer = Buffer.from('%PDF-1.4\n', 'ascii')
+          } else if (mimetype === 'image/jpeg') {
+            buffer = Buffer.from([0xff, 0xd8, 0xff, 0xdb])
+          } else if (mimetype === 'image/png') {
+            buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+          } else if (mimetype === 'image/webp') {
+            const arr = Buffer.alloc(12)
+            arr.write('RIFF', 0, 'ascii')
+            arr.write('WEBP', 8, 'ascii')
+            buffer = arr
+          } else {
+            buffer = Buffer.from('plain text', 'utf8')
+          }
+
           const reqWithFile = req as RequestWithFile
           reqWithFile.file = {
             originalname: 'evidence.pdf',
             filename: 'stored-evidence.pdf',
-            mimetype: 'application/pdf',
-            size: 1234,
+            mimetype,
+            size,
             path: '/tmp/stored-evidence.pdf',
+            buffer,
           }
         }
 
@@ -174,6 +224,108 @@ describe('POST /api/backend/checklists/run-entries/:runEntryId/evidence', () => 
 
     consoleErrorSpy.mockRestore()
     consoleWarnSpy.mockRestore()
+  })
+
+  it('returns 415 for unsupported mimetype', async () => {
+    const runEntryId = 321
+
+    const response = await request(app)
+      .post(`/api/backend/checklists/run-entries/${runEntryId}/evidence`)
+      .set('x-test-mimetype', 'text/plain')
+      .expect(415)
+
+    expect(uploadEvidenceMock).not.toHaveBeenCalled()
+    expect(typeof response.body).toBe('object')
+  })
+
+  it('returns 413 when file exceeds size limit', async () => {
+    const previousEnv = process.env.CHECKLIST_EVIDENCE_MAX_BYTES
+    process.env.CHECKLIST_EVIDENCE_MAX_BYTES = '10'
+
+    const runEntryId = 321
+
+    const response = await request(app)
+      .post(`/api/backend/checklists/run-entries/${runEntryId}/evidence`)
+      .set('x-test-size', '20')
+      .expect(413)
+
+    expect(uploadEvidenceMock).not.toHaveBeenCalled()
+    expect(typeof response.body).toBe('object')
+
+    if (previousEnv === undefined) {
+      delete process.env.CHECKLIST_EVIDENCE_MAX_BYTES
+    } else {
+      process.env.CHECKLIST_EVIDENCE_MAX_BYTES = previousEnv
+    }
+  })
+
+  it('returns 429 when exceeding per-account rate limit', async () => {
+    const previousLimit = process.env.CHECKLIST_EVIDENCE_RL_LIMIT
+    const previousWindow = process.env.CHECKLIST_EVIDENCE_RL_WINDOW_SEC
+
+    process.env.CHECKLIST_EVIDENCE_RL_LIMIT = '1'
+    process.env.CHECKLIST_EVIDENCE_RL_WINDOW_SEC = '60'
+
+    const runEntryId = 321
+
+    await request(app)
+      .post(`/api/backend/checklists/run-entries/${runEntryId}/evidence`)
+      .set('Content-Type', 'multipart/form-data')
+      .set('x-test-account-id', '999')
+      .expect(200)
+
+    const secondResponse = await request(app)
+      .post(`/api/backend/checklists/run-entries/${runEntryId}/evidence`)
+      .set('Content-Type', 'multipart/form-data')
+      .set('x-test-account-id', '999')
+      .expect(429)
+
+    expect(uploadEvidenceMock).toHaveBeenCalledTimes(1)
+    expect(typeof secondResponse.body).toBe('object')
+    expect(secondResponse.headers['retry-after']).toBeDefined()
+
+    if (previousLimit === undefined) {
+      delete process.env.CHECKLIST_EVIDENCE_RL_LIMIT
+    } else {
+      process.env.CHECKLIST_EVIDENCE_RL_LIMIT = previousLimit
+    }
+
+    if (previousWindow === undefined) {
+      delete process.env.CHECKLIST_EVIDENCE_RL_WINDOW_SEC
+    } else {
+      process.env.CHECKLIST_EVIDENCE_RL_WINDOW_SEC = previousWindow
+    }
+  })
+
+  it('returns 415 when mimetype is allowed but signature is invalid', async () => {
+    const previousLimit = process.env.CHECKLIST_EVIDENCE_RL_LIMIT
+    const previousWindow = process.env.CHECKLIST_EVIDENCE_RL_WINDOW_SEC
+
+    process.env.CHECKLIST_EVIDENCE_RL_LIMIT = '100'
+    process.env.CHECKLIST_EVIDENCE_RL_WINDOW_SEC = '60'
+
+    const runEntryId = 321
+
+    const response = await request(app)
+      .post(`/api/backend/checklists/run-entries/${runEntryId}/evidence`)
+      .set('x-test-mimetype', 'application/pdf')
+      .set('x-test-bad-signature', '1')
+      .expect(415)
+
+    expect(uploadEvidenceMock).not.toHaveBeenCalled()
+    expect(typeof response.body).toBe('object')
+
+    if (previousLimit === undefined) {
+      delete process.env.CHECKLIST_EVIDENCE_RL_LIMIT
+    } else {
+      process.env.CHECKLIST_EVIDENCE_RL_LIMIT = previousLimit
+    }
+
+    if (previousWindow === undefined) {
+      delete process.env.CHECKLIST_EVIDENCE_RL_WINDOW_SEC
+    } else {
+      process.env.CHECKLIST_EVIDENCE_RL_WINDOW_SEC = previousWindow
+    }
   })
 })
 

@@ -3,7 +3,6 @@ import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import app from '@/backend/app'
 import { patchChecklistRunEntry } from '@/backend/services/checklistsService'
 import type { ChecklistRunEntryPatchInput } from '@/domain/checklists/checklistTypes'
-
 interface AuthenticatedUser {
   accountId?: number
   userId?: number
@@ -59,7 +58,6 @@ jest.mock('@/backend/services/checklistsService', () => ({
 const patchChecklistRunEntryMock = patchChecklistRunEntry as jest.MockedFunction<
   typeof patchChecklistRunEntry
 >
-
 describe('PATCH /api/backend/checklists/run-entries/:runEntryId', () => {
   beforeEach(() => {
     jest.clearAllMocks()

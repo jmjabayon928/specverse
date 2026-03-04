@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import app from '@/backend/app'
 import type { CreateChecklistRunResult } from '@/domain/checklists/checklistTypes'
 import { createChecklistRun } from '@/backend/services/checklistsService'
+import { insertAuditLog } from '@/backend/repositories/checklistsRepository'
 
 interface AuthenticatedUser {
   accountId?: number
@@ -56,9 +57,18 @@ jest.mock('@/backend/services/checklistsService', () => ({
   createChecklistRun: jest.fn(),
 }))
 
+jest.mock('@/backend/repositories/checklistsRepository', () => ({
+  insertAuditLog: jest.fn(),
+}))
+
 const createChecklistRunMock = createChecklistRun as jest.MockedFunction<typeof createChecklistRun>
+const insertAuditLogMock = insertAuditLog as jest.MockedFunction<typeof insertAuditLog>
 
 describe('POST /api/backend/checklists/run', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
   it('creates a checklist run and returns result', async () => {
     const expectedResult: CreateChecklistRunResult = {
       checklistRunId: 42,
@@ -105,6 +115,29 @@ describe('POST /api/backend/checklists/run', () => {
 
     expect(typeof response.body.checklistRunId).toBe('number')
     expect(typeof response.body.entryCount).toBe('number')
+    expect(response.body.checklistRunId).toBe(expectedResult.checklistRunId)
+    expect(response.body.entryCount).toBe(expectedResult.entryCount)
+  })
+
+  it('still succeeds when audit logging fails', async () => {
+    const expectedResult: CreateChecklistRunResult = {
+      checklistRunId: 43,
+      entryCount: 2,
+    }
+
+    createChecklistRunMock.mockResolvedValueOnce(expectedResult)
+    insertAuditLogMock.mockRejectedValueOnce(new Error('db unavailable'))
+
+    const payload = {
+      checklistTemplateId: 11,
+      runName: 'Audit failure tolerant run',
+    }
+
+    const response = await request(app)
+      .post('/api/backend/checklists/run')
+      .send(payload)
+      .expect(200)
+
     expect(response.body.checklistRunId).toBe(expectedResult.checklistRunId)
     expect(response.body.entryCount).toBe(expectedResult.entryCount)
   })

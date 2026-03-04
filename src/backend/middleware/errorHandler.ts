@@ -1,5 +1,6 @@
 // src/backend/middleware/errorHandler.ts
 import type { ErrorRequestHandler } from 'express'
+import { MulterError } from 'multer'
 import { AppError } from '../errors/AppError'
 
 export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
@@ -13,6 +14,11 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
 
   const isAppError = err instanceof AppError
 
+  if (err instanceof MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    statusCode = 413
+    message = 'File too large'
+  }
+
   if (isAppError) {
     if (typeof err.statusCode === 'number') {
       statusCode = err.statusCode
@@ -21,7 +27,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
     if (typeof err.message === 'string') {
       message = err.message
     }
-  } else {
+  } else if (!(err instanceof MulterError)) {
     const candidate = err as { statusCode?: unknown; message?: unknown; type?: string }
 
     if (typeof candidate.statusCode === 'number') {

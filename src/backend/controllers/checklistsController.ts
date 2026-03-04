@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express'
+import { promises as fs } from 'fs'
 import { AppError } from '@/backend/errors/AppError'
 import {
   createChecklistRun,
@@ -6,11 +7,12 @@ import {
   patchChecklistRunEntry,
   uploadChecklistRunEntryEvidence,
 } from '@/backend/services/checklistsService'
-import type { ChecklistEvidenceFileMeta } from '@/backend/services/checklistsService'
+import type { ChecklistEvidenceFileMeta, ChecklistRunQueryOptions } from '@/backend/services/checklistsService'
 import type {
   ChecklistRunEntryPatchInput,
   ChecklistRunEntryResult,
   CreateChecklistRunInput,
+  EvidenceMode,
 } from '@/domain/checklists/checklistTypes'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -106,6 +108,105 @@ const getUploadedFile = (req: Request): Express.Multer.File | undefined => {
   }
 
   return maybeFile as Express.Multer.File
+}
+
+const readFilePrefix = async (file: Express.Multer.File, maxBytes: number): Promise<Buffer> => {
+  const prefixLength = Math.min(12, maxBytes)
+
+  if (Buffer.isBuffer((file as { buffer?: unknown }).buffer)) {
+    const buf = (file as { buffer: Buffer }).buffer
+    return buf.subarray(0, Math.min(buf.length, prefixLength))
+  }
+
+  if (typeof file.path === 'string' && file.path.length > 0) {
+    const handle = await fs.open(file.path, 'r')
+    try {
+      const buf = Buffer.alloc(prefixLength)
+      const { bytesRead } = await handle.read(buf, 0, prefixLength, 0)
+      return buf.subarray(0, bytesRead)
+    } finally {
+      await handle.close()
+    }
+  }
+
+  return Buffer.alloc(0)
+}
+
+const hasPdfSignature = (buf: Buffer): boolean => {
+  if (buf.length < 5) {
+    return false
+  }
+
+  return buf.subarray(0, 5).toString('ascii') === '%PDF-'
+}
+
+const hasJpegSignature = (buf: Buffer): boolean => {
+  if (buf.length < 3) {
+    return false
+  }
+
+  return buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff
+}
+
+const hasPngSignature = (buf: Buffer): boolean => {
+  const expected = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  if (buf.length < expected.length) {
+    return false
+  }
+
+  for (let i = 0; i < expected.length; i += 1) {
+    if (buf[i] !== expected[i]!) {
+      return false
+    }
+  }
+
+  return true
+}
+
+const hasWebpSignature = (buf: Buffer): boolean => {
+  if (buf.length < 12) {
+    return false
+  }
+
+  const riff = buf.subarray(0, 4).toString('ascii')
+  const webp = buf.subarray(8, 12).toString('ascii')
+
+  return riff === 'RIFF' && webp === 'WEBP'
+}
+
+const validateEvidenceFileSignature = async (
+  file: Express.Multer.File,
+  maxBytes: number,
+): Promise<void> => {
+  const prefix = await readFilePrefix(file, maxBytes)
+
+  if (file.mimetype === 'application/pdf') {
+    if (!hasPdfSignature(prefix)) {
+      throw new AppError('Unsupported file type', 415)
+    }
+    return
+  }
+
+  if (file.mimetype === 'image/jpeg') {
+    if (!hasJpegSignature(prefix)) {
+      throw new AppError('Unsupported file type', 415)
+    }
+    return
+  }
+
+  if (file.mimetype === 'image/png') {
+    if (!hasPngSignature(prefix)) {
+      throw new AppError('Unsupported file type', 415)
+    }
+    return
+  }
+
+  if (file.mimetype === 'image/webp') {
+    if (!hasWebpSignature(prefix)) {
+      throw new AppError('Unsupported file type', 415)
+    }
+    return
+  }
 }
 
 export const createChecklistRunHandler: RequestHandler = async (
@@ -210,6 +311,33 @@ export const uploadChecklistEvidenceHandler: RequestHandler = async (
       throw new AppError('File is required', 400)
     }
 
+    const maxBytesEnv = process.env.CHECKLIST_EVIDENCE_MAX_BYTES
+    let maxBytes = 15 * 1024 * 1024
+
+    if (typeof maxBytesEnv === 'string' && maxBytesEnv.trim().length > 0) {
+      const parsed = Number.parseInt(maxBytesEnv, 10)
+      if (Number.isFinite(parsed) && parsed > 0) {
+        maxBytes = parsed
+      }
+    }
+
+    if (file.size > maxBytes) {
+      throw new AppError('File too large', 413)
+    }
+
+    const allowedMimes = new Set<string>([
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'application/pdf',
+    ])
+
+    if (!allowedMimes.has(file.mimetype)) {
+      throw new AppError('Unsupported file type', 415)
+    }
+
+    await validateEvidenceFileSignature(file, maxBytes)
+
     const meta: ChecklistEvidenceFileMeta = {
       originalName: file.originalname,
       storedName: file.filename,
@@ -248,7 +376,30 @@ export const getChecklistRunHandler: RequestHandler = async (
       throw new AppError('Invalid runId', 400)
     }
 
-    const run = await getChecklistRun(accountId, runIdNumber)
+    const pageRaw = typeof req.query.page === 'string' ? req.query.page : undefined
+    const pageParsed = pageRaw !== undefined ? Number(pageRaw) : NaN
+    const page = Number.isInteger(pageParsed) && pageParsed > 0 ? pageParsed : 1
+
+    const pageSizeRaw = typeof req.query.pageSize === 'string' ? req.query.pageSize : undefined
+    const pageSizeParsed = pageSizeRaw !== undefined ? Number(pageSizeRaw) : NaN
+    let pageSize = Number.isInteger(pageSizeParsed) && pageSizeParsed > 0 ? pageSizeParsed : 50
+    if (pageSize > 200) {
+      pageSize = 200
+    }
+
+    const evidenceRaw = typeof req.query.evidence === 'string' ? req.query.evidence : 'full'
+    const evidenceMode: EvidenceMode =
+      evidenceRaw === 'none' || evidenceRaw === 'ids' || evidenceRaw === 'full'
+        ? evidenceRaw
+        : 'full'
+
+    const options: ChecklistRunQueryOptions = {
+      page,
+      pageSize,
+      evidenceMode,
+    }
+
+    const run = await getChecklistRun(accountId, runIdNumber, options)
 
     res.status(200).json(run)
   } catch (err) {

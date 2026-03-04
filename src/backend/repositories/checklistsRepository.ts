@@ -4,8 +4,10 @@ import type {
   ChecklistRunDTO,
   ChecklistRunEntryPatchInput,
   ChecklistRunEntryResult,
+  ChecklistRunPagination,
   CreateChecklistRunInput,
   CreateChecklistRunResult,
+  EvidenceMode,
 } from '@/domain/checklists/checklistTypes'
 
 interface CreateChecklistRunRepositoryArgs extends CreateChecklistRunInput {
@@ -21,6 +23,18 @@ interface UploadChecklistRunEntryEvidenceArgs {
   storageProvider: string
   storagePath: string
   sha256: string | null
+}
+
+interface InsertAuditLogArgs {
+  accountId: number
+  performedBy: number
+  action: string
+  tableName: string | null
+  recordId: number | null
+  route: string
+  method: string
+  statusCode: number
+  changes: unknown
 }
 
 export const createChecklistRunWithEntries = async (
@@ -138,6 +152,50 @@ export const createChecklistRunWithEntries = async (
 
     throw err
   }
+}
+
+export const insertAuditLog = async (args: InsertAuditLogArgs): Promise<void> => {
+  const pool = await poolPromise
+  const request = new sql.Request(pool)
+
+  const changesJson = JSON.stringify(args.changes ?? {})
+
+  request.input('AccountID', sql.Int, args.accountId)
+  request.input('PerformedBy', sql.Int, args.performedBy)
+  request.input('Action', sql.NVarChar(128), args.action)
+  request.input('TableName', sql.NVarChar(128), args.tableName)
+  request.input('RecordID', sql.Int, args.recordId)
+  request.input('Route', sql.NVarChar(512), args.route)
+  request.input('Method', sql.NVarChar(16), args.method)
+  request.input('StatusCode', sql.Int, args.statusCode)
+  request.input('ChangesJson', sql.NVarChar(sql.MAX), changesJson)
+
+  await request.query(`
+    INSERT INTO dbo.AuditLogs (
+      TableName,
+      RecordID,
+      Action,
+      PerformedBy,
+      PerformedAt,
+      Route,
+      Method,
+      StatusCode,
+      Changes,
+      AccountID
+    )
+    VALUES (
+      @TableName,
+      @RecordID,
+      @Action,
+      @PerformedBy,
+      SYSUTCDATETIME(),
+      @Route,
+      @Method,
+      @StatusCode,
+      @ChangesJson,
+      @AccountID
+    );
+  `)
 }
 
 interface ChecklistEvidenceAttachmentRow {
@@ -347,6 +405,7 @@ interface ChecklistRunHeaderRow {
   SystemID: number | null
   AssetID: number | null
   Status: string
+  TotalEntries: number
 }
 
 interface ChecklistRunEntryRow {
@@ -358,11 +417,6 @@ interface ChecklistRunEntryRow {
   MeasuredValue: string | null
   Uom: string | null
   RowVersion: Buffer | Uint8Array
-}
-
-interface ChecklistRunEntryAttachmentRow {
-  ChecklistRunEntryID: number | bigint
-  AttachmentID: number
 }
 
 interface ChecklistRunEntryAttachmentMetaRow {
@@ -377,12 +431,34 @@ interface ChecklistRunEntryAttachmentMetaRow {
   UploadedByLastName: string | null
   UploadedByEmail: string | null
 }
+interface ChecklistRunQueryOptions {
+  page?: number
+  pageSize?: number
+  evidenceMode?: EvidenceMode
+}
 
 export const getChecklistRun = async (
   accountId: number,
   runId: number,
-): Promise<ChecklistRunDTO | null> => {
+  options?: ChecklistRunQueryOptions,
+): Promise<(ChecklistRunDTO & { pagination: ChecklistRunPagination }) | null> => {
   const pool = await poolPromise
+
+  const pageRaw = options?.page
+  const page = typeof pageRaw === 'number' && Number.isInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1
+
+  const pageSizeRaw = options?.pageSize
+  let pageSize =
+    typeof pageSizeRaw === 'number' && Number.isInteger(pageSizeRaw) && pageSizeRaw > 0
+      ? pageSizeRaw
+      : 50
+  if (pageSize > 200) {
+    pageSize = 200
+  }
+
+  const evidenceMode: EvidenceMode = options?.evidenceMode ?? 'full'
+
+  const offset = (page - 1) * pageSize
 
   const headerRequest = new sql.Request(pool)
   headerRequest.input('AccountID', sql.Int, accountId)
@@ -398,7 +474,13 @@ export const getChecklistRun = async (
       FacilityID,
       SystemID,
       AssetID,
-      Status
+      Status,
+      (
+        SELECT COUNT(1)
+        FROM dbo.ChecklistRunEntries e
+        WHERE e.AccountID = @AccountID
+          AND e.ChecklistRunID = @ChecklistRunID
+      ) AS TotalEntries
     FROM dbo.ChecklistRuns
     WHERE AccountID = @AccountID
       AND ChecklistRunID = @ChecklistRunID;
@@ -410,9 +492,13 @@ export const getChecklistRun = async (
     return null
   }
 
+  const totalEntries = header.TotalEntries
+
   const entriesRequest = new sql.Request(pool)
   entriesRequest.input('AccountID', sql.Int, accountId)
   entriesRequest.input('ChecklistRunID', sql.BigInt, runId)
+  entriesRequest.input('Offset', sql.Int, offset)
+  entriesRequest.input('PageSize', sql.Int, pageSize)
 
   const entriesResult = await entriesRequest.query<ChecklistRunEntryRow>(`
     SELECT
@@ -427,7 +513,8 @@ export const getChecklistRun = async (
     FROM dbo.ChecklistRunEntries
     WHERE AccountID = @AccountID
       AND ChecklistRunID = @ChecklistRunID
-    ORDER BY SortOrder, ChecklistRunEntryID;
+    ORDER BY SortOrder, ChecklistRunEntryID
+    OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
   `)
 
   const runEntryIds = entriesResult.recordset.map(row => Number(row.ChecklistRunEntryID))
@@ -435,32 +522,17 @@ export const getChecklistRun = async (
   const attachmentsByEntry = new Map<number, number[]>()
   const attachmentsMetaByEntry = new Map<number, ChecklistRunEntryAttachmentMetaRow[]>()
 
-  if (runEntryIds.length > 0) {
-    const attachmentsRequest = new sql.Request(pool)
-    attachmentsRequest.input('AccountID', sql.Int, accountId)
-    attachmentsRequest.input('ChecklistRunID', sql.BigInt, runId)
-
-    const attachmentsResult = await attachmentsRequest.query<ChecklistRunEntryAttachmentRow>(`
-      SELECT
-        cre.ChecklistRunEntryID,
-        rea.AttachmentID
-      FROM dbo.ChecklistRunEntryAttachments rea
-      INNER JOIN dbo.ChecklistRunEntries cre
-        ON cre.ChecklistRunEntryID = rea.ChecklistRunEntryID
-      WHERE cre.AccountID = @AccountID
-        AND cre.ChecklistRunID = @ChecklistRunID;
-    `)
-
-    for (const row of attachmentsResult.recordset) {
-      const entryId = Number(row.ChecklistRunEntryID)
-      const list = attachmentsByEntry.get(entryId) ?? []
-      list.push(row.AttachmentID)
-      attachmentsByEntry.set(entryId, list)
-    }
-
+  if (runEntryIds.length > 0 && evidenceMode !== 'none') {
     const attachmentsMetaRequest = new sql.Request(pool)
     attachmentsMetaRequest.input('AccountID', sql.Int, accountId)
     attachmentsMetaRequest.input('ChecklistRunID', sql.BigInt, runId)
+
+    const entryIdParams: string[] = []
+    runEntryIds.forEach((id, index) => {
+      const paramName = `EntryID${index}`
+      entryIdParams.push(`@${paramName}`)
+      attachmentsMetaRequest.input(paramName, sql.BigInt, id)
+    })
 
     const attachmentsMetaResult =
       await attachmentsMetaRequest.query<ChecklistRunEntryAttachmentMetaRow>(`
@@ -484,11 +556,16 @@ export const getChecklistRun = async (
           ON u.UserID = a.UploadedBy
         WHERE cre.AccountID = @AccountID
           AND a.AccountID = @AccountID
-          AND cre.ChecklistRunID = @ChecklistRunID;
+          AND cre.ChecklistRunID = @ChecklistRunID
+          AND cre.ChecklistRunEntryID IN (${entryIdParams.join(', ')});
       `)
 
     for (const row of attachmentsMetaResult.recordset) {
       const entryId = Number(row.ChecklistRunEntryID)
+      const idsList = attachmentsByEntry.get(entryId) ?? []
+      idsList.push(row.AttachmentID)
+      attachmentsByEntry.set(entryId, idsList)
+
       const list = attachmentsMetaByEntry.get(entryId) ?? []
       list.push(row)
       attachmentsMetaByEntry.set(entryId, list)
@@ -558,8 +635,13 @@ export const getChecklistRun = async (
     status: header.Status,
     entries,
   }
+  const pagination: ChecklistRunPagination = {
+    page,
+    pageSize,
+    totalEntries,
+  }
 
-  return dto
+  return { ...dto, pagination }
 }
 
 export const patchChecklistRunEntry = async (
