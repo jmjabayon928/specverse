@@ -1,13 +1,94 @@
 // src/backend/repositories/assetsRepository.ts
 import { poolPromise, sql } from '../config/db'
 import type { AssetListItem } from '@/domain/schedules/scheduleTypes'
+import { normalizeTag } from '../utils/normalizeTag'
+
+/** Escape %, _, [ and \ for SQL LIKE with ESCAPE '\\'. */
+function escapeLike(s: string): string {
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+    .replace(/\[/g, '\\[')
+}
 
 export type AssetsListFilters = {
   clientId?: number
   projectId?: number
   disciplineId?: number
   subtypeId?: number
+  location?: string
+  system?: string
+  service?: string
+  criticality?: string
   q?: string
+  take: number
+  skip: number
+}
+
+export type AssetDetail = {
+  assetId: number
+  assetTag: string
+  assetName: string | null
+  location: string | null
+  system: string | null
+  service: string | null
+  criticality: string | null
+  disciplineId: number | null
+  subtypeId: number | null
+  clientId: number | null
+  projectId: number | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export type AssetCustomFieldValue = {
+  customFieldId: number
+  fieldKey: string
+  displayLabel: string
+  dataType: string
+  sortOrder: number
+  valueString: string | null
+  valueNumber: number | null
+  valueBool: boolean | null
+  valueDate: Date | null
+  valueJson: string | null
+}
+
+export async function getAssetCustomFields(
+  accountId: number,
+  assetId: number
+): Promise<AssetCustomFieldValue[]> {
+  const pool = await poolPromise
+
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('AssetID', sql.Int, assetId)
+    .query<AssetCustomFieldValue>(`
+      SELECT
+        d.CustomFieldID AS customFieldId,
+        d.FieldKey AS fieldKey,
+        d.DisplayLabel AS displayLabel,
+        d.DataType AS dataType,
+        d.SortOrder AS sortOrder,
+        v.ValueString AS valueString,
+        v.ValueNumber AS valueNumber,
+        v.ValueBool AS valueBool,
+        v.ValueDate AS valueDate,
+        v.ValueJson AS valueJson
+      FROM dbo.CustomFieldDefinitions d
+      LEFT JOIN dbo.CustomFieldValues v
+        ON v.AccountID = d.AccountID
+        AND v.EntityType = 'asset'
+        AND v.EntityID = @AssetID
+        AND v.CustomFieldID = d.CustomFieldID
+      WHERE d.AccountID = @AccountID
+        AND d.EntityType = 'asset'
+      ORDER BY d.SortOrder
+    `)
+
+  return result.recordset ?? []
 }
 
 export async function listAssets(
@@ -27,8 +108,62 @@ export async function listAssets(
       a.DisciplineID AS disciplineId,
       a.SubtypeID AS subtypeId,
       a.ClientID AS clientId,
-      a.ProjectID AS projectId
+      a.ProjectID AS projectId,
+      CASE
+        WHEN (core.coreTotalRequired + ISNULL(cfr.customTotalRequired, 0)) = 0 THEN 100
+        ELSE FLOOR(
+          100.0 * (core.coreTotalFilled + ISNULL(cf.customFilled, 0))
+          / (core.coreTotalRequired + ISNULL(cfr.customTotalRequired, 0))
+        )
+      END AS completenessScore,
+      (core.coreTotalFilled + ISNULL(cf.customFilled, 0)) AS completenessFilled,
+      (core.coreTotalRequired + ISNULL(cfr.customTotalRequired, 0)) AS completenessRequired
     FROM dbo.Assets a
+    LEFT JOIN (
+      SELECT
+        v.EntityID AS AssetID,
+        COUNT(
+          CASE
+            WHEN v.ValueString IS NOT NULL AND LTRIM(RTRIM(v.ValueString)) <> '' THEN 1
+            WHEN v.ValueNumber IS NOT NULL THEN 1
+            WHEN v.ValueBool IS NOT NULL THEN 1
+            WHEN v.ValueDate IS NOT NULL THEN 1
+            WHEN v.ValueJson IS NOT NULL THEN 1
+            ELSE NULL
+          END
+        ) AS customFilled
+      FROM dbo.CustomFieldDefinitions d
+      LEFT JOIN dbo.CustomFieldValues v
+        ON v.AccountID = d.AccountID
+        AND v.EntityType = d.EntityType
+        AND v.CustomFieldID = d.CustomFieldID
+      WHERE d.AccountID = @AccountID
+        AND d.EntityType = 'asset'
+        AND d.IsRequired = 1
+      GROUP BY v.EntityID
+    ) cf ON cf.AssetID = a.AssetID
+    CROSS APPLY (
+      SELECT
+        (CASE WHEN a.AssetName IS NOT NULL AND LTRIM(RTRIM(a.AssetName)) <> '' THEN 1 ELSE 0 END
+         + CASE WHEN a.Location IS NOT NULL AND LTRIM(RTRIM(a.Location)) <> '' THEN 1 ELSE 0 END
+         + CASE WHEN a.System IS NOT NULL AND LTRIM(RTRIM(a.System)) <> '' THEN 1 ELSE 0 END
+         + CASE WHEN a.Service IS NOT NULL AND LTRIM(RTRIM(a.Service)) <> '' THEN 1 ELSE 0 END
+         + CASE WHEN a.Criticality IS NOT NULL AND LTRIM(RTRIM(a.Criticality)) <> '' THEN 1 ELSE 0 END
+         + CASE WHEN a.DisciplineID IS NOT NULL THEN 1 ELSE 0 END
+         + CASE WHEN a.SubtypeID IS NOT NULL THEN 1 ELSE 0 END
+         + CASE WHEN a.ClientID IS NOT NULL THEN 1 ELSE 0 END
+         + CASE WHEN a.ProjectID IS NOT NULL THEN 1 ELSE 0 END
+        ) AS coreTotalFilled,
+        9 AS coreTotalRequired
+    ) core
+    CROSS JOIN (
+      SELECT
+        COUNT(*) AS customTotalRequired
+      FROM dbo.CustomFieldDefinitions d2
+      WHERE d2.AccountID = @AccountID
+        AND d2.EntityType = 'asset'
+        AND d2.IsRequired = 1
+    ) cfr
     WHERE a.AccountID = @AccountID
   `
   const request = pool.request().input('AccountID', sql.Int, accountId)
@@ -49,17 +184,74 @@ export async function listAssets(
     query += ' AND a.SubtypeID = @SubtypeID'
     request.input('SubtypeID', sql.Int, filters.subtypeId)
   }
+  if (filters.location != null) {
+    query += ' AND a.Location = @Location'
+    request.input('Location', sql.NVarChar(400), filters.location)
+  }
+  if (filters.system != null) {
+    query += ' AND a.System = @System'
+    request.input('System', sql.NVarChar(400), filters.system)
+  }
+  if (filters.service != null) {
+    query += ' AND a.Service = @Service'
+    request.input('Service', sql.NVarChar(400), filters.service)
+  }
+  if (filters.criticality != null) {
+    query += ' AND a.Criticality = @Criticality'
+    request.input('Criticality', sql.VarChar(20), filters.criticality)
+  }
   if (filters.q != null && filters.q.trim() !== '') {
-    query += ' AND (a.AssetTag LIKE @Q OR a.AssetTagNorm LIKE @QNorm OR a.AssetName LIKE @Q)'
-    const q = `%${filters.q.trim()}%`
-    request.input('Q', sql.NVarChar(255), q)
-    request.input('QNorm', sql.NVarChar(255), q)
+    const qTrim = filters.q.trim()
+    const qNormPrefix = escapeLike(normalizeTag(qTrim)) + '%'
+    const qContains = '%' + escapeLike(qTrim) + '%'
+    query += ` AND (a.AssetTagNorm LIKE @QNormPrefix ESCAPE '\\' OR a.AssetTag LIKE @QNormPrefix ESCAPE '\\' OR a.AssetName LIKE @QContains ESCAPE '\\')`
+    request.input('QNormPrefix', sql.NVarChar(255), qNormPrefix)
+    request.input('QContains', sql.NVarChar(255), qContains)
   }
 
-  query += ' ORDER BY a.AssetTag'
+  request.input('Skip', sql.Int, filters.skip)
+  request.input('Take', sql.Int, filters.take)
+  query += `
+    ORDER BY a.AssetTag, a.AssetID
+    OFFSET @Skip ROWS
+    FETCH NEXT @Take ROWS ONLY
+    OPTION (OPTIMIZE FOR UNKNOWN)
+  `
 
   const result = await request.query(query)
   return (result.recordset ?? []) as AssetListItem[]
+}
+
+export async function getAssetById(
+  accountId: number,
+  assetId: number
+): Promise<AssetDetail | null> {
+  const pool = await poolPromise
+  const result = await pool
+    .request()
+    .input('AccountID', sql.Int, accountId)
+    .input('AssetID', sql.Int, assetId)
+    .query<AssetDetail>(`
+      SELECT TOP 1
+        a.AssetID AS assetId,
+        a.AssetTag AS assetTag,
+        a.AssetName AS assetName,
+        a.Location AS location,
+        a.System AS system,
+        a.Service AS service,
+        a.Criticality AS criticality,
+        a.DisciplineID AS disciplineId,
+        a.SubtypeID AS subtypeId,
+        a.ClientID AS clientId,
+        a.ProjectID AS projectId,
+        a.CreatedAt AS createdAt,
+        a.UpdatedAt AS updatedAt
+      FROM dbo.Assets a
+      WHERE a.AccountID = @AccountID
+        AND a.AssetID = @AssetID
+    `)
+
+  return result.recordset?.[0] ?? null
 }
 
 export async function assetBelongsToAccount(
