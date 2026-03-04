@@ -3,6 +3,112 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import ScheduleColumnsEditor, { type ScheduleColumnItem } from './ScheduleColumnsEditor'
 import ScheduleGrid, { type ColumnDef, type GridEntry } from './ScheduleGrid'
+import {
+  buildAssetsQuery,
+  getFromCache,
+  getInFlight,
+  setInFlight,
+  clearInFlight,
+  setInCache,
+  isAssetListArray,
+  normalizeScopeKey,
+  type AssetListItem,
+  type AssetSearchParams,
+} from './assetsCache'
+
+class AssetsAuthError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AssetsAuthError'
+  }
+}
+
+async function fetchAssets(
+  params: AssetSearchParams,
+  signal: AbortSignal,
+  scopeKey: string,
+  allowCache: boolean
+): Promise<AssetListItem[]> {
+  const debug =
+    typeof window !== 'undefined' && window.localStorage.getItem('SV_DEBUG_ASSETS') === '1'
+  const key = buildAssetsQuery(params, scopeKey)
+  if (signal.aborted) {
+    if (debug) console.log(`[SV assets] cache=? inflight=? aborted=1 key="${key}"`)
+    return []
+  }
+
+  if (allowCache) {
+    const cached = getFromCache(key)
+    if (cached != null) {
+      if (debug) console.log(`[SV assets] cache=hit inflight=miss key="${key}"`)
+      return cached
+    }
+
+    const inflight = getInFlight(key)
+    if (inflight != null) {
+      if (debug) console.log(`[SV assets] cache=miss inflight=hit key="${key}"`)
+      try {
+        const data = await inflight
+        if (signal.aborted) return []
+        return data
+      } catch (err) {
+        if (signal.aborted) return []
+        if (err instanceof DOMException && err.name === 'AbortError') return []
+        throw err
+      }
+    }
+  } else if (debug) {
+    console.log(`[SV assets] cache=disabled inflight=disabled key="${key}"`)
+  }
+
+  let status: number | null = null
+  const startedAtMs = Date.now()
+
+  const promise = (async (): Promise<AssetListItem[]> => {
+    const res = await fetch(`/api/backend/assets?${key}`, { credentials: 'include', signal })
+    status = res.status
+
+    if (res.status === 401 || res.status === 403) {
+      throw new AssetsAuthError(
+        'Session expired or insufficient permissions. Please refresh or sign in again.'
+      )
+    }
+    if (!res.ok) throw new Error(`Assets fetch failed: ${res.status}`)
+
+    const raw = (await res.json()) as unknown
+    if (!isAssetListArray(raw)) return []
+    if (signal.aborted) return []
+
+    if (allowCache) setInCache(key, raw)
+    return raw
+  })()
+
+  if (allowCache) setInFlight(key, promise)
+  try {
+    const data = await promise
+    if (debug) {
+      const durationMs = Date.now() - startedAtMs
+      console.log(
+        `[SV assets] cache=miss inflight=miss status=${status ?? 'n/a'} durationMs=${durationMs} key="${key}"`
+      )
+    }
+    if (signal.aborted) return []
+    return data
+  } catch (err) {
+    if (debug) {
+      const durationMs = Date.now() - startedAtMs
+      const msg = err instanceof Error ? err.message : String(err)
+      console.log(
+        `[SV assets] cache=miss inflight=miss status=${status ?? 'n/a'} durationMs=${durationMs} error="${msg}" key="${key}"`
+      )
+    }
+    if (signal.aborted) return []
+    if (err instanceof DOMException && err.name === 'AbortError') return []
+    throw err
+  } finally {
+    if (allowCache) clearInFlight(key)
+  }
+}
 
 export type ScheduleDetail = {
   schedule: {
@@ -12,6 +118,7 @@ export type ScheduleDetail = {
     facilityId: number | null
     spaceId: number | null
     systemId: number | null
+    accountId?: number | null
   }
   columns: Array<{
     scheduleColumnId: number
@@ -99,6 +206,25 @@ export default function ScheduleEditor({ scheduleId, initialDetail, fetchDetail 
   const [columns, setColumns] = useState<ScheduleColumnItem[]>([])
   const [entries, setEntries] = useState<GridEntry[]>([])
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
+  const [assetPickerQuery, setAssetPickerQuery] = useState('')
+  const [assetPickerLocation, setAssetPickerLocation] = useState('')
+  const [assetPickerSystem, setAssetPickerSystem] = useState('')
+  const [assetPickerService, setAssetPickerService] = useState('')
+  const [assetPickerCriticality, setAssetPickerCriticality] = useState<string>('')
+  const [assetPickerSkip, setAssetPickerSkip] = useState(0)
+  const [assetPickerTake] = useState(50)
+  const [assetPickerResults, setAssetPickerResults] = useState<AssetListItem[]>([])
+  const [assetPickerLoading, setAssetPickerLoading] = useState(false)
+  const [assetPickerError, setAssetPickerError] = useState<string | null>(null)
+  const assetPickerAbortRef = useRef<AbortController | null>(null)
+  const assetPickerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const assetPickerOnSelectRef = useRef<((assetId: number, assetTag: string) => void) | null>(null)
+  const assetPickerJustOpenedRef = useRef(false)
+  const assetPickerRunImmediatelyRef = useRef(false)
+  const assetPickerDebounceMsRef = useRef(250)
+  const [activeAccountScopeKey, setActiveAccountScopeKey] = useState('unknown')
+  const [activeAccountAllowCache, setActiveAccountAllowCache] = useState(false)
+  const activeAccountFetchRef = useRef<Promise<void> | null>(null)
 
   // Facility/Space/System state
   const [facilityId, setFacilityId] = useState<number | null>(null)
@@ -107,6 +233,42 @@ export default function ScheduleEditor({ scheduleId, initialDetail, fetchDetail 
   const [spaceName, setSpaceName] = useState<string | null>(null)
   const [systemId, setSystemId] = useState<number | null>(null)
   const [systemName, setSystemName] = useState<string | null>(null)
+
+  const ensureActiveAccountScopeKey = useCallback(() => {
+    if (activeAccountFetchRef.current) return
+    activeAccountFetchRef.current = (async () => {
+      try {
+        const res = await fetch('/api/backend/sessions/active-account', {
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          setActiveAccountScopeKey('unknown')
+          setActiveAccountAllowCache(false)
+          return
+        }
+        const raw = (await res.json()) as unknown
+        if (raw == null || typeof raw !== 'object') {
+          setActiveAccountScopeKey('unknown')
+          setActiveAccountAllowCache(false)
+          return
+        }
+        const rec = raw as Record<string, unknown>
+        const normalized = normalizeScopeKey(rec.accountId)
+        if (normalized === 'unknown') {
+          setActiveAccountScopeKey('unknown')
+          setActiveAccountAllowCache(false)
+          return
+        }
+        setActiveAccountScopeKey(normalized)
+        setActiveAccountAllowCache(true)
+      } catch {
+        setActiveAccountScopeKey('unknown')
+        setActiveAccountAllowCache(false)
+      }
+    })().finally(() => {
+      activeAccountFetchRef.current = null
+    })
+  }, [])
 
   // Picker state
   const [facilityPickerOpen, setFacilityPickerOpen] = useState(false)
@@ -449,27 +611,95 @@ export default function ScheduleEditor({ scheduleId, initialDetail, fetchDetail 
   )
 
   const openAssetPicker = useCallback((onSelect: (assetId: number, assetTag: string) => void) => {
+    assetPickerOnSelectRef.current = onSelect
+    setAssetPickerQuery('')
+    setAssetPickerLocation('')
+    setAssetPickerSystem('')
+    setAssetPickerService('')
+    setAssetPickerCriticality('')
+    setAssetPickerSkip(0)
+    setAssetPickerResults([])
+    setAssetPickerError(null)
+    if (detail?.schedule.accountId == null) ensureActiveAccountScopeKey()
+    assetPickerJustOpenedRef.current = true
     setAssetPickerOpen(true)
-    const input = window.prompt('Search assets (q): enter text and we will fetch /assets?q=...')
-    if (input == null) {
-      setAssetPickerOpen(false)
+  }, [detail?.schedule.accountId, ensureActiveAccountScopeKey])
+
+  useEffect(() => {
+    if (!assetPickerOpen) return
+    const run = () => {
+      if (assetPickerAbortRef.current) {
+        assetPickerAbortRef.current.abort()
+      }
+      assetPickerAbortRef.current = new AbortController()
+      const signal = assetPickerAbortRef.current.signal
+      setAssetPickerLoading(true)
+      setAssetPickerError(null)
+      const params: AssetSearchParams = {
+        take: assetPickerTake,
+        skip: assetPickerSkip,
+      }
+      const qTrim = assetPickerQuery.trim()
+      if (qTrim !== '') params.q = qTrim
+      const locTrim = assetPickerLocation.trim()
+      if (locTrim !== '') params.location = locTrim
+      const sysTrim = assetPickerSystem.trim()
+      if (sysTrim !== '') params.system = sysTrim
+      const svcTrim = assetPickerService.trim()
+      if (svcTrim !== '') params.service = svcTrim
+      const critTrim = assetPickerCriticality.trim()
+      if (critTrim !== '') params.criticality = critTrim
+      const scheduleAccountId = detail?.schedule.accountId
+      const scopeKey =
+        scheduleAccountId != null ? normalizeScopeKey(scheduleAccountId) : activeAccountScopeKey
+      const allowCache = scheduleAccountId != null ? true : activeAccountAllowCache
+      fetchAssets(params, signal, scopeKey, allowCache)
+        .then(data => {
+          if (signal.aborted) return
+          setAssetPickerResults(data)
+        })
+        .catch(err => {
+          if (signal.aborted) return
+          if (err?.name === 'AbortError') return
+          setAssetPickerError(err instanceof Error ? err.message : 'Failed to load assets')
+          setAssetPickerResults([])
+        })
+        .finally(() => {
+          if (!signal.aborted) setAssetPickerLoading(false)
+        })
+    }
+    if (assetPickerJustOpenedRef.current) {
+      assetPickerJustOpenedRef.current = false
+      run()
       return
     }
-    fetch(`/api/backend/assets?q=${encodeURIComponent(input)}`, { credentials: 'include' })
-      .then(res => {
-        if (!res.ok) throw new Error(res.statusText)
-        return res.json()
-      })
-      .then((list: Array<{ assetId: number; assetTag: string; assetName?: string }>) => {
-        setAssetPickerOpen(false)
-        if (list.length === 0) return
-        const first = list[0]
-        onSelect(first.assetId, first.assetTag || String(first.assetId))
-      })
-      .catch(() => {
-        setAssetPickerOpen(false)
-      })
-  }, [])
+    if (assetPickerRunImmediatelyRef.current) {
+      assetPickerRunImmediatelyRef.current = false
+      run()
+      return
+    }
+    if (assetPickerDebounceRef.current) clearTimeout(assetPickerDebounceRef.current)
+    const delay = assetPickerDebounceMsRef.current
+    assetPickerDebounceRef.current = setTimeout(run, delay)
+    return () => {
+      if (assetPickerDebounceRef.current) {
+        clearTimeout(assetPickerDebounceRef.current)
+        assetPickerDebounceRef.current = null
+      }
+    }
+  }, [
+    assetPickerOpen,
+    assetPickerQuery,
+    assetPickerLocation,
+    assetPickerSystem,
+    assetPickerService,
+    assetPickerCriticality,
+    assetPickerSkip,
+    assetPickerTake,
+    detail?.schedule.accountId,
+    activeAccountScopeKey,
+    activeAccountAllowCache,
+  ])
 
   if (loading) return <div className="p-4">Loading schedule…</div>
   if (error) return <div className="p-4 text-red-600">{error}</div>
@@ -775,6 +1005,161 @@ export default function ScheduleEditor({ scheduleId, initialDetail, fetchDetail 
           </div>
         </div>
       </div>
+
+      {assetPickerOpen && (
+        <div className="border p-4 rounded space-y-3">
+          <h3 className="font-semibold">Select asset</h3>
+          <div className="space-y-2">
+            <label htmlFor="asset-picker-q" className="block text-sm font-medium">
+              Search
+            </label>
+            <input
+              id="asset-picker-q"
+              type="text"
+              value={assetPickerQuery}
+              onChange={e => {
+                assetPickerDebounceMsRef.current = 250
+                setAssetPickerQuery(e.target.value)
+                setAssetPickerSkip(0)
+              }}
+              placeholder="Search by tag or name..."
+              className="w-full px-2 py-1 border rounded"
+              autoFocus
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <div>
+              <label htmlFor="asset-picker-location" className="block text-sm font-medium">
+                Location
+              </label>
+              <input
+                id="asset-picker-location"
+                type="text"
+                value={assetPickerLocation}
+                onChange={e => {
+                  assetPickerDebounceMsRef.current = 150
+                  setAssetPickerLocation(e.target.value)
+                  setAssetPickerSkip(0)
+                }}
+                className="w-full px-2 py-1 border rounded text-sm"
+              />
+            </div>
+            <div>
+              <label htmlFor="asset-picker-system" className="block text-sm font-medium">
+                System
+              </label>
+              <input
+                id="asset-picker-system"
+                type="text"
+                value={assetPickerSystem}
+                onChange={e => {
+                  assetPickerDebounceMsRef.current = 150
+                  setAssetPickerSystem(e.target.value)
+                  setAssetPickerSkip(0)
+                }}
+                className="w-full px-2 py-1 border rounded text-sm"
+              />
+            </div>
+            <div>
+              <label htmlFor="asset-picker-service" className="block text-sm font-medium">
+                Service
+              </label>
+              <input
+                id="asset-picker-service"
+                type="text"
+                value={assetPickerService}
+                onChange={e => {
+                  assetPickerDebounceMsRef.current = 150
+                  setAssetPickerService(e.target.value)
+                  setAssetPickerSkip(0)
+                }}
+                className="w-full px-2 py-1 border rounded text-sm"
+              />
+            </div>
+            <div>
+              <label htmlFor="asset-picker-criticality" className="block text-sm font-medium">
+                Criticality
+              </label>
+              <select
+                id="asset-picker-criticality"
+                value={assetPickerCriticality}
+                onChange={e => {
+                  assetPickerDebounceMsRef.current = 150
+                  setAssetPickerCriticality(e.target.value)
+                  setAssetPickerSkip(0)
+                }}
+                className="w-full px-2 py-1 border rounded text-sm"
+              >
+                <option value="">Any</option>
+                <option value="LOW">LOW</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="HIGH">HIGH</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={assetPickerSkip === 0}
+              onClick={() => {
+                assetPickerRunImmediatelyRef.current = true
+                setAssetPickerSkip(s => Math.max(0, s - assetPickerTake))
+              }}
+              className="px-2 py-1 text-sm border rounded disabled:opacity-50"
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                assetPickerRunImmediatelyRef.current = true
+                setAssetPickerSkip(s => s + assetPickerTake)
+              }}
+              className="px-2 py-1 text-sm border rounded"
+            >
+              Next
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAssetPickerOpen(false)
+                assetPickerOnSelectRef.current = null
+              }}
+              className="px-2 py-1 text-sm border rounded"
+            >
+              Cancel
+            </button>
+          </div>
+          {assetPickerLoading && <p className="text-sm text-gray-500">Loading…</p>}
+          {assetPickerError != null && (
+            <p className="text-sm text-red-600" role="alert">
+              {assetPickerError}
+            </p>
+          )}
+          {!assetPickerLoading && assetPickerResults.length === 0 && (
+            <p className="text-sm text-gray-500">No results</p>
+          )}
+          {!assetPickerLoading && assetPickerResults.length > 0 && (
+            <ul className="border rounded max-h-48 overflow-y-auto">
+              {assetPickerResults.map(item => (
+                <li
+                  key={item.assetId}
+                  className="px-2 py-1 hover:bg-gray-100 cursor-pointer text-sm"
+                  onClick={() => {
+                    const onSelect = assetPickerOnSelectRef.current
+                    setAssetPickerOpen(false)
+                    assetPickerOnSelectRef.current = null
+                    if (onSelect) onSelect(item.assetId, item.assetTag ?? String(item.assetId))
+                  }}
+                >
+                  {item.assetTag}
+                  {item.assetName != null && item.assetName !== '' ? ` – ${item.assetName}` : ''}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <ScheduleColumnsEditor
         columns={columns}

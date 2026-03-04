@@ -1,6 +1,16 @@
 // src/backend/repositories/assetsRepository.ts
 import { poolPromise, sql } from '../config/db'
 import type { AssetListItem } from '@/domain/schedules/scheduleTypes'
+import { normalizeTag } from '../utils/normalizeTag'
+
+/** Escape %, _, [ and \ for SQL LIKE with ESCAPE '\\'. */
+function escapeLike(s: string): string {
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+    .replace(/\[/g, '\\[')
+}
 
 export type AssetsListFilters = {
   clientId?: number
@@ -12,6 +22,8 @@ export type AssetsListFilters = {
   service?: string
   criticality?: string
   q?: string
+  take: number
+  skip: number
 }
 
 export type AssetDetail = {
@@ -26,6 +38,8 @@ export type AssetDetail = {
   subtypeId: number | null
   clientId: number | null
   projectId: number | null
+  createdAt: Date
+  updatedAt: Date
 }
 
 export type AssetCustomFieldValue = {
@@ -187,13 +201,22 @@ export async function listAssets(
     request.input('Criticality', sql.VarChar(20), filters.criticality)
   }
   if (filters.q != null && filters.q.trim() !== '') {
-    query += ' AND (a.AssetTag LIKE @Q OR a.AssetTagNorm LIKE @QNorm OR a.AssetName LIKE @Q)'
-    const q = `%${filters.q.trim()}%`
-    request.input('Q', sql.NVarChar(255), q)
-    request.input('QNorm', sql.NVarChar(255), q)
+    const qTrim = filters.q.trim()
+    const qNormPrefix = escapeLike(normalizeTag(qTrim)) + '%'
+    const qContains = '%' + escapeLike(qTrim) + '%'
+    query += ` AND (a.AssetTagNorm LIKE @QNormPrefix ESCAPE '\\' OR a.AssetTag LIKE @QNormPrefix ESCAPE '\\' OR a.AssetName LIKE @QContains ESCAPE '\\')`
+    request.input('QNormPrefix', sql.NVarChar(255), qNormPrefix)
+    request.input('QContains', sql.NVarChar(255), qContains)
   }
 
-  query += ' ORDER BY a.AssetTag'
+  request.input('Skip', sql.Int, filters.skip)
+  request.input('Take', sql.Int, filters.take)
+  query += `
+    ORDER BY a.AssetTag, a.AssetID
+    OFFSET @Skip ROWS
+    FETCH NEXT @Take ROWS ONLY
+    OPTION (OPTIMIZE FOR UNKNOWN)
+  `
 
   const result = await request.query(query)
   return (result.recordset ?? []) as AssetListItem[]
@@ -220,7 +243,9 @@ export async function getAssetById(
         a.DisciplineID AS disciplineId,
         a.SubtypeID AS subtypeId,
         a.ClientID AS clientId,
-        a.ProjectID AS projectId
+        a.ProjectID AS projectId,
+        a.CreatedAt AS createdAt,
+        a.UpdatedAt AS updatedAt
       FROM dbo.Assets a
       WHERE a.AccountID = @AccountID
         AND a.AssetID = @AssetID

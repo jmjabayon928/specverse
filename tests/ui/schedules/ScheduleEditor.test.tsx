@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom'
 import ScheduleEditor from '../../../src/components/schedules/ScheduleEditor'
+import { clearAssetsCacheForTesting } from '../../../src/components/schedules/assetsCache'
 
 const emptyDetail = {
   schedule: {
@@ -63,6 +64,7 @@ describe('ScheduleEditor', () => {
   beforeEach(() => {
     fetchMock = jest.fn()
     globalThis.fetch = fetchMock as unknown as typeof fetch
+    clearAssetsCacheForTesting()
   })
 
   it('renders empty schedule', () => {
@@ -110,9 +112,6 @@ describe('ScheduleEditor', () => {
   })
 
   it('add row triggers asset picker and save entries calls fetch', async () => {
-    const origPrompt = globalThis.window.prompt
-    globalThis.window.prompt = jest.fn(() => 'PT')
-
     fetchMock
       .mockResolvedValueOnce({ ok: true, json: async () => [{ assetId: 1, assetTag: 'PT-001' }] })
       .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
@@ -131,11 +130,20 @@ describe('ScheduleEditor', () => {
     await user.click(addRow)
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringMatching(/\/api\/backend\/assets\?q=/),
-        expect.any(Object)
+      const assetsCall = fetchMock.mock.calls.find(
+        (c: [string, RequestInit]) => typeof c[0] === 'string' && c[0].includes('/api/backend/assets')
       )
+      expect(assetsCall).toBeDefined()
+      expect(assetsCall![0]).toMatch(/\/api\/backend\/assets\?/)
+      expect(assetsCall![0]).toContain('take=50')
+      expect(assetsCall![0]).toContain('skip=0')
     })
+
+    await waitFor(() => {
+      expect(screen.getByText('PT-001')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('PT-001'))
 
     await waitFor(() => {
       expect(screen.getByText('PT-001')).toBeInTheDocument()
@@ -151,8 +159,308 @@ describe('ScheduleEditor', () => {
       expect(putCalls.length).toBeGreaterThanOrEqual(1)
       expect(putCalls[0][0]).toMatch(/\/api\/backend\/schedules\/10\/entries/)
     })
+  })
 
-    globalThis.window.prompt = origPrompt
+  it('asset picker search includes q, take, and skip in URL', async () => {
+    fetchMock.mockImplementation((url: string | URL | Request) => {
+      const u = typeof url === 'string' ? url : url instanceof Request ? url.url : String(url)
+      if (u.includes('/api/backend/assets')) {
+        return Promise.resolve({ ok: true, json: async () => [] })
+      }
+      return Promise.reject(new Error(`Unmocked: ${u}`))
+    })
+
+    const user = userEvent.setup()
+
+    render(
+      <ScheduleEditor
+        scheduleId={10}
+        initialDetail={detailWithColumn}
+        fetchDetail={async () => detailWithColumn}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /add row.*asset picker/i }))
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        (c: [string, RequestInit]) => typeof c[0] === 'string' && c[0].includes('/api/backend/assets')
+      )
+      expect(call).toBeDefined()
+      expect(call![0]).toContain('take=50')
+      expect(call![0]).toContain('skip=0')
+    })
+
+    const searchInput = await screen.findByPlaceholderText(/search by tag or name/i, { timeout: 2000 })
+    await user.type(searchInput, 'pump')
+
+    await waitFor(
+      () => {
+        const calls = fetchMock.mock.calls.filter(
+          (c: [string, RequestInit]) => typeof c[0] === 'string' && c[0].includes('/api/backend/assets')
+        )
+        const withQ = calls.find((c: [string]) => (c[0] as string).includes('q=pump'))
+        expect(withQ).toBeDefined()
+        expect(withQ![0]).toContain('take=50')
+        expect(withQ![0]).toContain('skip=0')
+      },
+      { timeout: 8000, interval: 200 }
+    )
+  })
+
+  it('asset picker criticality filter includes criticality=HIGH in URL', async () => {
+    fetchMock.mockImplementation((url: string | URL | Request) => {
+      const u = typeof url === 'string' ? url : url instanceof Request ? url.url : String(url)
+      if (u.includes('/api/backend/assets')) {
+        return Promise.resolve({ ok: true, json: async () => [] })
+      }
+      return Promise.reject(new Error(`Unmocked: ${u}`))
+    })
+
+    const user = userEvent.setup()
+
+    render(
+      <ScheduleEditor
+        scheduleId={10}
+        initialDetail={detailWithColumn}
+        fetchDetail={async () => detailWithColumn}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /add row.*asset picker/i }))
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        (c: [string, RequestInit]) => typeof c[0] === 'string' && c[0].includes('/api/backend/assets')
+      )
+      expect(call).toBeDefined()
+    })
+
+    const criticalitySelect = await screen.findByLabelText(/criticality/i, { timeout: 2000 })
+    await user.selectOptions(criticalitySelect, 'HIGH')
+
+    await waitFor(
+      () => {
+        const calls = fetchMock.mock.calls.filter(
+          (c: [string, RequestInit]) => typeof c[0] === 'string' && c[0].includes('/api/backend/assets')
+        )
+        const withCriticality = calls.find((c: [string]) => (c[0] as string).includes('criticality=HIGH'))
+        expect(withCriticality).toBeDefined()
+      },
+      { timeout: 8000, interval: 200 }
+    )
+  })
+
+  it('asset picker in-flight dedupes identical requests across instances', async () => {
+    type MockResponse = { ok: boolean; status: number; json: () => Promise<unknown> }
+    let resolveAssets: (value: MockResponse) => void
+    const assetsPromise = new Promise<MockResponse>(r => {
+      resolveAssets = r
+    })
+
+    fetchMock.mockImplementation((url: string | URL | Request) => {
+      const u = typeof url === 'string' ? url : url instanceof Request ? url.url : String(url)
+      if (u.includes('/api/backend/assets')) return assetsPromise
+      return Promise.reject(new Error(`Unmocked: ${u}`))
+    })
+
+    const user = userEvent.setup()
+
+    render(
+      <div>
+        <ScheduleEditor
+          scheduleId={10}
+          initialDetail={detailWithColumn}
+          fetchDetail={async () => detailWithColumn}
+        />
+        <ScheduleEditor
+          scheduleId={10}
+          initialDetail={detailWithColumn}
+          fetchDetail={async () => detailWithColumn}
+        />
+      </div>
+    )
+
+    const addRowButtons = screen.getAllByRole('button', { name: /add row.*asset picker/i })
+    await user.click(addRowButtons[0])
+    await user.click(addRowButtons[1])
+
+    const inputs = await screen.findAllByPlaceholderText(/search by tag or name/i, { timeout: 2000 })
+    expect(inputs.length).toBe(2)
+
+    await waitFor(
+      () => {
+        const assetsCalls = fetchMock.mock.calls.filter(
+          (c: [string, RequestInit]) => typeof c[0] === 'string' && c[0].includes('/api/backend/assets')
+        )
+        expect(assetsCalls.length).toBe(1)
+      },
+      { timeout: 1500, interval: 100 }
+    )
+
+    resolveAssets({ ok: true, status: 200, json: async () => [] })
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled()
+    })
+  })
+
+  it('asset picker key normalization collapses spaces in q', async () => {
+    fetchMock.mockImplementation((url: string | URL | Request) => {
+      const u = typeof url === 'string' ? url : url instanceof Request ? url.url : String(url)
+      if (u.includes('/api/backend/assets')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => [] })
+      }
+      return Promise.reject(new Error(`Unmocked: ${u}`))
+    })
+
+    const user = userEvent.setup()
+
+    render(
+      <ScheduleEditor
+        scheduleId={10}
+        initialDetail={detailWithColumn}
+        fetchDetail={async () => detailWithColumn}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /add row.*asset picker/i }))
+
+    const searchInput = await screen.findByPlaceholderText(/search by tag or name/i, { timeout: 2000 })
+    await user.clear(searchInput)
+    await user.type(searchInput, '  pump   station ')
+
+    await waitFor(
+      () => {
+        const calls = fetchMock.mock.calls.filter(
+          (c: [string, RequestInit]) => typeof c[0] === 'string' && c[0].includes('/api/backend/assets')
+        )
+        const normalized = calls.find((c: [string]) => (c[0] as string).includes('q=pump%20station'))
+        expect(normalized).toBeDefined()
+      },
+      { timeout: 8000, interval: 200 }
+    )
+  })
+
+  it('asset picker cache is scoped by account so switching accounts does not reuse cached results', async () => {
+    const detailAccount1 = {
+      ...detailWithColumn,
+      schedule: {
+        ...detailWithColumn.schedule,
+        accountId: 1,
+      },
+    }
+    const detailAccount2 = {
+      ...detailWithColumn,
+      schedule: {
+        ...detailWithColumn.schedule,
+        accountId: 2,
+      },
+    }
+
+    fetchMock.mockImplementation((url: string | URL | Request) => {
+      const u = typeof url === 'string' ? url : url instanceof Request ? url.url : String(url)
+      if (u.includes('/api/backend/assets')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => [] })
+      }
+      return Promise.reject(new Error(`Unmocked: ${u}`))
+    })
+
+    const user = userEvent.setup()
+
+    const { unmount } = render(
+      <ScheduleEditor
+        scheduleId={10}
+        initialDetail={detailAccount1}
+        fetchDetail={async () => detailAccount1}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /add row.*asset picker/i }))
+    const searchInput1 = await screen.findByPlaceholderText(/search by tag or name/i, { timeout: 2000 })
+    await user.clear(searchInput1)
+    await user.type(searchInput1, 'pump')
+
+    await waitFor(
+      () => {
+        const calls = fetchMock.mock.calls.filter(
+          (c: [string, RequestInit]) => typeof c[0] === 'string' && c[0].includes('/api/backend/assets')
+        )
+        const scoped = calls.find((c: [string]) => (c[0] as string).includes('scope=1') && (c[0] as string).includes('q=pump'))
+        expect(scoped).toBeDefined()
+      },
+      { timeout: 8000, interval: 200 }
+    )
+
+    unmount()
+
+    render(
+      <ScheduleEditor
+        scheduleId={10}
+        initialDetail={detailAccount2}
+        fetchDetail={async () => detailAccount2}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /add row.*asset picker/i }))
+    const searchInput2 = await screen.findByPlaceholderText(/search by tag or name/i, { timeout: 2000 })
+    await user.clear(searchInput2)
+    await user.type(searchInput2, 'pump')
+
+    await waitFor(
+      () => {
+        const calls = fetchMock.mock.calls.filter(
+          (c: [string, RequestInit]) => typeof c[0] === 'string' && c[0].includes('/api/backend/assets')
+        )
+        const pumpCalls = calls.filter((c: [string]) => (c[0] as string).includes('q=pump'))
+        expect(pumpCalls.length).toBeGreaterThanOrEqual(2)
+        const scoped2 = pumpCalls.find((c: [string]) => (c[0] as string).includes('scope=2'))
+        expect(scoped2).toBeDefined()
+      },
+      { timeout: 8000, interval: 200 }
+    )
+  })
+
+  it('asset picker shows explicit auth/permission message on 401 and clears it after a successful fetch', async () => {
+    let assetsCallCount = 0
+    fetchMock.mockImplementation((url: string | URL | Request) => {
+      const u = typeof url === 'string' ? url : url instanceof Request ? url.url : String(url)
+      if (!u.includes('/api/backend/assets')) return Promise.reject(new Error(`Unmocked: ${u}`))
+      assetsCallCount += 1
+      if (assetsCallCount === 1) {
+        return Promise.resolve({ ok: false, status: 401, json: async () => ({}) })
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => [{ assetId: 1, assetTag: 'PT-001' }] })
+    })
+
+    const user = userEvent.setup()
+
+    render(
+      <ScheduleEditor
+        scheduleId={10}
+        initialDetail={detailWithColumn}
+        fetchDetail={async () => detailWithColumn}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /add row.*asset picker/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/session expired or insufficient permissions/i)
+      ).toBeInTheDocument()
+    })
+
+    const searchInput = await screen.findByPlaceholderText(/search by tag or name/i, { timeout: 2000 })
+    await user.clear(searchInput)
+    await user.type(searchInput, 'pump')
+
+    await waitFor(
+      () => {
+        expect(screen.queryByText(/session expired or insufficient permissions/i)).not.toBeInTheDocument()
+        expect(screen.getByText('PT-001')).toBeInTheDocument()
+      },
+      { timeout: 8000, interval: 200 }
+    )
   })
 
   it('sheet picker: search and select links datasheet to row', async () => {

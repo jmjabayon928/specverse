@@ -15,6 +15,8 @@ export type AssetDetail = {
   subtypeId: number | null
   clientId: number | null
   projectId: number | null
+  createdAt: Date
+  updatedAt: Date
 }
 
 export type AssetCustomFieldDto = {

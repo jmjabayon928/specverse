@@ -26,7 +26,7 @@ import type { InsertImportErrorInput, InsertImportRecordProvenanceInput } from '
 import type { UpsertCustomFieldValueInput } from '../database/customFieldQueries'
 import { upsertAsset, getAssetsByTagNorms, type UpsertAssetInput } from '../repositories/assetsRepository'
 import { parseFile, type ParsedRow, truncateSourceValue } from '../utils/fileParser'
-import { normalizeTag } from './instrumentsService'
+import { normalizeTag } from '../utils/normalizeTag'
 import { poolPromise, sql } from '../config/db'
 
 const ENTITY_TYPE_ASSET = 'Asset'

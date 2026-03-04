@@ -20,9 +20,11 @@ jest.mock('../../src/backend/database/permissionQueries', () => ({
 }))
 
 const mockListAssets = jest.fn()
+const mockGetAssetById = jest.fn()
 
 jest.mock('../../src/backend/services/assetsService', () => ({
   listAssets: (...args: unknown[]) => mockListAssets(...args),
+  getAssetById: (...args: unknown[]) => mockGetAssetById(...args),
 }))
 
 describe('Assets API', () => {
@@ -111,6 +113,69 @@ describe('Assets API', () => {
       expect(filters.service).toBeUndefined()
       expect(filters.criticality).toBeUndefined()
       expect(filters.system).toBe('HVAC')
+    })
+
+    it('accepts q search and returns 200 with array body', async () => {
+      mockListAssets.mockResolvedValue([])
+
+      const res = await request(app).get('/api/backend/assets?q=pump')
+
+      expect(res.status).toBe(200)
+      expect(Array.isArray(res.body)).toBe(true)
+      expect(mockListAssets).toHaveBeenCalledWith(1, expect.objectContaining({ q: 'pump' }))
+    })
+
+    it('accepts q with LIKE special chars and passes decoded q to service', async () => {
+      mockListAssets.mockResolvedValue([])
+      const res = await request(app).get('/api/backend/assets?q=pump%20%5Babc%5D_')
+      expect(res.status).toBe(200)
+      expect(Array.isArray(res.body)).toBe(true)
+      expect(mockListAssets).toHaveBeenCalledWith(1, expect.objectContaining({ q: 'pump [abc]_' }))
+    })
+
+    it('honors take and skip pagination', async () => {
+      mockListAssets.mockResolvedValue([
+        { assetId: 1, assetTag: 'A', assetName: null, location: null, system: null, service: null, criticality: null, disciplineId: null, subtypeId: null, clientId: null, projectId: null, completenessScore: 0, completenessFilled: 0, completenessRequired: 9 },
+        { assetId: 2, assetTag: 'B', assetName: null, location: null, system: null, service: null, criticality: null, disciplineId: null, subtypeId: null, clientId: null, projectId: null, completenessScore: 0, completenessFilled: 0, completenessRequired: 9 },
+      ])
+
+      const res = await request(app).get('/api/backend/assets?take=10&skip=0')
+
+      expect(res.status).toBe(200)
+      expect(Array.isArray(res.body)).toBe(true)
+      expect(res.body.length).toBeLessThanOrEqual(10)
+      expect(mockListAssets).toHaveBeenCalledWith(1, expect.objectContaining({ take: 10, skip: 0 }))
+    })
+
+    it('GET /api/backend/assets/:id returns asset detail with createdAt and updatedAt', async () => {
+      const createdAt = new Date('2025-01-01T12:00:00.000Z')
+      const updatedAt = new Date('2025-01-02T14:30:00.000Z')
+      mockGetAssetById.mockResolvedValue({
+        assetId: 1,
+        assetTag: 'PT-001',
+        assetName: 'Pressure Transmitter',
+        location: 'Area A',
+        system: 'HVAC',
+        service: 'Cooling',
+        criticality: 'High',
+        disciplineId: 1,
+        subtypeId: 2,
+        clientId: null,
+        projectId: null,
+        createdAt,
+        updatedAt,
+      })
+
+      const res = await request(app).get('/api/backend/assets/1')
+
+      expect(res.status).toBe(200)
+      expect(res.body).not.toBeNull()
+      expect(res.body.assetId).toBe(1)
+      expect(res.body.assetTag).toBe('PT-001')
+      expect(res.body).toHaveProperty('createdAt')
+      expect(res.body).toHaveProperty('updatedAt')
+      expect(typeof res.body.createdAt).toBe('string')
+      expect(typeof res.body.updatedAt).toBe('string')
     })
 
     it('computes completeness score math as specified', () => {

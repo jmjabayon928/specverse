@@ -58,7 +58,24 @@ const querySchema = z.object({
       const trimmed = s.trim()
       return trimmed === '' ? undefined : trimmed
     }),
-  q: z.string().optional(),
+  q: z
+    .string()
+    .optional()
+    .transform(s => {
+      if (s == null) return undefined
+      const trimmed = s.trim()
+      return trimmed === '' ? undefined : trimmed.slice(0, 100)
+    }),
+  take: z
+    .string()
+    .optional()
+    .transform(s => (s ? Number(s) : undefined))
+    .pipe(z.number().int().min(1).max(200).optional()),
+  skip: z
+    .string()
+    .optional()
+    .transform(s => (s ? Number(s) : undefined))
+    .pipe(z.number().int().min(0).optional()),
 })
 
 const paramsSchema = z.object({
@@ -78,6 +95,8 @@ export const listAssets: RequestHandler = async (req, res, next) => {
       throw new AppError('Invalid query parameters', 400)
     }
 
+    const safeTake = parsed.data.take ?? 50
+    const safeSkip = parsed.data.skip ?? 0
     const filters = {
       clientId: parsed.data.clientId,
       projectId: parsed.data.projectId,
@@ -88,6 +107,8 @@ export const listAssets: RequestHandler = async (req, res, next) => {
       service: parsed.data.service,
       criticality: parsed.data.criticality,
       q: parsed.data.q,
+      take: safeTake,
+      skip: safeSkip,
     }
     const list = await serviceListAssets(accountId, filters)
     res.status(200).json(list)

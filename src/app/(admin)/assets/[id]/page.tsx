@@ -1,7 +1,8 @@
 // src/app/(admin)/assets/[id]/page.tsx
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { cookies, headers } from 'next/headers'
+import AssetHeader from '@/components/assets/AssetHeader'
+import AssetTabs from '@/components/assets/AssetTabs'
 
 type PageProps = {
   params: { id: string }
@@ -19,6 +20,8 @@ type AssetDetail = {
   subtypeId: number | null
   clientId: number | null
   projectId: number | null
+  createdAt: string
+  updatedAt: string
 }
 
 const parseAssetId = (raw: string): number | null => {
@@ -33,13 +36,12 @@ const getBaseUrl = async (): Promise<string> => {
   if (!host) return 'http://localhost:3000'
 
   const protoHeader = h.get('x-forwarded-proto')
-  const proto =
-    protoHeader === 'https' || protoHeader === 'http'
-      ? protoHeader
-      : process.env.NODE_ENV === 'production'
-        ? 'https'
-        : 'http'
-
+  let proto = 'http'
+  if (protoHeader === 'https' || protoHeader === 'http') {
+    proto = protoHeader
+  } else if (process.env.NODE_ENV === 'production') {
+    proto = 'https'
+  }
   return `${proto}://${host}`
 }
 
@@ -77,98 +79,31 @@ export default async function AssetDetailPage({ params }: PageProps) {
 
   const asset = await fetchAssetById(assetId)
 
+  const headerAsset = {
+    assetId: asset.assetId,
+    assetTag: asset.assetTag,
+    assetName: asset.assetName ?? '',
+    disciplineId: asset.disciplineId ?? undefined,
+    location: asset.location ?? undefined,
+    criticality: asset.criticality ?? undefined,
+  }
+
+  const identityAsset = {
+    system: asset.system ?? undefined,
+    service: asset.service ?? undefined,
+    criticality: asset.criticality ?? undefined,
+    createdAt: asset.createdAt ?? undefined,
+    updatedAt: asset.updatedAt ?? undefined,
+  }
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">Asset 360</h1>
-          <div className="text-sm text-gray-600">
-            <span className="font-medium">{asset.assetTag}</span>
-            {asset.assetName ? <span> · {asset.assetName}</span> : null}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Link
-            href="/assets"
-            className="text-sm text-blue-600 underline whitespace-nowrap"
-          >
-            Back to MEL
-          </Link>
-        </div>
-      </div>
-
-      <div className="border-b pb-3">
-        <div className="flex gap-6 text-sm">
-          <Link
-            href={`/assets/${assetId}`}
-            className="font-medium text-gray-900"
-          >
-            Overview
-          </Link>
-
-          <Link
-            href={`/assets/${assetId}/custom-fields`}
-            className="text-blue-600 underline"
-          >
-            Custom Fields
-          </Link>
-        </div>
-      </div>
-
-      <div className="border rounded p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <div>
-            <div className="text-gray-600">Asset Tag</div>
-            <div className="font-medium">{asset.assetTag}</div>
-          </div>
-
-          <div>
-            <div className="text-gray-600">Asset Name</div>
-            <div className="font-medium">{asset.assetName ?? '—'}</div>
-          </div>
-
-          <div>
-            <div className="text-gray-600">Location</div>
-            <div className="font-medium">{asset.location ?? '—'}</div>
-          </div>
-
-          <div>
-            <div className="text-gray-600">System</div>
-            <div className="font-medium">{asset.system ?? '—'}</div>
-          </div>
-
-          <div>
-            <div className="text-gray-600">Service</div>
-            <div className="font-medium">{asset.service ?? '—'}</div>
-          </div>
-
-          <div>
-            <div className="text-gray-600">Criticality</div>
-            <div className="font-medium">{asset.criticality ?? '—'}</div>
-          </div>
-
-          <div>
-            <div className="text-gray-600">Discipline ID</div>
-            <div className="font-medium">{asset.disciplineId ?? '—'}</div>
-          </div>
-
-          <div>
-            <div className="text-gray-600">Subtype ID</div>
-            <div className="font-medium">{asset.subtypeId ?? '—'}</div>
-          </div>
-
-          <div>
-            <div className="text-gray-600">Client ID</div>
-            <div className="font-medium">{asset.clientId ?? '—'}</div>
-          </div>
-
-          <div>
-            <div className="text-gray-600">Project ID</div>
-            <div className="font-medium">{asset.projectId ?? '—'}</div>
-          </div>
-        </div>
-      </div>
+      <AssetHeader asset={headerAsset} assetId={assetId} />
+      <AssetTabs
+        assetId={assetId}
+        identityAsset={identityAsset}
+        lastUpdated={asset.updatedAt ?? undefined}
+      />
     </div>
   )
 }
