@@ -50,6 +50,8 @@ import instrumentsRoutes from './routes/instrumentsRoutes'
 import instrumentLoopsRoutes from './routes/instrumentLoopsRoutes'
 import schedulesRoutes from './routes/schedulesRoutes'
 import assetsRoutes from './routes/assetsRoutes'
+import submittalsRoutes from './routes/submittalsRoutes'
+import deviationsRoutes from './routes/deviationsRoutes'
 import { errorHandler } from './middleware/errorHandler'
 
 const app: Application = express()
@@ -204,6 +206,8 @@ app.use('/api/backend/instruments', instrumentsRoutes)
 app.use('/api/backend/instrument-loops', instrumentLoopsRoutes)
 app.use('/api/backend/schedules', schedulesRoutes)
 app.use('/api/backend/assets', assetsRoutes)
+app.use('/api/backend/submittals', submittalsRoutes)
+app.use('/api/backend/deviations', deviationsRoutes)
 
 // ─────────────────────────────────────────────
 // Dev-only routes inspector
