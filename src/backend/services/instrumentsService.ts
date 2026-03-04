@@ -28,15 +28,8 @@ import {
 } from './sheetInstrumentSnapshotsService'
 import { kickSheetInstrumentSnapshotWorker } from '../workers/sheetInstrumentSnapshotWorker'
 
-/**
- * Lightweight tag normalization: trim, uppercase, collapse whitespace, remove spaces around '-' and '/'.
- */
-export function normalizeTag(input: string): string {
-  let s = (input ?? '').trim()
-  s = s.replace(/\s+/g, ' ').trim()
-  s = s.replace(/\s*-\s*/g, '-').replace(/\s*\/\s*/g, '/')
-  return s.toUpperCase()
-}
+import { normalizeTag } from '../utils/normalizeTag'
+export { normalizeTag }
 
 function validateTagAgainstRule(tag: string, tagNorm: string, rule: InstrumentTagRuleRow): void {
   // Prefix validation
