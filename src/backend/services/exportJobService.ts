@@ -1,16 +1,21 @@
 // src/backend/services/exportJobService.ts
 import path from 'path'
 import fs from 'fs/promises'
+import { createWriteStream } from 'fs'
 import jwt from 'jsonwebtoken'
+import archiver from 'archiver'
+import { randomUUID } from 'crypto'
 import {
   insertExportJob,
   getExportJobById,
-  updateExportJobRunning,
+  claimExportJob,
+  heartbeatExportJob,
   updateExportJobCompleted,
   updateExportJobFailed,
   updateExportJobCancelled,
   updateExportJobResetForRetry,
   listExportJobsForCleanup,
+  insertExportJobItem,
   type ExportJobRow,
   type ExportJobStatus,
 } from '../database/exportJobQueries'
@@ -29,6 +34,14 @@ if (!JWT_SECRET) {
 const EXPORT_JOBS_DIR = path.join(process.cwd(), 'exports', 'jobs')
 const CSV_LIMIT = 10000
 const DOWNLOAD_TOKEN_EXPIRES_IN = '5m'
+const LEASE_TTL_MS = 5 * 60 * 1000
+const HEARTBEAT_INTERVAL_MS = 60 * 1000
+
+/** Normalize relative path for deterministic manifest: forward slashes, no leading ./ */
+function normalizeRelativePath(relativePath: string): string {
+  const normalized = relativePath.replace(/\\/g, '/').replace(/^\.\//, '')
+  return normalized || relativePath
+}
 
 export interface StartExportJobParams {
   jobType: string
@@ -204,12 +217,35 @@ export async function getExportJobStatus(
   return rowToStatusDto(row)
 }
 
-/** Run the export job (worker): generate file, write to disk, update row. */
+/** Run the export job (worker): claim, generate file, write ZIP, update row. */
 export async function runExportJob(jobId: number): Promise<void> {
-  const row = await getExportJobById(jobId)
-  if (!row || row.Status !== 'queued') return
+  const leaseId = randomUUID()
+  const startedAt = new Date()
+  const leasedUntil = new Date(Date.now() + LEASE_TTL_MS)
 
-  await updateExportJobRunning(jobId)
+  const { claimed, row } = await claimExportJob(jobId, leaseId, leasedUntil, startedAt)
+  if (!claimed || !row) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(JSON.stringify({ msg: 'export_job_claim_skipped', jobId, leaseId }))
+    }
+    return
+  }
+
+  if (process.env.NODE_ENV !== 'test') {
+    console.log(JSON.stringify({ msg: 'export_job_start', jobId, leaseId }))
+  }
+
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  const scheduleHeartbeat = (): void => {
+    heartbeatTimer = setInterval(async () => {
+      const nextUntil = new Date(Date.now() + LEASE_TTL_MS)
+      const ok = await heartbeatExportJob(jobId, leaseId, nextUntil)
+      if (!ok && process.env.NODE_ENV !== 'test') {
+        console.warn(JSON.stringify({ msg: 'export_job_heartbeat_failed', jobId, leaseId }))
+      }
+    }, HEARTBEAT_INTERVAL_MS)
+  }
+  scheduleHeartbeat()
 
   try {
     if (row.JobType === 'inventory_transactions_csv') {
@@ -220,21 +256,54 @@ export async function runExportJob(jobId: number): Promise<void> {
       const rows = await getInventoryTransactionsForCsv(filters, CSV_LIMIT)
       const csv = buildInventoryTransactionsCsv(rows)
       await ensureExportJobsDir()
-      const fileName = `inventory-transactions-${jobId}.csv`
-      const filePath = path.join(EXPORT_JOBS_DIR, fileName)
-      await fs.writeFile(filePath, csv, 'utf8')
-      const relativePath = `jobs/${fileName}`
-      await updateExportJobCompleted(jobId, fileName, relativePath)
+
+      const zipFileName = `export-${jobId}.zip`
+      const zipFilePath = path.join(EXPORT_JOBS_DIR, zipFileName)
+      const entryName = 'inventory_transactions/transactions.csv'
+      const normalizedEntry = normalizeRelativePath(entryName)
+
+      const output = createWriteStream(zipFilePath)
+      const archive = archiver('zip', { zlib: { level: 9 } })
+      archive.pipe(output)
+      archive.append(csv, { name: normalizedEntry })
+      archive.finalize()
+
+      await new Promise<void>((resolve, reject) => {
+        output.on('close', () => resolve())
+        archive.on('error', reject)
+        output.on('error', reject)
+      })
+
+      const csvByteSize = Buffer.byteLength(csv, 'utf8')
+      await insertExportJobItem({
+        jobId,
+        relativePath: normalizedEntry,
+        sourceType: 'inventory_transactions_csv',
+        sourceId: null,
+        byteSize: csvByteSize,
+      })
+
+      const relativePath = `jobs/${zipFileName}`
+      await updateExportJobCompleted(jobId, zipFileName, relativePath, leaseId)
+
+      if (process.env.NODE_ENV !== 'test') {
+        console.log(JSON.stringify({ msg: 'export_job_complete', jobId, leaseId }))
+      }
     } else {
       await updateExportJobFailed(
         jobId,
-        `Unsupported job type: ${row.JobType}`
+        `Unsupported job type: ${row.JobType}`,
+        leaseId
       )
     }
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : 'Export failed'
-    await updateExportJobFailed(jobId, message)
+    const message = err instanceof Error ? err.message : 'Export failed'
+    await updateExportJobFailed(jobId, message, leaseId)
+    if (process.env.NODE_ENV !== 'test') {
+      console.error(JSON.stringify({ msg: 'export_job_failed', jobId, leaseId, error: message }))
+    }
+  } finally {
+    if (heartbeatTimer) clearInterval(heartbeatTimer)
   }
 }
 
