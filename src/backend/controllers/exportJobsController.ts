@@ -180,7 +180,11 @@ export const downloadExportJobHandler: RequestHandler = async (
       'Content-Disposition',
       `attachment; filename="${resolved.fileName}"`
     )
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    const isZip = resolved.fileName.toLowerCase().endsWith('.zip')
+    res.setHeader(
+      'Content-Type',
+      isZip ? 'application/zip' : 'text/csv; charset=utf-8'
+    )
     res.status(200).sendFile(resolved.absolutePath, (err) => {
       if (err) next(err)
     })
