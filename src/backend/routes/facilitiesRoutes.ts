@@ -8,6 +8,7 @@ import {
   listSystems,
   getSystemById,
 } from '../controllers/facilitiesController'
+import { listAssetsForSystem } from '../controllers/systemAssetsController'
 
 const router = Router()
 
@@ -37,6 +38,13 @@ router.get(
   verifyToken,
   requirePermission(PERMISSIONS.DASHBOARD_VIEW),
   getSystemById
+)
+
+router.get(
+  '/:facilityId/systems/:systemId/assets',
+  verifyToken,
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
+  listAssetsForSystem
 )
 
 export default router

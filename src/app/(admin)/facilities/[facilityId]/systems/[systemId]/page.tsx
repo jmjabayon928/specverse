@@ -126,12 +126,15 @@ export default function SystemPage({ params }: Props) {
               </div>
 
               <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-lg font-semibold mb-3">Future Tabs</h3>
+                <h3 className="text-lg font-semibold mb-3">Related Content</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-4 border border-gray-200 rounded-md bg-gray-50">
+                  <Link
+                    href={`/facilities/${facilityId}/systems/${systemId}/assets`}
+                    className="p-4 border border-gray-200 rounded-md bg-gray-50 hover:bg-gray-100 transition-colors"
+                  >
                     <div className="font-medium text-gray-700">Assets</div>
-                    <div className="text-sm text-gray-500 mt-1">Coming soon</div>
-                  </div>
+                    <div className="text-sm text-gray-500 mt-1">View assets</div>
+                  </Link>
                   <div className="p-4 border border-gray-200 rounded-md bg-gray-50">
                     <div className="font-medium text-gray-700">Checklists</div>
                     <div className="text-sm text-gray-500 mt-1">Coming soon</div>

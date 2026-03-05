@@ -33,6 +33,10 @@ import { applySheetTranslations } from '@/utils/applySheetTranslations'
 import { generateDatasheetPDF } from '@/utils/generateDatasheetPDF'
 import { generateDatasheetExcel } from '@/utils/generateDatasheetExcel'
 
+function escapeLike(s: string): string {
+  return s.replace(/[%_[\]\\]/g, '\$&')
+}
+
 type UOM = 'SI' | 'USC'
 
 async function ensureDir(dir: string): Promise<void> {
@@ -98,6 +102,14 @@ export type CreateAttachmentInput = {
    Queries for filled sheet listing (account-scoped: only caller's account)
    ────────────────────────────────────────────────────────────── */
 
+export type AssetFilledSheetRow = {
+  sheetId: number
+  sheetName: string
+  equipmentTagNum: string
+  status: string
+  revisionDate: string
+}
+
 export const fetchAllFilled = async (accountId: number) => {
   const pool = await poolPromise
 
@@ -129,6 +141,66 @@ export const fetchAllFilled = async (accountId: number) => {
   `)
 
   return result.recordset ?? []
+}
+
+export const fetchFilledSheetsForAsset = async (args: {
+  accountId: number
+  assetId: number
+  q?: string
+  status?: string
+  take: number
+  skip: number
+}): Promise<{ items: AssetFilledSheetRow[]; total: number }> => {
+  const pool = await poolPromise
+  const request = pool.request()
+
+  request.input('AccountID', sql.Int, args.accountId)
+  request.input('AssetID', sql.Int, args.assetId)
+  request.input('Take', sql.Int, args.take)
+  request.input('Skip', sql.Int, args.skip)
+
+  let query = `
+    SELECT
+      s.SheetID AS sheetId,
+      s.SheetName AS sheetName,
+      s.EquipmentTagNum AS equipmentTagNum,
+      s.Status AS status,
+      s.RevisionDate AS revisionDate,
+      COUNT(*) OVER() AS TotalCount
+    FROM Sheets s
+    WHERE s.IsTemplate = 0
+      AND s.AccountID = @AccountID
+      AND s.AssetID = @AssetID
+  `
+
+  if (args.status != null) {
+    query += ` AND s.Status = @Status`
+    request.input('Status', sql.VarChar(50), args.status)
+  }
+
+  if (args.q != null) {
+    const escapedQ = escapeLike(args.q)
+    query += ` AND (s.SheetName LIKE @Q ESCAPE '\' OR s.EquipmentTagNum LIKE @Q ESCAPE '\')`
+    request.input('Q', sql.VarChar(100), `%${escapedQ}%`)
+  }
+
+  query += `
+    ORDER BY s.SheetID DESC
+    OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY;
+  `
+
+  const result = await request.query<AssetFilledSheetRow & { TotalCount: number }>(query)
+
+  const total = result.recordset[0]?.TotalCount ?? 0
+  const items = result.recordset.map(row => ({
+    sheetId: row.sheetId,
+    sheetName: row.sheetName,
+    equipmentTagNum: row.equipmentTagNum,
+    status: row.status,
+    revisionDate: new Date(row.revisionDate).toISOString().split('T')[0],
+  }))
+
+  return { items, total }
 }
 
 export async function getRequiredTemplateFields(templateId: number): Promise<RequiredTemplateField[]> {

@@ -46,6 +46,7 @@ import {
   // export
   exportPDF,
   exportExcel,
+  fetchFilledSheetsForAsset
 } from "../services/filledSheetService"
 import { sheetBelongsToAccount } from "../services/sheetAccessService"
 import { mustGetAccountId } from '@/backend/utils/authGuards'
@@ -223,9 +224,75 @@ const checkTagQuerySchema = z.object({
   projectId: z.unknown(),
 })
 
+const assetIdParamsSchema = z.object({
+  assetId: z
+    .string()
+    .transform(s => Number(s))
+    .pipe(z.number().int().positive()),
+})
+
+const assetDatasheetQueryParamsSchema = z.object({
+  q: z
+    .string()
+    .optional()
+    .transform(s => {
+      if (s == null) return undefined
+      const trimmed = s.trim()
+      return trimmed === '' ? undefined : trimmed.slice(0, 100)
+    }),
+  status: z
+    .string()
+    .optional()
+    .transform(s => {
+      if (s == null) return undefined
+      const trimmed = s.trim()
+      return trimmed === '' ? undefined : trimmed.slice(0, 50)
+    }),
+  take: z
+    .string()
+    .optional()
+    .transform(s => (s ? Number(s) : undefined))
+    .pipe(z.number().int().min(1).max(200).optional()),
+  skip: z
+    .string()
+    .optional()
+    .transform(s => (s ? Number(s) : undefined))
+    .pipe(z.number().int().min(0).optional()),
+})
+
 /* ───────────────────────────────────────────
    Lists & reference
    ─────────────────────────────────────────── */
+
+export const listDatasheetsForAsset: RequestHandler = async (req, res, next) => {
+  try {
+    const accountId = mustGetAccountId(req, next)
+    if (!accountId) return
+
+    const parsedParams = assetIdParamsSchema.safeParse(req.params)
+    if (!parsedParams.success) {
+      throw new AppError('Invalid asset ID', 400)
+    }
+    const assetId = parsedParams.data.assetId
+
+    const parsedQuery = assetDatasheetQueryParamsSchema.safeParse(req.query)
+    if (!parsedQuery.success) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+
+    const filters = {
+      q: parsedQuery.data.q,
+      status: parsedQuery.data.status,
+      take: parsedQuery.data.take ?? 50,
+      skip: parsedQuery.data.skip ?? 0,
+    }
+
+    const result = await fetchFilledSheetsForAsset({ accountId, assetId, ...filters })
+    res.status(200).json(result)
+  } catch (err: unknown) {
+    handleError(next, err, 'Failed to fetch datasheets for asset')
+  }
+}
 
 export const getAllFilled: RequestHandler = async (req, res, next) => {
   try {
