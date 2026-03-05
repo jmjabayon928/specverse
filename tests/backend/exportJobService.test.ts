@@ -4,21 +4,25 @@
  */
 
 const mockClaimExportJob = jest.fn()
+const mockClaimNextExportJob = jest.fn()
 const mockInsertExportJobItem = jest.fn()
 const mockUpdateExportJobCompleted = jest.fn()
 const mockUpdateExportJobFailed = jest.fn()
 const mockGetInventoryTransactionsForCsv = jest.fn()
+const mockGetExportJobItemsForJob = jest.fn()
 
 jest.mock('../../src/backend/database/exportJobQueries', () => ({
   insertExportJob: jest.fn(),
   getExportJobById: jest.fn(),
   claimExportJob: (...args: unknown[]) => mockClaimExportJob(...args),
+  claimNextExportJob: (...args: unknown[]) => mockClaimNextExportJob(...args),
   heartbeatExportJob: jest.fn(),
   updateExportJobCompleted: (...args: unknown[]) => mockUpdateExportJobCompleted(...args),
   updateExportJobFailed: (...args: unknown[]) => mockUpdateExportJobFailed(...args),
   updateExportJobCancelled: jest.fn(),
   updateExportJobResetForRetry: jest.fn(),
   listExportJobsForCleanup: jest.fn(),
+  getExportJobItemsForJob: (...args: unknown[]) => mockGetExportJobItemsForJob(...args),
   insertExportJobItem: (...args: unknown[]) => mockInsertExportJobItem(...args),
 }))
 
@@ -56,6 +60,7 @@ jest.mock('archiver', () => {
   }))
 })
 
+const mockExistsSync = jest.fn()
 jest.mock('fs', () => ({
   createWriteStream: jest.fn(() => ({
     on: jest.fn((ev: string, fn: () => void) => {
@@ -70,6 +75,7 @@ jest.mock('fs', () => ({
       return { on: jest.fn() }
     }),
   })),
+  existsSync: (...args: unknown[]) => mockExistsSync(...args),
 }))
 
 jest.mock('fs/promises', () => ({
@@ -79,7 +85,11 @@ jest.mock('fs/promises', () => ({
   writeFile: jest.fn().mockResolvedValue(undefined),
 }))
 
-import { runExportJob } from '../../src/backend/services/exportJobService'
+import {
+  runExportJob,
+  runClaimedExportJob,
+  startExportJobRunner,
+} from '../../src/backend/services/exportJobService'
 
 const stubClaimedRow = {
   Id: 50,
@@ -98,6 +108,7 @@ const stubClaimedRow = {
   LeaseId: null as string | null,
   LeasedUntil: null as Date | null,
   AttemptCount: 0,
+  MaxAttempts: 3,
 }
 
 describe('exportJobService', () => {
@@ -105,6 +116,8 @@ describe('exportJobService', () => {
     jest.clearAllMocks()
     streamCloseCallback = null
     finalizeCalled = false
+    mockExistsSync.mockReturnValue(false)
+    mockGetExportJobItemsForJob.mockResolvedValue([])
     mockGetInventoryTransactionsForCsv.mockResolvedValue([])
     mockClaimExportJob.mockResolvedValue({
       claimed: true,
@@ -156,6 +169,92 @@ describe('exportJobService', () => {
       expect(mockInsertExportJobItem).not.toHaveBeenCalled()
       expect(mockUpdateExportJobCompleted).not.toHaveBeenCalled()
       expect(mockUpdateExportJobFailed).not.toHaveBeenCalled()
+    })
+
+    it('runClaimedExportJob still produces .zip and inserts ExportJobItems with normalized path', async () => {
+      mockGetInventoryTransactionsForCsv.mockResolvedValue([
+        {
+          transactionId: 1,
+          itemId: 10,
+          itemName: 'Item',
+          warehouseId: 1,
+          warehouseName: 'WH1',
+          quantityChanged: 5,
+          transactionType: 'Receive',
+          performedAt: new Date().toISOString(),
+          performedBy: 'User',
+        },
+      ])
+
+      await runClaimedExportJob(stubClaimedRow, 'lease-123')
+
+      expect(mockInsertExportJobItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: 50,
+          relativePath: 'inventory_transactions/transactions.csv',
+          sourceType: 'inventory_transactions_csv',
+        })
+      )
+      expect(mockUpdateExportJobCompleted).toHaveBeenCalledTimes(1)
+      expect(mockUpdateExportJobCompleted.mock.calls[0][1]).toMatch(/\.zip$/)
+    })
+
+    it('runClaimedExportJob completes without regenerating when zip already exists', async () => {
+      mockExistsSync.mockReturnValue(true)
+      mockGetExportJobItemsForJob.mockResolvedValue([])
+      const rowWithExistingFile = {
+        ...stubClaimedRow,
+        Status: 'running',
+        LeaseId: 'lease-456',
+        FileName: 'export-50.zip',
+        FilePath: 'jobs/export-50.zip',
+      }
+
+      await runClaimedExportJob(rowWithExistingFile, 'lease-456')
+
+      expect(mockUpdateExportJobCompleted).toHaveBeenCalledTimes(1)
+      expect(mockUpdateExportJobCompleted).toHaveBeenCalledWith(50, 'export-50.zip', 'jobs/export-50.zip', 'lease-456')
+      expect(mockGetInventoryTransactionsForCsv).not.toHaveBeenCalled()
+      expect(mockAppend).not.toHaveBeenCalled()
+      expect(mockFinalize).not.toHaveBeenCalled()
+      expect(mockInsertExportJobItem).toHaveBeenCalledTimes(1)
+      expect(mockInsertExportJobItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: 50,
+          relativePath: 'inventory_transactions/transactions.csv',
+          sourceType: 'inventory_transactions_csv',
+        })
+      )
+    })
+  })
+
+  describe('runner', () => {
+    it('calls claimNextExportJob when poll fires and runs job when claimed', async () => {
+      jest.useFakeTimers()
+      mockClaimNextExportJob.mockResolvedValue({ claimed: true, row: { ...stubClaimedRow, Id: 51 } })
+      mockGetInventoryTransactionsForCsv.mockResolvedValue([])
+
+      startExportJobRunner({
+        enabled: true,
+        workerId: 'runner-1',
+        pollIntervalMs: 5000,
+        leaseTtlMs: 300000,
+        heartbeatMs: 60000,
+        globalConcurrency: 2,
+        perAccountLimit: 1,
+      })
+
+      expect(mockClaimNextExportJob).not.toHaveBeenCalled()
+      jest.advanceTimersByTime(5000)
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(mockClaimNextExportJob).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Date),
+        expect.any(Date),
+        1
+      )
+      jest.useRealTimers()
     })
   })
 })

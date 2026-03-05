@@ -1,7 +1,8 @@
 // src/backend/services/exportJobService.ts
 import path from 'path'
 import fs from 'fs/promises'
-import { createWriteStream } from 'fs'
+import { createWriteStream, existsSync } from 'fs'
+import { Readable, Transform } from 'stream'
 import jwt from 'jsonwebtoken'
 import archiver from 'archiver'
 import { randomUUID } from 'crypto'
@@ -9,12 +10,14 @@ import {
   insertExportJob,
   getExportJobById,
   claimExportJob,
+  claimNextExportJob,
   heartbeatExportJob,
   updateExportJobCompleted,
   updateExportJobFailed,
   updateExportJobCancelled,
   updateExportJobResetForRetry,
   listExportJobsForCleanup,
+  getExportJobItemsForJob,
   insertExportJobItem,
   type ExportJobRow,
   type ExportJobStatus,
@@ -37,9 +40,15 @@ const DOWNLOAD_TOKEN_EXPIRES_IN = '5m'
 const LEASE_TTL_MS = 5 * 60 * 1000
 const HEARTBEAT_INTERVAL_MS = 60 * 1000
 
-/** Normalize relative path for deterministic manifest: forward slashes, no leading ./ */
+/** Normalize relative path for deterministic manifest: forward slashes, trim leading slashes. Rejects ".." segments. */
 function normalizeRelativePath(relativePath: string): string {
-  const normalized = relativePath.replace(/\\/g, '/').replace(/^\.\//, '')
+  if (relativePath.includes('..')) {
+    throw new Error('Relative path must not contain ".."')
+  }
+  const normalized = relativePath
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/^\/+/, '')
   return normalized || relativePath
 }
 
@@ -128,48 +137,76 @@ function paramsToInventoryFilters(
   }
 }
 
-function buildInventoryTransactionsCsv(rows: InventoryTransactionDTO[]): string {
-  const headers = [
-    'Transaction ID',
-    'Item ID',
-    'Item Name',
-    'Warehouse ID',
-    'Warehouse Name',
-    'Quantity Changed',
-    'Transaction Type',
-    'Performed At',
-    'Performed By',
-  ]
-  const escapeCsvField = (field: unknown): string => {
-    if (field === null || field === undefined) return ''
-    const str = String(field)
-    if (
-      str.includes(',') ||
-      str.includes('"') ||
-      str.includes('\n') ||
-      str.includes('\r')
-    ) {
-      return `"${str.replace(/"/g, '""')}"`
-    }
-    return str
+const CSV_HEADERS = [
+  'Transaction ID',
+  'Item ID',
+  'Item Name',
+  'Warehouse ID',
+  'Warehouse Name',
+  'Quantity Changed',
+  'Transaction Type',
+  'Performed At',
+  'Performed By',
+]
+
+function escapeCsvField(field: unknown): string {
+  if (field === null || field === undefined) return ''
+  const str = String(field)
+  if (
+    str.includes(',') ||
+    str.includes('"') ||
+    str.includes('\n') ||
+    str.includes('\r')
+  ) {
+    return `"${str.replace(/"/g, '""')}"`
   }
-  const csvRows = [
-    headers.join(','),
-    ...rows.map((row) =>
-      [
-        escapeCsvField(row.transactionId),
-        escapeCsvField(row.itemId),
-        escapeCsvField(row.itemName),
-        escapeCsvField(row.warehouseId),
-        escapeCsvField(row.warehouseName),
-        escapeCsvField(row.quantityChanged),
-        escapeCsvField(row.transactionType),
-        escapeCsvField(row.performedAt),
-        escapeCsvField(row.performedBy),
-      ].join(',')
-    ),
-  ]
-  return csvRows.join('\n')
+  return str
+}
+
+function csvLine(row: InventoryTransactionDTO): string {
+  return [
+    escapeCsvField(row.transactionId),
+    escapeCsvField(row.itemId),
+    escapeCsvField(row.itemName),
+    escapeCsvField(row.warehouseId),
+    escapeCsvField(row.warehouseName),
+    escapeCsvField(row.quantityChanged),
+    escapeCsvField(row.transactionType),
+    escapeCsvField(row.performedAt),
+    escapeCsvField(row.performedBy),
+  ].join(',')
+}
+
+/** Create a readable stream of CSV (header + one line per row). Avoids building one big string in memory. */
+function createInventoryTransactionsCsvStream(
+  rows: InventoryTransactionDTO[]
+): Readable {
+  const headerLine = CSV_HEADERS.join(',')
+  let index = 0
+  let headerSent = false
+  const stream = new Readable({
+    objectMode: false,
+    read() {
+      if (!headerSent) {
+        headerSent = true
+        this.push(headerLine + '\n')
+        return
+      }
+      if (index >= rows.length) {
+        this.push(null)
+        return
+      }
+      this.push(csvLine(rows[index]) + '\n')
+      index += 1
+    },
+  })
+  return stream
+}
+
+/** Backoff seconds by attempt index (0-based): 30, 120, 600. */
+function backoffSecondsForAttempt(attemptCount: number): number {
+  const backoff = [30, 120, 600]
+  return backoff[Math.min(attemptCount, backoff.length - 1)] ?? 600
 }
 
 /** Start a new export job; enqueues execution via setImmediate. Returns jobId. */
@@ -197,11 +234,13 @@ export async function startExportJob(
     createdBy: input.userId,
   })
 
-  setImmediate(() => {
-    runExportJob(jobId).catch((err) => {
-      console.error('Export job failed:', jobId, err)
+  if (process.env.NODE_ENV !== 'test') {
+    setImmediate(() => {
+      void runExportJob(jobId).catch((err) => {
+        console.error('Export job failed:', jobId, err)
+      })
     })
-  })
+  }
 
   const row = await getExportJobById(jobId)
   const createdAt = row?.CreatedAt.toISOString() ?? new Date().toISOString()
@@ -217,20 +256,9 @@ export async function getExportJobStatus(
   return rowToStatusDto(row)
 }
 
-/** Run the export job (worker): claim, generate file, write ZIP, update row. */
-export async function runExportJob(jobId: number): Promise<void> {
-  const leaseId = randomUUID()
-  const startedAt = new Date()
-  const leasedUntil = new Date(Date.now() + LEASE_TTL_MS)
-
-  const { claimed, row } = await claimExportJob(jobId, leaseId, leasedUntil, startedAt)
-  if (!claimed || !row) {
-    if (process.env.NODE_ENV !== 'test') {
-      console.log(JSON.stringify({ msg: 'export_job_claim_skipped', jobId, leaseId }))
-    }
-    return
-  }
-
+/** Run a job that is already claimed. Used by runner and by runExportJob after claim. */
+export async function runClaimedExportJob(row: ExportJobRow, leaseId: string): Promise<void> {
+  const jobId = row.Id
   if (process.env.NODE_ENV !== 'test') {
     console.log(JSON.stringify({ msg: 'export_job_start', jobId, leaseId }))
   }
@@ -238,34 +266,95 @@ export async function runExportJob(jobId: number): Promise<void> {
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   const scheduleHeartbeat = (): void => {
     heartbeatTimer = setInterval(async () => {
-      const nextUntil = new Date(Date.now() + LEASE_TTL_MS)
-      const ok = await heartbeatExportJob(jobId, leaseId, nextUntil)
-      if (!ok && process.env.NODE_ENV !== 'test') {
-        console.warn(JSON.stringify({ msg: 'export_job_heartbeat_failed', jobId, leaseId }))
+      try {
+        const nextUntil = new Date(Date.now() + LEASE_TTL_MS)
+        const ok = await heartbeatExportJob(jobId, leaseId, nextUntil)
+        if (!ok && process.env.NODE_ENV !== 'test') {
+          console.warn(JSON.stringify({ msg: 'export_job_heartbeat_failed', jobId, leaseId }))
+        }
+      } catch (heartbeatErr) {
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn(
+            JSON.stringify({
+              msg: 'export_job_heartbeat_error',
+              jobId,
+              leaseId,
+              error: heartbeatErr instanceof Error ? heartbeatErr.message : String(heartbeatErr),
+            })
+          )
+        }
       }
     }, HEARTBEAT_INTERVAL_MS)
   }
   scheduleHeartbeat()
 
+  const attemptCount = row.AttemptCount ?? 0
+
   try {
     if (row.JobType === 'inventory_transactions_csv') {
+      const zipFileName = `export-${jobId}.zip`
+      const expectedRelativePath = `jobs/${zipFileName}`
+      const entryName = 'inventory_transactions/transactions.csv'
+      const normalizedEntry = normalizeRelativePath(entryName)
+
+      if (
+        row.Status === 'running' &&
+        row.LeaseId === leaseId &&
+        row.FileName === zipFileName &&
+        row.FilePath === expectedRelativePath
+      ) {
+        const stored = row.FilePath
+        if (!path.isAbsolute(stored) && !stored.includes('..')) {
+          const basename = path.basename(stored)
+          const absolutePath = path.join(EXPORT_JOBS_DIR, basename)
+          const resolved = path.resolve(absolutePath)
+          const root = path.resolve(EXPORT_JOBS_DIR)
+          const relative = path.relative(root, resolved)
+          if (!relative.startsWith('..') && !path.isAbsolute(relative) && existsSync(resolved)) {
+            await updateExportJobCompleted(jobId, zipFileName, expectedRelativePath, leaseId)
+            const items = await getExportJobItemsForJob(jobId)
+            const hasEntry = items.some((i) => i.RelativePath === normalizedEntry)
+            if (!hasEntry) {
+              await insertExportJobItem({
+                jobId,
+                relativePath: normalizedEntry,
+                sourceType: 'inventory_transactions_csv',
+                sourceId: null,
+                byteSize: null,
+              })
+            }
+            if (process.env.NODE_ENV !== 'test') {
+              console.log(JSON.stringify({ msg: 'export_job_complete_skip_regenerate', jobId, leaseId }))
+            }
+            return
+          }
+        }
+      }
+
       const params = row.ParamsJson
         ? (JSON.parse(row.ParamsJson) as Record<string, unknown>)
         : {}
       const filters = paramsToInventoryFilters(params)
       const rows = await getInventoryTransactionsForCsv(filters, CSV_LIMIT)
-      const csv = buildInventoryTransactionsCsv(rows)
       await ensureExportJobsDir()
 
-      const zipFileName = `export-${jobId}.zip`
       const zipFilePath = path.join(EXPORT_JOBS_DIR, zipFileName)
-      const entryName = 'inventory_transactions/transactions.csv'
-      const normalizedEntry = normalizeRelativePath(entryName)
+
+      const csvStream = createInventoryTransactionsCsvStream(rows)
+      const byteCounter = new Transform({
+        transform(chunk: Buffer | string, _enc, cb) {
+          ;(this as Transform & { _bytes: number })._bytes =
+            ((this as Transform & { _bytes: number })._bytes || 0) + chunk.length
+          cb(null, chunk)
+        },
+      })
+      ;(byteCounter as Transform & { _bytes: number })._bytes = 0
+      csvStream.pipe(byteCounter)
 
       const output = createWriteStream(zipFilePath)
       const archive = archiver('zip', { zlib: { level: 9 } })
       archive.pipe(output)
-      archive.append(csv, { name: normalizedEntry })
+      archive.append(byteCounter, { name: normalizedEntry })
       archive.finalize()
 
       await new Promise<void>((resolve, reject) => {
@@ -274,13 +363,13 @@ export async function runExportJob(jobId: number): Promise<void> {
         output.on('error', reject)
       })
 
-      const csvByteSize = Buffer.byteLength(csv, 'utf8')
+      const csvByteSize = (byteCounter as Transform & { _bytes?: number })._bytes ?? null
       await insertExportJobItem({
         jobId,
         relativePath: normalizedEntry,
         sourceType: 'inventory_transactions_csv',
         sourceId: null,
-        byteSize: csvByteSize,
+        byteSize: csvByteSize ?? undefined,
       })
 
       const relativePath = `jobs/${zipFileName}`
@@ -293,18 +382,40 @@ export async function runExportJob(jobId: number): Promise<void> {
       await updateExportJobFailed(
         jobId,
         `Unsupported job type: ${row.JobType}`,
-        leaseId
+        leaseId,
+        backoffSecondsForAttempt(attemptCount)
       )
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Export failed'
-    await updateExportJobFailed(jobId, message, leaseId)
+    await updateExportJobFailed(
+      jobId,
+      message,
+      leaseId,
+      backoffSecondsForAttempt(attemptCount)
+    )
     if (process.env.NODE_ENV !== 'test') {
       console.error(JSON.stringify({ msg: 'export_job_failed', jobId, leaseId, error: message }))
     }
   } finally {
     if (heartbeatTimer) clearInterval(heartbeatTimer)
   }
+}
+
+/** Run the export job (worker): claim by jobId, then run. Used when triggered by HTTP (setImmediate). */
+export async function runExportJob(jobId: number): Promise<void> {
+  const leaseId = randomUUID()
+  const startedAt = new Date()
+  const leasedUntil = new Date(Date.now() + LEASE_TTL_MS)
+
+  const { claimed, row } = await claimExportJob(jobId, leaseId, leasedUntil, startedAt)
+  if (!claimed || !row) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(JSON.stringify({ msg: 'export_job_claim_skipped', jobId, leaseId }))
+    }
+    return
+  }
+  await runClaimedExportJob(row, leaseId)
 }
 
 /** Resolve absolute file path for a completed job. Returns null if expired, file missing, or path unsafe. */
@@ -376,12 +487,101 @@ export async function retryExportJob(jobId: number): Promise<boolean> {
   if (!row) return false
   if (row.Status !== 'failed') return false
   await updateExportJobResetForRetry(jobId)
-  setImmediate(() => {
-    runExportJob(jobId).catch((err) => {
-      console.error('Export job retry failed:', jobId, err)
+  if (process.env.NODE_ENV !== 'test') {
+    setImmediate(() => {
+      void runExportJob(jobId).catch((err) => {
+        console.error('Export job retry failed:', jobId, err)
+      })
     })
-  })
+  }
   return true
+}
+
+export interface ExportJobRunnerOptions {
+  enabled: boolean
+  workerId: string
+  pollIntervalMs: number
+  leaseTtlMs: number
+  heartbeatMs: number
+  globalConcurrency: number
+  perAccountLimit: number
+}
+
+let runnerTimeoutId: ReturnType<typeof setTimeout> | null = null
+
+/** Start the background export job runner. Stops any existing runner. */
+export function startExportJobRunner(opts: ExportJobRunnerOptions): void {
+  if (runnerTimeoutId) {
+    clearTimeout(runnerTimeoutId)
+    runnerTimeoutId = null
+  }
+  if (!opts.enabled) return
+
+  let inFlight = 0
+  let consecutiveEmptyPolls = 0
+
+  const scheduleNext = (delayMs: number): void => {
+    runnerTimeoutId = setTimeout(() => {
+      runOne().catch((err) => {
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn(JSON.stringify({ msg: 'export_job_runner_poll_error', error: String(err) }))
+        }
+      }).finally(() => {
+        const nextDelay =
+          consecutiveEmptyPolls === 0
+            ? opts.pollIntervalMs
+            : Math.min(10000, opts.pollIntervalMs * (1 + consecutiveEmptyPolls))
+        scheduleNext(nextDelay)
+      })
+    }, delayMs)
+  }
+
+  const runOne = async (): Promise<void> => {
+    if (inFlight >= opts.globalConcurrency) return
+    const leaseId = randomUUID()
+    const leasedUntil = new Date(Date.now() + opts.leaseTtlMs)
+    const startedAt = new Date()
+    const { claimed, row } = await claimNextExportJob(
+      leaseId,
+      leasedUntil,
+      startedAt,
+      opts.perAccountLimit
+    )
+    if (!claimed || !row) {
+      consecutiveEmptyPolls += 1
+      return
+    }
+    consecutiveEmptyPolls = 0
+    inFlight += 1
+    runClaimedExportJob(row, leaseId).catch((err) => {
+      if (process.env.NODE_ENV !== 'test') {
+        console.error(
+          JSON.stringify({
+            msg: 'export_job_runner_error',
+            jobId: row.Id,
+            leaseId,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        )
+      }
+    }).finally(() => {
+      inFlight -= 1
+    })
+  }
+
+  scheduleNext(opts.pollIntervalMs)
+
+  if (process.env.NODE_ENV !== 'test') {
+    console.log(
+      JSON.stringify({
+        msg: 'export_job_runner_started',
+        workerId: opts.workerId,
+        pollIntervalMs: opts.pollIntervalMs,
+        globalConcurrency: opts.globalConcurrency,
+        perAccountLimit: opts.perAccountLimit,
+      })
+    )
+  }
 }
 
 /** Cleanup expired jobs: delete files and optionally clear FilePath. */

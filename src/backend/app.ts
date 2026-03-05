@@ -1,5 +1,6 @@
 // src/backend/app.ts
 import express, { type Application, type Request, type Response } from 'express'
+import { randomUUID } from 'crypto'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import helmet from 'helmet'
@@ -40,6 +41,7 @@ import devRoutes from './routes/devRoutes'
 import auditLogsRoutes from './routes/auditLogsRoutes'
 import platformAdminsRoutes from './routes/platformAdminsRoutes'
 import exportJobsRoutes from './routes/exportJobsRoutes'
+import { startExportJobRunner } from './services/exportJobService'
 import importsRoutes from './routes/importsRoutes'
 import verificationRecordsRoutes from './routes/verificationRecordsRoutes'
 import datasheetVerificationRecordsRoutes from './routes/datasheetVerificationRecordsRoutes'
@@ -381,6 +383,24 @@ if (process.env.NODE_ENV !== 'production') {
     }))
 
     res.json(flat)
+  })
+}
+
+// Export job background runner (start on boot unless disabled or in test)
+if (process.env.NODE_ENV !== 'test' && process.env.ENABLE_EXPORT_JOB_RUNNER !== 'false') {
+  const pollMs = parseInt(process.env.EXPORT_JOB_RUNNER_POLL_MS ?? '2000', 10)
+  const workers = parseInt(process.env.EXPORT_JOB_WORKERS ?? '2', 10)
+  const perAccountLimit = parseInt(process.env.EXPORT_JOB_PER_ACCOUNT_LIMIT ?? '1', 10)
+  const leaseTtlMs = parseInt(process.env.EXPORT_JOB_LEASE_TTL_MS ?? '300000', 10)
+  const heartbeatMs = parseInt(process.env.EXPORT_JOB_HEARTBEAT_MS ?? '60000', 10)
+  startExportJobRunner({
+    enabled: true,
+    workerId: randomUUID(),
+    pollIntervalMs: Number.isInteger(pollMs) && pollMs > 0 ? pollMs : 2000,
+    leaseTtlMs: Number.isInteger(leaseTtlMs) && leaseTtlMs > 0 ? leaseTtlMs : 300000,
+    heartbeatMs: Number.isInteger(heartbeatMs) && heartbeatMs > 0 ? heartbeatMs : 60000,
+    globalConcurrency: Number.isInteger(workers) && workers > 0 ? workers : 2,
+    perAccountLimit: Number.isInteger(perAccountLimit) && perAccountLimit > 0 ? perAccountLimit : 1,
   })
 }
 

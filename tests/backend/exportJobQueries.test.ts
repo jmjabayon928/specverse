@@ -23,6 +23,7 @@ jest.mock('../../src/backend/config/db', () => ({
 
 import {
   claimExportJob,
+  claimNextExportJob,
   heartbeatExportJob,
   clearLeaseOnTerminal,
 } from '../../src/backend/database/exportJobQueries'
@@ -152,6 +153,47 @@ describe('exportJobQueries', () => {
       expect(queryText).toContain('LeaseId = NULL')
       expect(queryText).toContain('LeasedUntil = NULL')
       expect(queryText).toContain('LeaseId = @LeaseId')
+    })
+  })
+
+  describe('claimNextExportJob', () => {
+    it('returns claimed and row when one job is claimed', async () => {
+      mockQuery.mockResolvedValueOnce({
+        recordset: [{ ...stubRow, Id: 200 }],
+        rowsAffected: [1],
+      })
+
+      const result = await claimNextExportJob(
+        'c3d4e5f6-0000-4000-8000-000000000003',
+        new Date(Date.now() + 300000),
+        new Date(),
+        1
+      )
+
+      expect(result.claimed).toBe(true)
+      expect(result.row?.Id).toBe(200)
+      expect(mockQuery).toHaveBeenCalledTimes(1)
+      const queryText = mockQuery.mock.calls[0][0]
+      expect(queryText).toContain('NextAttemptAt')
+      expect(queryText).toContain('SYSUTCDATETIME()')
+      expect(queryText).toContain('PerAccountLimit')
+      expect(queryText).toContain('@PerAccountLimit')
+      expect(queryText).toMatch(/COUNT\s*\(\s*1\s*\)|AccountID|per.*account/i)
+    })
+
+    it('respects NextAttemptAt in eligible predicate', async () => {
+      mockQuery.mockResolvedValueOnce({ recordset: [], rowsAffected: [0] })
+
+      await claimNextExportJob(
+        'd4e5f6a7-0000-4000-8000-000000000004',
+        new Date(Date.now() + 300000),
+        new Date(),
+        2
+      )
+
+      const queryText = mockQuery.mock.calls[0][0]
+      expect(queryText).toContain("Status = 'queued'")
+      expect(queryText).toContain('NextAttemptAt IS NULL OR ej.NextAttemptAt <= SYSUTCDATETIME()')
     })
   })
 })

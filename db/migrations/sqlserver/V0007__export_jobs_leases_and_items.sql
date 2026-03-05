@@ -1,4 +1,4 @@
--- V0005 (export jobs): Export job leases and ExportJobItems (idempotent).
+-- V0007 (export jobs): Export job leases and ExportJobItems (idempotent).
 -- Safe to re-run: uses existence checks.
 
 SET NOCOUNT ON
