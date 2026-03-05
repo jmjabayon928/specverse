@@ -9,6 +9,8 @@ SpecVerse is a production-grade engineering system of record for EPC, industrial
 
 It unifies datasheets, equipment specifications, schedules, estimations, inventory, verification records, and exports into a single, auditable, multi-tenant platform—designed to scale across disciplines, projects, and organizations.
 
+SpecVerse has been validated through a realistic Water/Wastewater engineering pilot demonstrating facility hierarchy, asset organization, datasheet workflows, estimation, inventory tracking, and engineering verification processes.
+
 Unlike traditional tools that treat datasheets as static documents, SpecVerse models engineering data as structured, lifecycle-aware entities with approvals, revisions, traceability, and downstream impact on cost, procurement, and operations.
 
 ## 🌟 Key Innovation — Dynamic Engineering Data, Not Static Forms
@@ -32,6 +34,7 @@ SpecVerse is intentionally designed as:
 - A multi-tenant engineering platform with strict account isolation, roles, and permissions
 - A QA/QC and compliance-ready foundation with approvals, verification records, audit trails, and exportable evidence
 - An AI-ready platform that can evolve toward assistive intelligence without compromising engineering judgment or accountability
+- Validated through a water and wastewater facility pilot architecture
 
 Every architectural decision — schema design, replace-all transactions, audit logging, permission enforcement, and comprehensive testing — reinforces these principles.
 
@@ -271,6 +274,29 @@ Operational visibility is built into the platform, not bolted on.
 - Platform Capabilities
 - Role-specific dashboards (Engineer, Manager, Admin, etc.)
 - Interactive charts with modal data inspection
+
+## 💧 Water & Wastewater Pilot Implementation
+
+SpecVerse has been validated through a realistic pilot modeling a municipal water / wastewater engineering environment.
+
+The pilot demonstrates:
+
+* Facilities hierarchy (Facility → Systems)
+* Mechanical Equipment List (MEL)
+* Asset 360 engineering view
+* Datasheet lifecycle and approvals
+* Engineering estimations and supplier quotations
+* Inventory tracking
+* Verification and inspection records
+* Engineering schedules and commissioning workflows
+* Export packs for engineering documentation
+
+This validates SpecVerse as a scalable engineering data platform suitable for:
+
+* EPC contractors
+* municipal infrastructure projects
+* industrial facilities
+* asset-intensive engineering environments
 
 ## 🚧 Near-Term Platform Expansion
 
@@ -1225,6 +1251,41 @@ SpecVerse uses a layered testing strategy covering backend, domain logic, and UI
 - CI
 - CI runs on pushes to main, staging, and release/**
 - All linting, type-checking, and tests must pass before merge
+
+---
+
+## 🏛 Enterprise Design Principles
+
+* multi-tenant architecture with account isolation
+* auditability and engineering traceability
+* structured engineering data models
+* runtime-configurable datasheet templates
+* CI/CD validated builds
+* automated testing and quality gates
+* scalable engineering data platform
+
+## 💻 Technology Stack
+
+### Frontend
+* Next.js (App Router)
+* React
+* TypeScript
+
+### Backend
+* Node.js
+* Express
+
+### Database
+* Microsoft SQL Server
+
+### DevOps
+* GitHub Actions
+* automated testing with Jest
+* VPS deployment
+
+### Architecture
+* multi-tenant design
+* domain-driven backend structure
 
 ---
 
