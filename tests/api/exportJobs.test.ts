@@ -111,6 +111,7 @@ function createAuthCookie(
 
 const mockInsertExportJob = jest.fn()
 const mockGetExportJobById = jest.fn()
+const mockClaimExportJob = jest.fn()
 const mockUpdateExportJobResetForRetry = jest.fn()
 const mockGetInventoryTransactionsPaged = jest.fn()
 const mockResolveExportFilePath = jest.fn()
@@ -120,6 +121,11 @@ const mockCleanupExpiredExportJobs = jest.fn()
 jest.mock('../../src/backend/database/exportJobQueries', () => ({
   insertExportJob: (...args: unknown[]) => mockInsertExportJob(...args),
   getExportJobById: (...args: unknown[]) => mockGetExportJobById(...args),
+  claimExportJob: (...args: unknown[]) => mockClaimExportJob(...args),
+  claimNextExportJob: jest.fn().mockResolvedValue({ claimed: false, row: null }),
+  heartbeatExportJob: jest.fn().mockResolvedValue(true),
+  clearLeaseOnTerminal: jest.fn().mockResolvedValue(undefined),
+  insertExportJobItem: jest.fn().mockResolvedValue(undefined),
   updateExportJobRunning: jest.fn(),
   updateExportJobCompleted: jest.fn(),
   updateExportJobFailed: jest.fn(),
@@ -209,6 +215,7 @@ describe('Export Jobs API', () => {
     mockGetInventoryTransactionsPaged.mockResolvedValue({ total: 100, rows: [] })
     mockInsertExportJob.mockResolvedValue(123)
     mockGetExportJobById.mockResolvedValue(defaultJobRow())
+    mockClaimExportJob.mockResolvedValue({ claimed: true, row: defaultJobRow() })
   })
 
   describe('POST /api/backend/exports/jobs', () => {
