@@ -34,43 +34,49 @@ BEGIN
 END
 
 -- Backfill UpdatedAt = CreatedAt for existing rows
-UPDATE dbo.ChecklistRuns
-SET UpdatedAt = CreatedAt
-WHERE UpdatedAt IS NULL;
+IF COL_LENGTH('dbo.ChecklistRuns', 'UpdatedAt') IS NOT NULL
+BEGIN
+  UPDATE dbo.ChecklistRuns
+  SET UpdatedAt = CreatedAt
+  WHERE UpdatedAt IS NULL;
+END
 
 -- Backfill Status = 'DRAFT' for existing rows (including invalid values)
-UPDATE dbo.ChecklistRuns
-SET Status = 'DRAFT'
-WHERE Status IS NULL 
-   OR Status = ''
-   OR Status NOT IN ('DRAFT', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
-
--- Backfill VersionNumber = 1 for existing templates
-UPDATE dbo.ChecklistTemplates
-SET VersionNumber = 1
-WHERE VersionNumber IS NULL;
+IF COL_LENGTH('dbo.ChecklistRuns', 'Status') IS NOT NULL
+BEGIN
+  UPDATE dbo.ChecklistRuns
+  SET Status = 'DRAFT'
+  WHERE Status IS NULL
+     OR Status = ''
+     OR Status NOT IN ('DRAFT', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
+END
 
 -- Backfill Status = 'DRAFT' for existing templates (including invalid values)
-UPDATE dbo.ChecklistTemplates
-SET Status = 'DRAFT'
-WHERE Status IS NULL 
-   OR Status = ''
-   OR Status NOT IN ('DRAFT', 'PUBLISHED', 'ARCHIVED');
+IF COL_LENGTH('dbo.ChecklistTemplates', 'Status') IS NOT NULL
+BEGIN
+  UPDATE dbo.ChecklistTemplates
+  SET Status = 'DRAFT'
+  WHERE Status IS NULL
+     OR Status = ''
+     OR Status NOT IN ('DRAFT', 'PUBLISHED', 'ARCHIVED');
+END
 
 -- Add CHECK constraint for valid Status values
 IF NOT EXISTS (
-  SELECT 1 FROM sys.check_constraints 
+  SELECT 1
+  FROM sys.check_constraints
   WHERE name = 'CK_ChecklistRuns_Status'
 )
 BEGIN
   ALTER TABLE dbo.ChecklistRuns
-  ADD CONSTRAINT CK_ChecklistRuns_Status 
+  ADD CONSTRAINT CK_ChecklistRuns_Status
   CHECK (Status IN ('DRAFT', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'));
 END
 
 -- Create index for template status lookups
 IF NOT EXISTS (
-  SELECT 1 FROM sys.indexes 
+  SELECT 1
+  FROM sys.indexes
   WHERE name = 'IX_ChecklistTemplates_AccountID_Status'
 )
 BEGIN
