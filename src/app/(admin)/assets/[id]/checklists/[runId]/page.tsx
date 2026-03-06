@@ -5,6 +5,8 @@ import AssetHeader from '@/components/assets/AssetHeader'
 import AssetTabs from '@/components/assets/AssetTabs'
 import ChecklistRunDetail from '@/components/checklists/ChecklistRunDetail'
 
+export const dynamic = 'force-dynamic'
+
 type PageProps = {
   params: { id: string; runId: string }
 }
