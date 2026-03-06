@@ -114,6 +114,12 @@ describe('createChecklistRunWithEntries', () => {
   })
 
   it('uses a transaction, set-based tenant-scoped SQL, and returns result on success', async () => {
+    const templateVersionHandler = jest
+      .fn<Promise<{ recordset: Array<Record<string, unknown>> }>, [string]>()
+      .mockResolvedValue({
+        recordset: [{ VersionNumber: 2 }],
+      })
+
     const insertRunHandler = jest
       .fn<Promise<{ recordset: Array<Record<string, unknown>> }>, [string]>()
       .mockResolvedValue({
@@ -126,7 +132,7 @@ describe('createChecklistRunWithEntries', () => {
         recordset: [{ EntryCount: 5 }],
       })
 
-    MockRequest.nextQueryHandlers.push(insertRunHandler, insertEntriesHandler)
+    MockRequest.nextQueryHandlers.push(templateVersionHandler, insertRunHandler, insertEntriesHandler)
 
     const result = await createChecklistRunWithEntries(baseArgs)
 
@@ -149,7 +155,11 @@ describe('createChecklistRunWithEntries', () => {
       .map(q => q.sql)
       .join(' ')
 
+    expect(allSql).toContain('SELECT VersionNumber')
+    expect(allSql).toContain('FROM dbo.ChecklistTemplates')
+    expect(allSql).toContain('WHERE AccountID = @AccountID')
     expect(allSql).toContain('INSERT INTO dbo.ChecklistRuns')
+    expect(allSql).toContain('ChecklistTemplateVersionNumber')
     expect(allSql).toContain('OUTPUT inserted.ChecklistRunID')
     expect(allSql).toContain('INSERT INTO dbo.ChecklistRunEntries')
     expect(allSql).toContain('FROM dbo.ChecklistTemplateEntries te')
@@ -158,6 +168,12 @@ describe('createChecklistRunWithEntries', () => {
   })
 
   it('rolls back the transaction when entries insert fails', async () => {
+    const templateVersionHandler = jest
+      .fn<Promise<{ recordset: Array<Record<string, unknown>> }>, [string]>()
+      .mockResolvedValue({
+        recordset: [{ VersionNumber: 1 }],
+      })
+
     const insertRunHandler = jest
       .fn<Promise<{ recordset: Array<Record<string, unknown>> }>, [string]>()
       .mockResolvedValue({
@@ -170,7 +186,7 @@ describe('createChecklistRunWithEntries', () => {
         throw new Error('entries failed')
       })
 
-    MockRequest.nextQueryHandlers.push(insertRunHandler, insertEntriesHandler)
+    MockRequest.nextQueryHandlers.push(templateVersionHandler, insertRunHandler, insertEntriesHandler)
 
     await expect(createChecklistRunWithEntries(baseArgs)).rejects.toThrow('entries failed')
 
