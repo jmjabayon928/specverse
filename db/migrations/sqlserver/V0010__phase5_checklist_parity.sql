@@ -7,12 +7,14 @@ BEGIN
   ALTER TABLE dbo.ChecklistTemplates
   ADD VersionNumber INT NOT NULL DEFAULT 1;
 END
+GO
 
 IF COL_LENGTH('dbo.ChecklistTemplates', 'Status') IS NULL
 BEGIN
   ALTER TABLE dbo.ChecklistTemplates
   ADD Status NVARCHAR(16) NOT NULL DEFAULT 'DRAFT';
 END
+GO
 
 -- Add ChecklistTemplateVersionNumber, UpdatedAt, CompletedAt to ChecklistRuns
 IF COL_LENGTH('dbo.ChecklistRuns', 'ChecklistTemplateVersionNumber') IS NULL
@@ -20,18 +22,21 @@ BEGIN
   ALTER TABLE dbo.ChecklistRuns
   ADD ChecklistTemplateVersionNumber INT NULL;
 END
+GO
 
 IF COL_LENGTH('dbo.ChecklistRuns', 'UpdatedAt') IS NULL
 BEGIN
   ALTER TABLE dbo.ChecklistRuns
   ADD UpdatedAt DATETIME2(0) NULL;
 END
+GO
 
 IF COL_LENGTH('dbo.ChecklistRuns', 'CompletedAt') IS NULL
 BEGIN
   ALTER TABLE dbo.ChecklistRuns
   ADD CompletedAt DATETIME2(0) NULL;
 END
+GO
 
 -- Backfill UpdatedAt = CreatedAt for existing rows
 IF COL_LENGTH('dbo.ChecklistRuns', 'UpdatedAt') IS NOT NULL
@@ -40,6 +45,7 @@ BEGIN
   SET UpdatedAt = CreatedAt
   WHERE UpdatedAt IS NULL;
 END
+GO
 
 -- Backfill Status = 'DRAFT' for existing rows (including invalid values)
 IF COL_LENGTH('dbo.ChecklistRuns', 'Status') IS NOT NULL
@@ -50,6 +56,7 @@ BEGIN
      OR Status = ''
      OR Status NOT IN ('DRAFT', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
 END
+GO
 
 -- Backfill Status = 'DRAFT' for existing templates (including invalid values)
 IF COL_LENGTH('dbo.ChecklistTemplates', 'Status') IS NOT NULL
@@ -60,6 +67,7 @@ BEGIN
      OR Status = ''
      OR Status NOT IN ('DRAFT', 'PUBLISHED', 'ARCHIVED');
 END
+GO
 
 -- Add CHECK constraint for valid Status values
 IF NOT EXISTS (
@@ -72,6 +80,7 @@ BEGIN
   ADD CONSTRAINT CK_ChecklistRuns_Status
   CHECK (Status IN ('DRAFT', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'));
 END
+GO
 
 -- Create index for template status lookups
 IF NOT EXISTS (
@@ -83,3 +92,4 @@ BEGIN
   CREATE INDEX IX_ChecklistTemplates_AccountID_Status
   ON dbo.ChecklistTemplates(AccountID, Status);
 END
+GO
