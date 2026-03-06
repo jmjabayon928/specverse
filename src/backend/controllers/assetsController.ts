@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { AppError } from '../errors/AppError'
 import { mustGetAccountId } from '@/backend/utils/authGuards'
 import { listAssets as serviceListAssets, getAssetById as serviceGetAssetById, getAssetCustomFields as serviceGetAssetCustomFields } from '../services/assetsService'
+import { listChecklistRunsByAssetId as serviceListChecklistRunsByAssetId } from '../services/checklistsService'
 
 const querySchema = z.object({
   clientId: z
@@ -85,6 +86,26 @@ const paramsSchema = z.object({
     .pipe(z.number().int().positive()),
 })
 
+const checklistRunsParamsSchema = z.object({
+  assetId: z
+    .string()
+    .transform(s => Number(s))
+    .pipe(z.number().int().positive()),
+})
+
+const checklistRunsQuerySchema = z.object({
+  page: z
+    .string()
+    .optional()
+    .transform(s => (s ? Number(s) : undefined))
+    .pipe(z.number().int().min(1).optional()),
+  pageSize: z
+    .string()
+    .optional()
+    .transform(s => (s ? Number(s) : undefined))
+    .pipe(z.number().int().min(1).max(200).optional()),
+})
+
 export const listAssets: RequestHandler = async (req, res, next) => {
   try {
     const accountId = mustGetAccountId(req, next)
@@ -150,6 +171,31 @@ export const getAssetById: RequestHandler = async (req, res, next) => {
     }
 
     res.status(200).json(asset)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const listChecklistRunsForAsset: RequestHandler = async (req, res, next) => {
+  try {
+    const accountId = mustGetAccountId(req, next)
+    if (accountId == null) return
+
+    const parsedParams = checklistRunsParamsSchema.safeParse(req.params)
+    if (!parsedParams.success) {
+      throw new AppError('Invalid asset id', 400)
+    }
+
+    const parsedQuery = checklistRunsQuerySchema.safeParse(req.query)
+    if (!parsedQuery.success) {
+      throw new AppError('Invalid query parameters', 400)
+    }
+
+    const page = parsedQuery.data.page ?? 1
+    const pageSize = parsedQuery.data.pageSize ?? 10
+
+    const result = await serviceListChecklistRunsByAssetId(accountId, parsedParams.data.assetId, page, pageSize)
+    res.status(200).json(result)
   } catch (error) {
     next(error)
   }

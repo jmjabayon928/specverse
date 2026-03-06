@@ -644,6 +644,95 @@ export const getChecklistRun = async (
   return { ...dto, pagination }
 }
 
+export interface ChecklistRunSummary {
+  checklistRunId: number
+  runName: string
+  status: string
+  createdAt: string
+  checklistTemplateId: number
+}
+
+export interface ChecklistRunsListResult {
+  items: ChecklistRunSummary[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export const listChecklistRunsByAssetId = async (
+  accountId: number,
+  assetId: number,
+  page: number = 1,
+  pageSize: number = 10,
+): Promise<ChecklistRunsListResult> => {
+  const pool = await poolPromise
+
+  const safePage = Number.isInteger(page) && page > 0 ? page : 1
+  let safePageSize = Number.isInteger(pageSize) && pageSize > 0 ? pageSize : 10
+  if (safePageSize > 200) {
+    safePageSize = 200
+  }
+
+  const offset = (safePage - 1) * safePageSize
+
+  // Count total
+  const countRequest = new sql.Request(pool)
+  countRequest.input('AccountID', sql.Int, accountId)
+  countRequest.input('AssetID', sql.Int, assetId)
+
+  const countResult = await countRequest.query<{ Total: number }>(`
+    SELECT COUNT(*) AS Total
+    FROM dbo.ChecklistRuns
+    WHERE AccountID = @AccountID
+      AND AssetID = @AssetID;
+  `)
+
+  const total = countResult.recordset[0]?.Total ?? 0
+
+  // Get paginated items
+  const listRequest = new sql.Request(pool)
+  listRequest.input('AccountID', sql.Int, accountId)
+  listRequest.input('AssetID', sql.Int, assetId)
+  listRequest.input('Offset', sql.Int, offset)
+  listRequest.input('PageSize', sql.Int, safePageSize)
+
+  const listResult = await listRequest.query<{
+    ChecklistRunID: number | bigint
+    RunName: string
+    Status: string
+    CreatedAt: Date
+    ChecklistTemplateID: number
+  }>(`
+    SELECT
+      ChecklistRunID,
+      RunName,
+      Status,
+      CreatedAt,
+      ChecklistTemplateID
+    FROM dbo.ChecklistRuns
+    WHERE AccountID = @AccountID
+      AND AssetID = @AssetID
+    ORDER BY CreatedAt DESC, ChecklistRunID DESC
+    OFFSET @Offset ROWS
+    FETCH NEXT @PageSize ROWS ONLY;
+  `)
+
+  const items: ChecklistRunSummary[] = listResult.recordset.map(row => ({
+    checklistRunId: Number(row.ChecklistRunID),
+    runName: row.RunName,
+    status: row.Status,
+    createdAt: row.CreatedAt instanceof Date ? row.CreatedAt.toISOString() : String(row.CreatedAt),
+    checklistTemplateId: row.ChecklistTemplateID,
+  }))
+
+  return {
+    items,
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+  }
+}
+
 export const patchChecklistRunEntry = async (
   accountId: number,
   _userId: number,

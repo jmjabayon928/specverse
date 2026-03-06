@@ -1,9 +1,9 @@
-// src/app/(admin)/assets/[id]/page.tsx
+// src/app/(admin)/assets/[id]/checklists/page.tsx
 import { notFound } from 'next/navigation'
 import { cookies, headers } from 'next/headers'
-import Link from 'next/link'
 import AssetHeader from '@/components/assets/AssetHeader'
 import AssetTabs from '@/components/assets/AssetTabs'
+import AssetChecklistsPanel from '@/components/assets/AssetChecklistsPanel'
 
 type PageProps = {
   params: { id: string }
@@ -23,10 +23,6 @@ type AssetDetail = {
   projectId: number | null
   createdAt: string
   updatedAt: string
-  facilityId: number | null
-  facilityName: string | null
-  systemId: number | null
-  systemName: string | null
 }
 
 const parseAssetId = (raw: string): number | null => {
@@ -78,7 +74,7 @@ const fetchAssetById = async (assetId: number): Promise<AssetDetail> => {
   return data as AssetDetail
 }
 
-export default async function AssetDetailPage({ params }: PageProps) {
+export default async function AssetChecklistsPage({ params }: PageProps) {
   const assetId = parseAssetId(params.id)
   if (assetId == null) notFound()
 
@@ -101,51 +97,16 @@ export default async function AssetDetailPage({ params }: PageProps) {
     updatedAt: asset.updatedAt ?? undefined,
   }
 
-  const hasFacilitySystemContext = asset.facilityId != null && asset.facilityName != null && asset.systemId != null && asset.systemName != null
-
   return (
     <div className="p-6 space-y-6">
-      {hasFacilitySystemContext ? (
-        <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-          <Link href="/facilities" className="text-blue-600 hover:text-blue-800">
-            Facilities
-          </Link>
-          <span>/</span>
-          <Link
-            href={`/facilities/${asset.facilityId}`}
-            className="text-blue-600 hover:text-blue-800"
-          >
-            {asset.facilityName}
-          </Link>
-          <span>/</span>
-          <Link
-            href={`/facilities/${asset.facilityId}/systems/${asset.systemId}`}
-            className="text-blue-600 hover:text-blue-800"
-          >
-            {asset.systemName}
-          </Link>
-          <span>/</span>
-          <span className="text-gray-900">{asset.assetTag}</span>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-          <Link href="/facilities" className="text-blue-600 hover:text-blue-800">
-            Facilities
-          </Link>
-          <span>/</span>
-          <Link href="/assets" className="text-blue-600 hover:text-blue-800">
-            Assets
-          </Link>
-          <span>/</span>
-          <span className="text-gray-900">{asset.assetTag}</span>
-        </div>
-      )}
       <AssetHeader asset={headerAsset} assetId={assetId} />
       <AssetTabs
         assetId={assetId}
         identityAsset={identityAsset}
         lastUpdated={asset.updatedAt ?? undefined}
+        activeTab="checklists"
       />
+      <AssetChecklistsPanel assetId={assetId} />
     </div>
   )
 }

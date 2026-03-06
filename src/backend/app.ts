@@ -52,6 +52,7 @@ import instrumentsRoutes from './routes/instrumentsRoutes'
 import instrumentLoopsRoutes from './routes/instrumentLoopsRoutes'
 import schedulesRoutes from './routes/schedulesRoutes'
 import assetsRoutes from './routes/assetsRoutes'
+import facilitiesRoutes from './routes/facilitiesRoutes'
 import submittalsRoutes from './routes/submittalsRoutes'
 import deviationsRoutes from './routes/deviationsRoutes'
 import checklistsRoutes from './routes/checklistsRoutes'
@@ -209,6 +210,7 @@ app.use('/api/backend/instruments', instrumentsRoutes)
 app.use('/api/backend/instrument-loops', instrumentLoopsRoutes)
 app.use('/api/backend/schedules', schedulesRoutes)
 app.use('/api/backend/assets', assetsRoutes)
+app.use('/api/backend/facilities', facilitiesRoutes)
 app.use('/api/backend/submittals', submittalsRoutes)
 app.use('/api/backend/deviations', deviationsRoutes)
 app.use('/api/backend/checklists', checklistsRoutes)
