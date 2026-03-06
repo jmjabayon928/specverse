@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { z } from 'zod'
 import { cookies, headers } from 'next/headers'
 import { notFound } from 'next/navigation'
+
+export const dynamic = 'force-dynamic'
+
 type PageProps = {
   params: { id: string }
   searchParams: { [key: string]: string | string[] | undefined }

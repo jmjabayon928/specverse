@@ -5,6 +5,8 @@ import Link from 'next/link'
 import AssetHeader from '@/components/assets/AssetHeader'
 import AssetTabs from '@/components/assets/AssetTabs'
 
+export const dynamic = 'force-dynamic'
+
 type PageProps = {
   params: { id: string }
 }
