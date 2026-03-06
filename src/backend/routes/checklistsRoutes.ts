@@ -2,9 +2,11 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { verifyToken, requirePermission } from '@/backend/middleware/authMiddleware'
 import { uploadAttachment } from '@/backend/utils/attachmentUpload'
 import {
+  cloneChecklistTemplateHandler,
   createChecklistRunHandler,
   getChecklistRunHandler,
   patchChecklistRunEntryHandler,
+  patchChecklistRunHandler,
   uploadChecklistEvidenceHandler,
 } from '@/backend/controllers/checklistsController'
 
@@ -15,6 +17,8 @@ const PERMISSIONS = {
   CHECKLISTS_RUN_VIEW: 'CHECKLISTS_RUN_VIEW',
   CHECKLISTS_RUN_EXECUTE: 'CHECKLISTS_RUN_EXECUTE',
   CHECKLISTS_EVIDENCE_UPLOAD: 'CHECKLISTS_EVIDENCE_UPLOAD',
+  CHECKLISTS_TEMPLATE_CLONE: 'CHECKLISTS_TEMPLATE_CLONE',
+  CHECKLISTS_RUN_UPDATE: 'CHECKLISTS_RUN_UPDATE',
 } as const
 
 interface RateLimitBucket {
@@ -122,6 +126,20 @@ router.post(
   rateLimitChecklistEvidence,
   uploadAttachment.single('file'),
   uploadChecklistEvidenceHandler,
+)
+
+router.post(
+  '/templates/:id/clone',
+  verifyToken,
+  requirePermission(PERMISSIONS.CHECKLISTS_TEMPLATE_CLONE),
+  cloneChecklistTemplateHandler,
+)
+
+router.patch(
+  '/runs/:runId',
+  verifyToken,
+  requirePermission(PERMISSIONS.CHECKLISTS_RUN_UPDATE),
+  patchChecklistRunHandler,
 )
 
 export default router
