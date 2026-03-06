@@ -95,7 +95,7 @@ export default function AssetTabs({ assetId, identityAsset, lastUpdated, activeT
       )}
 
       {activeTab === 'schedules' && <AssetSchedulesPanel />}
-      {activeTab === 'activity' && <AssetActivityPanel />}
+      {activeTab === 'activity' && <AssetActivityPanel assetId={assetId} />}
     </div>
   )
 }

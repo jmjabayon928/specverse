@@ -5,6 +5,7 @@ import { verifyToken, requirePermission } from '@/backend/middleware/authMiddlew
 import { listAssets, getAssetById, getAssetCustomFields } from '../controllers/assetsController'
 import { listDatasheetsForAsset } from '../controllers/filledSheetController'
 import { listAssetDocuments, linkAssetDocument, unlinkAssetDocument } from '../controllers/assetDocumentsController'
+import { getAssetActivity } from '../controllers/assetActivityController'
 import { auditAction } from '@/backend/middleware/auditMiddleware'
 
 const router = Router()
@@ -42,6 +43,13 @@ router.get(
   verifyToken,
   requirePermission(PERMISSIONS.DATASHEET_VIEW),
   listAssetDocuments
+)
+
+router.get(
+  '/:assetId/activity',
+  verifyToken,
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
+  getAssetActivity
 )
 
 router.post(
