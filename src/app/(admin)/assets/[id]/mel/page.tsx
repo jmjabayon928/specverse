@@ -6,6 +6,8 @@ import AssetTabs from '@/components/assets/AssetTabs'
 import AssetMelPanel from '@/components/assets/AssetMelPanel'
 import type { AssetCustomFieldDto } from '@/types/api/assets'
 
+export const dynamic = 'force-dynamic'
+
 type PageProps = {
   params: { id: string }
 }

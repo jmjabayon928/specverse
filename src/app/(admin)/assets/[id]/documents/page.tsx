@@ -6,6 +6,8 @@ import AssetTabs from '@/components/assets/AssetTabs'
 import Link from 'next/link'
 import { z } from 'zod'
 
+export const dynamic = 'force-dynamic'
+
 type PageProps = {
   params: { id: string }
   searchParams: { [key: string]: string | string[] | undefined }

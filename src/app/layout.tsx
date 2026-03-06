@@ -9,6 +9,8 @@ import { Toaster } from 'react-hot-toast'
 import LayoutWithSidebar from '@/layout/LayoutWithSidebar'
 import { ClientBootLogger } from '@/components/error/ClientBootLogger'
 
+export const dynamic = 'force-dynamic'
+
 const outfit = Outfit({
   subsets: ['latin']
 })
