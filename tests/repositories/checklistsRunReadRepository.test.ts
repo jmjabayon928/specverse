@@ -120,6 +120,7 @@ describe('getChecklistRun', () => {
         {
           ChecklistRunID: runId,
           ChecklistTemplateID: 100,
+          ChecklistTemplateVersionNumber: 2,
           RunName: 'Run name',
           Notes: null,
           ProjectID: null,
@@ -127,7 +128,15 @@ describe('getChecklistRun', () => {
           SystemID: null,
           AssetID: null,
           Status: 'DRAFT',
+          CreatedAt: new Date('2024-01-01T00:00:00.000Z'),
+          UpdatedAt: new Date('2024-01-01T00:00:00.000Z'),
+          CompletedAt: null,
           TotalEntries: 1,
+          CompletedEntries: 0,
+          PendingEntries: 1,
+          PassEntries: 0,
+          FailEntries: 0,
+          NaEntries: 0,
         },
       ],
     })
@@ -174,10 +183,16 @@ describe('getChecklistRun', () => {
 
     expect(result).not.toBeNull()
     expect(result?.runId).toBe(runId)
+    expect(result?.checklistTemplateVersionNumber).toBe(2)
+    expect(result?.totalEntries).toBe(1)
+    expect(result?.completedEntries).toBe(0)
+    expect(result?.pendingEntries).toBe(1)
+    expect(result?.completionPercentage).toBe(0)
     const firstEntry = result?.entries[0]
     expect(firstEntry?.evidenceAttachmentIds).toEqual([500])
     expect(firstEntry?.evidenceAttachments[0]?.attachmentId).toBe(500)
     expect(firstEntry?.evidenceAttachments[0]?.uploadedBy?.userId).toBe(7)
+    expect(firstEntry?.rowVersionBase64).toBeDefined()
 
     expect(allRequests.length).toBeGreaterThanOrEqual(3)
 

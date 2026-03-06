@@ -2,8 +2,10 @@ import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import { promises as fs } from 'fs'
 import { AppError } from '@/backend/errors/AppError'
 import {
+  cloneChecklistTemplate,
   createChecklistRun,
   getChecklistRun,
+  patchChecklistRun,
   patchChecklistRunEntry,
   uploadChecklistRunEntryEvidence,
 } from '@/backend/services/checklistsService'
@@ -11,6 +13,8 @@ import type { ChecklistEvidenceFileMeta, ChecklistRunQueryOptions } from '@/back
 import type {
   ChecklistRunEntryPatchInput,
   ChecklistRunEntryResult,
+  ChecklistRunPatchInput,
+  ChecklistRunStatus,
   CreateChecklistRunInput,
   EvidenceMode,
 } from '@/domain/checklists/checklistTypes'
@@ -481,6 +485,79 @@ export const patchChecklistRunEntryHandler: RequestHandler = async (
     }
 
     await patchChecklistRunEntry(accountId, userId, runEntryIdNumber, input)
+
+    res.status(200).json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const cloneChecklistTemplateHandler: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { accountId, userId } = getAuthContext(req)
+
+    const { id } = req.params
+    const templateIdNumber = Number(id)
+
+    if (!Number.isInteger(templateIdNumber) || templateIdNumber <= 0) {
+      throw new AppError('Invalid template id', 400)
+    }
+
+    const result = await cloneChecklistTemplate(accountId, userId, templateIdNumber)
+
+    res.status(200).json(result)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const patchChecklistRunHandler: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { accountId, userId } = getAuthContext(req)
+
+    const { runId } = req.params
+    const runIdNumber = Number(runId)
+
+    if (!Number.isInteger(runIdNumber) || runIdNumber <= 0) {
+      throw new AppError('Invalid runId', 400)
+    }
+
+    const body = req.body as unknown
+
+    if (!isRecord(body)) {
+      throw new AppError('Invalid request body', 400)
+    }
+
+    const { status } = body
+
+    if (status !== undefined && typeof status !== 'string') {
+      throw new AppError('status must be a string', 400)
+    }
+
+    const validStatuses: ChecklistRunStatus[] = ['DRAFT', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']
+    if (status !== undefined && !validStatuses.includes(status as ChecklistRunStatus)) {
+      throw new AppError('Invalid status value', 400)
+    }
+
+    const input: ChecklistRunPatchInput = {}
+
+    if (status !== undefined) {
+      input.status = status as ChecklistRunStatus
+    }
+
+    if (Object.keys(input).length === 0) {
+      throw new AppError('No valid fields to update', 400)
+    }
+
+    await patchChecklistRun(accountId, userId, runIdNumber, input)
 
     res.status(200).json({ ok: true })
   } catch (err) {

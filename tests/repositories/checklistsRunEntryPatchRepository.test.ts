@@ -117,11 +117,13 @@ describe('patchChecklistRunEntry', () => {
     MockRequest.nextQueryHandlers = []
   })
 
-  it('updates provided fields with tenant-safe WHERE clause', async () => {
-    const selectHandler = jest.fn<Promise<QueryResult>, [string]>().mockResolvedValue({
+  it('updates provided fields with tenant-safe WHERE clause and status check', async () => {
+    const checkHandler = jest.fn<Promise<QueryResult>, [string]>().mockResolvedValue({
       recordset: [
         {
           RowVersion: Buffer.from('rowversion', 'utf8'),
+          ChecklistRunID: 10,
+          RunStatus: 'DRAFT',
         },
       ],
     })
@@ -131,7 +133,21 @@ describe('patchChecklistRunEntry', () => {
       rowsAffected: [1],
     })
 
-    MockRequest.nextQueryHandlers.push(selectHandler, updateHandler)
+    const completionCheckHandler = jest.fn<Promise<QueryResult>, [string]>().mockResolvedValue({
+      recordset: [{ PendingCount: 1 }],
+    })
+
+    const statusUpdateHandler = jest.fn<Promise<QueryResult>, [string]>().mockResolvedValue({
+      recordset: [],
+      rowsAffected: [1],
+    })
+
+    MockRequest.nextQueryHandlers.push(
+      checkHandler,
+      updateHandler,
+      completionCheckHandler,
+      statusUpdateHandler,
+    )
 
     const result = await patchChecklistRunEntry(accountId, userId, runEntryId, {
       result: 'PASS',
@@ -141,39 +157,70 @@ describe('patchChecklistRunEntry', () => {
 
     expect(result).toEqual({ exists: true, updatedRows: 1 })
 
-    expect(allRequests.length).toBeGreaterThanOrEqual(2)
+    expect(mockTransactionInstances).toHaveLength(1)
+    const tx = mockTransactionInstances[0]
+    expect(tx.begin).toHaveBeenCalledTimes(1)
+    expect(tx.commit).toHaveBeenCalledTimes(1)
+    expect(tx.rollback).not.toHaveBeenCalled()
+
+    expect(allRequests.length).toBeGreaterThanOrEqual(3)
     const sqlText = allRequests
       .flatMap(request => request.queries)
       .map(q => q.sql)
       .join(' ')
 
-    expect(sqlText).toContain('SELECT RowVersion')
-    expect(sqlText).toContain('FROM dbo.ChecklistRunEntries')
-    expect(sqlText).toContain('WHERE AccountID = @AccountID')
-    expect(sqlText).toContain('AND ChecklistRunEntryID = @ChecklistRunEntryID')
+    expect(sqlText).toContain('SELECT')
+    expect(sqlText).toContain('RowVersion')
+    expect(sqlText).toContain('RunStatus')
+    expect(sqlText).toContain('FROM dbo.ChecklistRunEntries cre')
+    expect(sqlText).toContain('INNER JOIN dbo.ChecklistRuns cr')
+    expect(sqlText).toContain('WHERE cre.AccountID = @AccountID')
 
     expect(sqlText).toContain('UPDATE dbo.ChecklistRunEntries')
     expect(sqlText).toContain('Result = @Result')
     expect(sqlText).toContain('Notes = @Notes')
     expect(sqlText).toContain('WHERE AccountID = @AccountID')
-    expect(sqlText).toContain('AND ChecklistRunEntryID = @ChecklistRunEntryID')
     expect(sqlText).toContain('AND RowVersion = @ExpectedRowVersion')
 
-    const updateRequest = allRequests[1]
-    const inputNames = updateRequest.inputs.map(i => i.name)
-
-    expect(inputNames).toContain('AccountID')
-    expect(inputNames).toContain('ChecklistRunEntryID')
-    expect(inputNames).toContain('Result')
-    expect(inputNames).toContain('Notes')
-    expect(inputNames).toContain('ExpectedRowVersion')
+    expect(sqlText).toContain('COUNT(1) AS PendingCount')
+    expect(sqlText).toContain('UPDATE dbo.ChecklistRuns')
+    expect(sqlText).toContain('Status = \'IN_PROGRESS\'')
   })
 
-  it('returns 0 rows when nothing is updated', async () => {
-    const selectHandler = jest.fn<Promise<QueryResult>, [string]>().mockResolvedValue({
+  it('blocks updates for COMPLETED runs', async () => {
+    const checkHandler = jest.fn<Promise<QueryResult>, [string]>().mockResolvedValue({
       recordset: [
         {
           RowVersion: Buffer.from('rowversion', 'utf8'),
+          ChecklistRunID: 10,
+          RunStatus: 'COMPLETED',
+        },
+      ],
+    })
+
+    MockRequest.nextQueryHandlers.push(checkHandler)
+
+    await expect(
+      patchChecklistRunEntry(accountId, userId, runEntryId, {
+        result: 'PASS',
+        expectedRowVersionBase64: 'ZXhwZWN0ZWQ=',
+      }),
+    ).rejects.toThrow('Cannot update entries for COMPLETED checklist run')
+
+    expect(mockTransactionInstances).toHaveLength(1)
+    const tx = mockTransactionInstances[0]
+    // Rollback is called once explicitly, and may be called again in catch block
+    expect(tx.rollback).toHaveBeenCalled()
+    expect(tx.commit).not.toHaveBeenCalled()
+  })
+
+  it('returns 0 rows when nothing is updated due to row version mismatch', async () => {
+    const checkHandler = jest.fn<Promise<QueryResult>, [string]>().mockResolvedValue({
+      recordset: [
+        {
+          RowVersion: Buffer.from('rowversion', 'utf8'),
+          ChecklistRunID: 10,
+          RunStatus: 'IN_PROGRESS',
         },
       ],
     })
@@ -183,7 +230,7 @@ describe('patchChecklistRunEntry', () => {
       rowsAffected: [0],
     })
 
-    MockRequest.nextQueryHandlers.push(selectHandler, updateHandler)
+    MockRequest.nextQueryHandlers.push(checkHandler, updateHandler)
 
     const result = await patchChecklistRunEntry(accountId, userId, runEntryId, {
       result: 'FAIL',

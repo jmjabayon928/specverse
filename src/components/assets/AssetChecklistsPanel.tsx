@@ -1,17 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
+import type { ChecklistRunSummary } from '@/domain/checklists/checklistTypes'
 
 type Props = {
   assetId: number
-}
-
-interface ChecklistRunSummary {
-  checklistRunId: number
-  runName: string
-  status: string
-  createdAt: string
-  checklistTemplateId: number
 }
 
 interface ChecklistRunsResponse {
@@ -123,11 +117,18 @@ export default function AssetChecklistsPanel({ assetId }: Props) {
           <div key={run.checklistRunId} className="border-b border-gray-100 pb-3 last:border-0">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <div className="text-sm font-medium text-gray-900">
+                <Link
+                  href={`/assets/${assetId}/checklists/${run.checklistRunId}`}
+                  className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                >
                   {run.runName || '(unnamed run)'}
-                </div>
+                </Link>
                 <div className="text-xs text-gray-500 mt-1">
-                  Status: {run.status} | Template ID: {run.checklistTemplateId}
+                  <span className="inline-block px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                    {run.status}
+                  </span>
+                  {' | '}
+                  {run.completedEntries} / {run.totalEntries} completed ({run.completionPercentage}%)
                 </div>
                 {run.createdAt && (
                   <div className="text-xs text-gray-500 mt-1">{formatTimestamp(run.createdAt)}</div>

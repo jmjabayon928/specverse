@@ -51,6 +51,7 @@ export interface ChecklistRunEntryDTO {
   uom: string | null
   evidenceAttachmentIds: number[]
   evidenceAttachments: ChecklistEvidenceAttachmentDTO[]
+  rowVersionBase64?: string
 }
 
 export interface ChecklistRunPagination {
@@ -59,17 +60,53 @@ export interface ChecklistRunPagination {
   totalEntries: number
 }
 
+export type ChecklistRunStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
+
+export type ChecklistTemplateStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+
 export interface ChecklistRunDTO {
   runId: number
   checklistTemplateId: number
+  checklistTemplateVersionNumber: number | null
   runName: string
   notes: string | null
   projectId: number | null
   facilityId: number | null
   systemId: number | null
   assetId: number | null
-  status: string
+  status: ChecklistRunStatus
+  createdAt: string
+  updatedAt: string | null
+  completedAt: string | null
   entries: ChecklistRunEntryDTO[]
+  totalEntries: number
+  completedEntries: number
+  pendingEntries: number
+  passEntries: number
+  failEntries: number
+  naEntries: number
+  completionPercentage: number
+}
+
+export interface ChecklistRunPatchInput {
+  status?: ChecklistRunStatus
+}
+
+export interface ChecklistTemplateCloneResult {
+  checklistTemplateId: number
+  versionNumber: number
+  entryCount: number
+}
+
+export interface ChecklistRunSummary {
+  checklistRunId: number
+  runName: string
+  status: ChecklistRunStatus
+  createdAt: string
+  checklistTemplateId: number
+  totalEntries: number
+  completedEntries: number
+  completionPercentage: number
 }
 
 

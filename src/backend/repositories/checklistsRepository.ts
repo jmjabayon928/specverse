@@ -5,6 +5,10 @@ import type {
   ChecklistRunEntryPatchInput,
   ChecklistRunEntryResult,
   ChecklistRunPagination,
+  ChecklistRunPatchInput,
+  ChecklistRunStatus,
+  ChecklistRunSummary,
+  ChecklistTemplateCloneResult,
   CreateChecklistRunInput,
   CreateChecklistRunResult,
   EvidenceMode,
@@ -46,10 +50,27 @@ export const createChecklistRunWithEntries = async (
   await transaction.begin()
 
   try {
+    // Get template version to snapshot
+    const templateVersionRequest = new sql.Request(transaction)
+    templateVersionRequest.input('AccountID', sql.Int, args.accountId)
+    templateVersionRequest.input('ChecklistTemplateID', sql.Int, args.checklistTemplateId)
+
+    const templateVersionResult = await templateVersionRequest.query<{
+      VersionNumber: number
+    }>(`
+      SELECT VersionNumber
+      FROM dbo.ChecklistTemplates
+      WHERE AccountID = @AccountID
+        AND ChecklistTemplateID = @ChecklistTemplateID;
+    `)
+
+    const templateVersion = templateVersionResult.recordset[0]?.VersionNumber ?? 1
+
     const insertRunRequest = new sql.Request(transaction)
 
     insertRunRequest.input('AccountID', sql.Int, args.accountId)
     insertRunRequest.input('ChecklistTemplateID', sql.Int, args.checklistTemplateId)
+    insertRunRequest.input('ChecklistTemplateVersionNumber', sql.Int, templateVersion)
     insertRunRequest.input('RunName', sql.NVarChar(255), args.runName)
     insertRunRequest.input('Notes', sql.NVarChar(4000), args.notes ?? null)
     insertRunRequest.input('ProjectID', sql.Int, args.projectId ?? null)
@@ -64,6 +85,7 @@ export const createChecklistRunWithEntries = async (
       INSERT INTO dbo.ChecklistRuns (
         AccountID,
         ChecklistTemplateID,
+        ChecklistTemplateVersionNumber,
         RunName,
         Notes,
         ProjectID,
@@ -72,12 +94,14 @@ export const createChecklistRunWithEntries = async (
         AssetID,
         Status,
         CreatedAt,
+        UpdatedAt,
         CreatedBy
       )
       OUTPUT inserted.ChecklistRunID
       VALUES (
         @AccountID,
         @ChecklistTemplateID,
+        @ChecklistTemplateVersionNumber,
         @RunName,
         @Notes,
         @ProjectID,
@@ -85,6 +109,7 @@ export const createChecklistRunWithEntries = async (
         @SystemID,
         @AssetID,
         'DRAFT',
+        SYSUTCDATETIME(),
         SYSUTCDATETIME(),
         @UserID
       );
@@ -398,6 +423,7 @@ export const uploadChecklistRunEntryEvidence = async (
 interface ChecklistRunHeaderRow {
   ChecklistRunID: number | bigint
   ChecklistTemplateID: number
+  ChecklistTemplateVersionNumber: number | null
   RunName: string
   Notes: string | null
   ProjectID: number | null
@@ -405,7 +431,15 @@ interface ChecklistRunHeaderRow {
   SystemID: number | null
   AssetID: number | null
   Status: string
+  CreatedAt: Date
+  UpdatedAt: Date | null
+  CompletedAt: Date | null
   TotalEntries: number
+  CompletedEntries: number
+  PendingEntries: number
+  PassEntries: number
+  FailEntries: number
+  NaEntries: number
 }
 
 interface ChecklistRunEntryRow {
@@ -466,24 +500,64 @@ export const getChecklistRun = async (
 
   const headerResult = await headerRequest.query<ChecklistRunHeaderRow>(`
     SELECT
-      ChecklistRunID,
-      ChecklistTemplateID,
-      RunName,
-      Notes,
-      ProjectID,
-      FacilityID,
-      SystemID,
-      AssetID,
-      Status,
+      cr.ChecklistRunID,
+      cr.ChecklistTemplateID,
+      cr.ChecklistTemplateVersionNumber,
+      cr.RunName,
+      cr.Notes,
+      cr.ProjectID,
+      cr.FacilityID,
+      cr.SystemID,
+      cr.AssetID,
+      cr.Status,
+      cr.CreatedAt,
+      cr.UpdatedAt,
+      cr.CompletedAt,
       (
         SELECT COUNT(1)
         FROM dbo.ChecklistRunEntries e
         WHERE e.AccountID = @AccountID
           AND e.ChecklistRunID = @ChecklistRunID
-      ) AS TotalEntries
-    FROM dbo.ChecklistRuns
-    WHERE AccountID = @AccountID
-      AND ChecklistRunID = @ChecklistRunID;
+      ) AS TotalEntries,
+      (
+        SELECT COUNT(1)
+        FROM dbo.ChecklistRunEntries e
+        WHERE e.AccountID = @AccountID
+          AND e.ChecklistRunID = @ChecklistRunID
+          AND e.Result IS NOT NULL
+          AND e.Result != 'PENDING'
+      ) AS CompletedEntries,
+      (
+        SELECT COUNT(1)
+        FROM dbo.ChecklistRunEntries e
+        WHERE e.AccountID = @AccountID
+          AND e.ChecklistRunID = @ChecklistRunID
+          AND (e.Result IS NULL OR e.Result = 'PENDING')
+      ) AS PendingEntries,
+      (
+        SELECT COUNT(1)
+        FROM dbo.ChecklistRunEntries e
+        WHERE e.AccountID = @AccountID
+          AND e.ChecklistRunID = @ChecklistRunID
+          AND e.Result = 'PASS'
+      ) AS PassEntries,
+      (
+        SELECT COUNT(1)
+        FROM dbo.ChecklistRunEntries e
+        WHERE e.AccountID = @AccountID
+          AND e.ChecklistRunID = @ChecklistRunID
+          AND e.Result = 'FAIL'
+      ) AS FailEntries,
+      (
+        SELECT COUNT(1)
+        FROM dbo.ChecklistRunEntries e
+        WHERE e.AccountID = @AccountID
+          AND e.ChecklistRunID = @ChecklistRunID
+          AND e.Result = 'NA'
+      ) AS NaEntries
+    FROM dbo.ChecklistRuns cr
+    WHERE cr.AccountID = @AccountID
+      AND cr.ChecklistRunID = @ChecklistRunID;
   `)
 
   const header = headerResult.recordset[0]
@@ -493,6 +567,13 @@ export const getChecklistRun = async (
   }
 
   const totalEntries = header.TotalEntries
+  const completedEntries = header.CompletedEntries
+  const pendingEntries = header.PendingEntries
+  const passEntries = header.PassEntries
+  const failEntries = header.FailEntries
+  const naEntries = header.NaEntries
+  const completionPercentage =
+    totalEntries > 0 ? Math.round((completedEntries / totalEntries) * 100) : 0
 
   const entriesRequest = new sql.Request(pool)
   entriesRequest.input('AccountID', sql.Int, accountId)
@@ -626,14 +707,25 @@ export const getChecklistRun = async (
   const dto: ChecklistRunDTO = {
     runId: Number(header.ChecklistRunID),
     checklistTemplateId: header.ChecklistTemplateID,
+    checklistTemplateVersionNumber: header.ChecklistTemplateVersionNumber,
     runName: header.RunName,
     notes: header.Notes,
     projectId: header.ProjectID,
     facilityId: header.FacilityID,
     systemId: header.SystemID,
     assetId: header.AssetID,
-    status: header.Status,
+    status: header.Status as ChecklistRunStatus,
+    createdAt: header.CreatedAt instanceof Date ? header.CreatedAt.toISOString() : String(header.CreatedAt),
+    updatedAt: header.UpdatedAt instanceof Date ? header.UpdatedAt.toISOString() : (header.UpdatedAt ? String(header.UpdatedAt) : null),
+    completedAt: header.CompletedAt instanceof Date ? header.CompletedAt.toISOString() : (header.CompletedAt ? String(header.CompletedAt) : null),
     entries,
+    totalEntries,
+    completedEntries,
+    pendingEntries,
+    passEntries,
+    failEntries,
+    naEntries,
+    completionPercentage,
   }
   const pagination: ChecklistRunPagination = {
     page,
@@ -642,14 +734,6 @@ export const getChecklistRun = async (
   }
 
   return { ...dto, pagination }
-}
-
-export interface ChecklistRunSummary {
-  checklistRunId: number
-  runName: string
-  status: string
-  createdAt: string
-  checklistTemplateId: number
 }
 
 export interface ChecklistRunsListResult {
@@ -702,28 +786,53 @@ export const listChecklistRunsByAssetId = async (
     Status: string
     CreatedAt: Date
     ChecklistTemplateID: number
+    TotalEntries: number
+    CompletedEntries: number
   }>(`
     SELECT
-      ChecklistRunID,
-      RunName,
-      Status,
-      CreatedAt,
-      ChecklistTemplateID
-    FROM dbo.ChecklistRuns
-    WHERE AccountID = @AccountID
-      AND AssetID = @AssetID
-    ORDER BY CreatedAt DESC, ChecklistRunID DESC
+      cr.ChecklistRunID,
+      cr.RunName,
+      cr.Status,
+      cr.CreatedAt,
+      cr.ChecklistTemplateID,
+      (
+        SELECT COUNT(1)
+        FROM dbo.ChecklistRunEntries e
+        WHERE e.AccountID = @AccountID
+          AND e.ChecklistRunID = cr.ChecklistRunID
+      ) AS TotalEntries,
+      (
+        SELECT COUNT(1)
+        FROM dbo.ChecklistRunEntries e
+        WHERE e.AccountID = @AccountID
+          AND e.ChecklistRunID = cr.ChecklistRunID
+          AND e.Result IS NOT NULL
+          AND e.Result != 'PENDING'
+      ) AS CompletedEntries
+    FROM dbo.ChecklistRuns cr
+    WHERE cr.AccountID = @AccountID
+      AND cr.AssetID = @AssetID
+    ORDER BY cr.CreatedAt DESC, cr.ChecklistRunID DESC
     OFFSET @Offset ROWS
     FETCH NEXT @PageSize ROWS ONLY;
   `)
 
-  const items: ChecklistRunSummary[] = listResult.recordset.map(row => ({
-    checklistRunId: Number(row.ChecklistRunID),
-    runName: row.RunName,
-    status: row.Status,
-    createdAt: row.CreatedAt instanceof Date ? row.CreatedAt.toISOString() : String(row.CreatedAt),
-    checklistTemplateId: row.ChecklistTemplateID,
-  }))
+  const items: ChecklistRunSummary[] = listResult.recordset.map(row => {
+    const totalEntries = row.TotalEntries
+    const completedEntries = row.CompletedEntries
+    const completionPercentage = totalEntries > 0 ? Math.round((completedEntries / totalEntries) * 100) : 0
+
+    return {
+      checklistRunId: Number(row.ChecklistRunID),
+      runName: row.RunName,
+      status: row.Status as ChecklistRunStatus,
+      createdAt: row.CreatedAt instanceof Date ? row.CreatedAt.toISOString() : String(row.CreatedAt),
+      checklistTemplateId: row.ChecklistTemplateID,
+      totalEntries,
+      completedEntries,
+      completionPercentage,
+    }
+  })
 
   return {
     items,
@@ -735,79 +844,379 @@ export const listChecklistRunsByAssetId = async (
 
 export const patchChecklistRunEntry = async (
   accountId: number,
-  _userId: number,
+  userId: number,
   runEntryId: number,
   input: ChecklistRunEntryPatchInput,
 ): Promise<{ exists: boolean; updatedRows: number }> => {
   const pool = await poolPromise
-  const selectRequest = new sql.Request(pool)
+  const transaction = new sql.Transaction(pool)
 
-  selectRequest.input('AccountID', sql.Int, accountId)
-  selectRequest.input('ChecklistRunEntryID', sql.BigInt, runEntryId)
+  await transaction.begin()
 
-  const existing = await selectRequest.query<{ RowVersion: Buffer | Uint8Array }>(`
-    SELECT RowVersion
-    FROM dbo.ChecklistRunEntries
+  try {
+    // Check entry exists and get run status
+    const checkRequest = new sql.Request(transaction)
+    checkRequest.input('AccountID', sql.Int, accountId)
+    checkRequest.input('ChecklistRunEntryID', sql.BigInt, runEntryId)
+
+    const checkResult = await checkRequest.query<{
+      RowVersion: Buffer | Uint8Array
+      ChecklistRunID: number | bigint
+      RunStatus: string
+    }>(`
+      SELECT
+        cre.RowVersion,
+        cre.ChecklistRunID,
+        cr.Status AS RunStatus
+      FROM dbo.ChecklistRunEntries cre
+      INNER JOIN dbo.ChecklistRuns cr
+        ON cr.ChecklistRunID = cre.ChecklistRunID
+        AND cr.AccountID = cre.AccountID
+      WHERE cre.AccountID = @AccountID
+        AND cre.ChecklistRunEntryID = @ChecklistRunEntryID;
+    `)
+
+    if (checkResult.recordset.length === 0) {
+      await transaction.rollback()
+      return { exists: false, updatedRows: 0 }
+    }
+
+    const runStatus = checkResult.recordset[0]!.RunStatus as ChecklistRunStatus
+    const checklistRunId = Number(checkResult.recordset[0]!.ChecklistRunID)
+
+    // Block updates for COMPLETED or CANCELLED runs
+    if (runStatus === 'COMPLETED' || runStatus === 'CANCELLED') {
+      await transaction.rollback()
+      throw new AppError(`Cannot update entries for ${runStatus} checklist run`, 400)
+    }
+
+    const updateRequest = new sql.Request(transaction)
+    updateRequest.input('AccountID', sql.Int, accountId)
+    updateRequest.input('ChecklistRunEntryID', sql.BigInt, runEntryId)
+
+    const setClauses: string[] = []
+
+    if (input.result !== undefined) {
+      updateRequest.input('Result', sql.NVarChar(16), input.result)
+      setClauses.push('Result = @Result')
+    }
+
+    if (input.notes !== undefined) {
+      updateRequest.input('Notes', sql.NVarChar(4000), input.notes)
+      setClauses.push('Notes = @Notes')
+    }
+
+    if (input.measuredValue !== undefined) {
+      updateRequest.input('MeasuredValue', sql.NVarChar(255), input.measuredValue)
+      setClauses.push('MeasuredValue = @MeasuredValue')
+    }
+
+    if (input.uom !== undefined) {
+      updateRequest.input('Uom', sql.NVarChar(64), input.uom)
+      setClauses.push('Uom = @Uom')
+    }
+
+    if (setClauses.length === 0) {
+      await transaction.rollback()
+      return { exists: true, updatedRows: 0 }
+    }
+
+    const expectedRowVersionBase64 = input.expectedRowVersionBase64
+    const expectedRowVersionBuffer =
+      typeof Buffer !== 'undefined'
+        ? Buffer.from(expectedRowVersionBase64, 'base64')
+        : expectedRowVersionBase64
+
+    updateRequest.input('ExpectedRowVersion', sql.VarBinary(8), expectedRowVersionBuffer)
+
+    const sqlText = `
+      UPDATE dbo.ChecklistRunEntries
+      SET ${setClauses.join(', ')}
+      WHERE AccountID = @AccountID
+        AND ChecklistRunEntryID = @ChecklistRunEntryID
+        AND RowVersion = @ExpectedRowVersion;
+    `
+
+    const updateResult = await updateRequest.query(sqlText)
+
+    const rowsAffectedArray = (updateResult as { rowsAffected?: number[] }).rowsAffected ?? []
+    const rowsAffected = rowsAffectedArray.reduce((sum, value) => sum + value, 0)
+
+    if (rowsAffected === 0) {
+      await transaction.rollback()
+      return { exists: true, updatedRows: 0 }
+    }
+
+    // Check if we need to auto-transition status
+    const statusUpdateRequest = new sql.Request(transaction)
+    statusUpdateRequest.input('AccountID', sql.Int, accountId)
+    statusUpdateRequest.input('ChecklistRunID', sql.BigInt, checklistRunId)
+
+    // Check completion status
+    const completionCheck = await statusUpdateRequest.query<{
+      PendingCount: number
+    }>(`
+      SELECT COUNT(1) AS PendingCount
+      FROM dbo.ChecklistRunEntries
+      WHERE AccountID = @AccountID
+        AND ChecklistRunID = @ChecklistRunID
+        AND (Result IS NULL OR Result = 'PENDING');
+    `)
+
+    const pendingCount = completionCheck.recordset[0]?.PendingCount ?? 0
+    const isCompleted = pendingCount === 0
+
+    // Auto-transition logic
+    if (runStatus === 'DRAFT' && (input.result !== undefined && input.result !== 'PENDING')) {
+      // Transition DRAFT -> IN_PROGRESS on first meaningful update
+      const transitionRequest = new sql.Request(transaction)
+      transitionRequest.input('AccountID', sql.Int, accountId)
+      transitionRequest.input('ChecklistRunID', sql.BigInt, checklistRunId)
+      await transitionRequest.query(`
+        UPDATE dbo.ChecklistRuns
+        SET Status = 'IN_PROGRESS',
+            UpdatedAt = SYSUTCDATETIME()
+        WHERE AccountID = @AccountID
+          AND ChecklistRunID = @ChecklistRunID
+          AND Status = 'DRAFT';
+      `)
+    } else if (runStatus === 'IN_PROGRESS' && isCompleted) {
+      // Transition IN_PROGRESS -> COMPLETED when all entries completed
+      const completeRequest = new sql.Request(transaction)
+      completeRequest.input('AccountID', sql.Int, accountId)
+      completeRequest.input('ChecklistRunID', sql.BigInt, checklistRunId)
+      await completeRequest.query(`
+        UPDATE dbo.ChecklistRuns
+        SET Status = 'COMPLETED',
+            UpdatedAt = SYSUTCDATETIME(),
+            CompletedAt = SYSUTCDATETIME()
+        WHERE AccountID = @AccountID
+          AND ChecklistRunID = @ChecklistRunID
+          AND Status = 'IN_PROGRESS';
+      `)
+    } else if (runStatus !== 'DRAFT') {
+      // Update UpdatedAt for IN_PROGRESS runs
+      const updateTimeRequest = new sql.Request(transaction)
+      updateTimeRequest.input('AccountID', sql.Int, accountId)
+      updateTimeRequest.input('ChecklistRunID', sql.BigInt, checklistRunId)
+      await updateTimeRequest.query(`
+        UPDATE dbo.ChecklistRuns
+        SET UpdatedAt = SYSUTCDATETIME()
+        WHERE AccountID = @AccountID
+          AND ChecklistRunID = @ChecklistRunID;
+      `)
+    }
+
+    await transaction.commit()
+    return { exists: true, updatedRows: rowsAffected }
+  } catch (err) {
+    try {
+      await transaction.rollback()
+    } catch {
+      // ignore rollback errors
+    }
+    throw err
+  }
+}
+
+interface CloneChecklistTemplateArgs {
+  accountId: number
+  userId: number
+  templateId: number
+}
+
+export const cloneChecklistTemplate = async (
+  args: CloneChecklistTemplateArgs,
+): Promise<ChecklistTemplateCloneResult> => {
+  const pool = await poolPromise
+  const transaction = new sql.Transaction(pool)
+
+  await transaction.begin()
+
+  try {
+    // Get source template
+    const sourceRequest = new sql.Request(transaction)
+    sourceRequest.input('AccountID', sql.Int, args.accountId)
+    sourceRequest.input('ChecklistTemplateID', sql.Int, args.templateId)
+
+    const sourceResult = await sourceRequest.query<{
+      ChecklistTemplateID: number
+      VersionNumber: number
+      AccountID: number
+    }>(`
+      SELECT ChecklistTemplateID, VersionNumber, AccountID
+      FROM dbo.ChecklistTemplates
+      WHERE AccountID = @AccountID
+        AND ChecklistTemplateID = @ChecklistTemplateID;
+    `)
+
+    if (sourceResult.recordset.length === 0) {
+      throw new AppError('Checklist template not found', 404)
+    }
+
+    const source = sourceResult.recordset[0]!
+    const newVersionNumber = source.VersionNumber + 1
+
+    // Create new template version
+    // Only use columns proven in allowlist: AccountID, VersionNumber, Status
+    // ChecklistTemplateID is assumed to be IDENTITY (auto-generated)
+    // TemplateName, CreatedAt, CreatedBy are not proven and omitted
+    const insertTemplateRequest = new sql.Request(transaction)
+    insertTemplateRequest.input('AccountID', sql.Int, args.accountId)
+    insertTemplateRequest.input('VersionNumber', sql.Int, newVersionNumber)
+    insertTemplateRequest.input('Status', sql.NVarChar(16), 'DRAFT')
+
+    const insertTemplateResult = await insertTemplateRequest.query<{
+      ChecklistTemplateID: number
+    }>(`
+      INSERT INTO dbo.ChecklistTemplates (
+        AccountID,
+        VersionNumber,
+        Status
+      )
+      OUTPUT inserted.ChecklistTemplateID
+      VALUES (
+        @AccountID,
+        @VersionNumber,
+        @Status
+      );
+    `)
+
+    const newTemplateId = Number(insertTemplateResult.recordset[0]?.ChecklistTemplateID)
+    if (!newTemplateId) {
+      throw new Error('Failed to create checklist template')
+    }
+
+    // Clone template entries
+    const cloneEntriesRequest = new sql.Request(transaction)
+    cloneEntriesRequest.input('AccountID', sql.Int, args.accountId)
+    cloneEntriesRequest.input('SourceTemplateID', sql.Int, args.templateId)
+    cloneEntriesRequest.input('TargetTemplateID', sql.Int, newTemplateId)
+
+    const cloneEntriesResult = await cloneEntriesRequest.query<{
+      EntryCount: number
+    }>(`
+      INSERT INTO dbo.ChecklistTemplateEntries (
+        AccountID,
+        ChecklistTemplateID,
+        EntryText,
+        SortOrder,
+        Required,
+        ResultType
+      )
+      SELECT
+        AccountID,
+        @TargetTemplateID AS ChecklistTemplateID,
+        EntryText,
+        SortOrder,
+        Required,
+        ResultType
+      FROM dbo.ChecklistTemplateEntries
+      WHERE AccountID = @AccountID
+        AND ChecklistTemplateID = @SourceTemplateID;
+
+      SELECT @@ROWCOUNT AS EntryCount;
+    `)
+
+    const entryCount = Number(cloneEntriesResult.recordset[0]?.EntryCount ?? 0)
+
+    await transaction.commit()
+
+    return {
+      checklistTemplateId: newTemplateId,
+      versionNumber: newVersionNumber,
+      entryCount,
+    }
+  } catch (err) {
+    try {
+      await transaction.rollback()
+    } catch {
+      // ignore rollback errors
+    }
+    throw err
+  }
+}
+
+interface PatchChecklistRunArgs {
+  accountId: number
+  userId: number
+  runId: number
+  input: ChecklistRunPatchInput
+}
+
+export const patchChecklistRun = async (
+  args: PatchChecklistRunArgs,
+): Promise<{ exists: boolean; updatedRows: number }> => {
+  const pool = await poolPromise
+
+  // Check run exists and get current status
+  const checkRequest = new sql.Request(pool)
+  checkRequest.input('AccountID', sql.Int, args.accountId)
+  checkRequest.input('ChecklistRunID', sql.BigInt, args.runId)
+
+  const checkResult = await checkRequest.query<{
+    Status: string
+  }>(`
+    SELECT Status
+    FROM dbo.ChecklistRuns
     WHERE AccountID = @AccountID
-      AND ChecklistRunEntryID = @ChecklistRunEntryID;
+      AND ChecklistRunID = @ChecklistRunID;
   `)
 
-  if (existing.recordset.length === 0) {
+  if (checkResult.recordset.length === 0) {
     return { exists: false, updatedRows: 0 }
   }
 
-  const request = new sql.Request(pool)
+  const currentStatus = checkResult.recordset[0]!.Status as ChecklistRunStatus
 
-  request.input('AccountID', sql.Int, accountId)
-  request.input('ChecklistRunEntryID', sql.BigInt, runEntryId)
+  // Validate status transition
+  if (args.input.status) {
+    const newStatus = args.input.status
+
+    // No transitions out of COMPLETED or CANCELLED
+    if (currentStatus === 'COMPLETED' || currentStatus === 'CANCELLED') {
+      throw new AppError(`Cannot change status of ${currentStatus} checklist run`, 400)
+    }
+
+    // Only allow IN_PROGRESS -> CANCELLED transition
+    if (newStatus === 'CANCELLED' && currentStatus !== 'IN_PROGRESS') {
+      throw new AppError('Can only cancel IN_PROGRESS checklist runs', 400)
+    }
+
+    // Block invalid transitions
+    if (newStatus === 'DRAFT' || newStatus === 'IN_PROGRESS') {
+      throw new AppError('Status transitions to DRAFT or IN_PROGRESS are automatic', 400)
+    }
+  }
+
+  const updateRequest = new sql.Request(pool)
+  updateRequest.input('AccountID', sql.Int, args.accountId)
+  updateRequest.input('ChecklistRunID', sql.BigInt, args.runId)
 
   const setClauses: string[] = []
 
-  if (input.result !== undefined) {
-    request.input('Result', sql.NVarChar(16), input.result)
-    setClauses.push('Result = @Result')
+  if (args.input.status) {
+    updateRequest.input('Status', sql.NVarChar(16), args.input.status)
+    setClauses.push('Status = @Status')
+
+    if (args.input.status === 'CANCELLED') {
+      setClauses.push('UpdatedAt = SYSUTCDATETIME()')
+    }
+  } else {
+    setClauses.push('UpdatedAt = SYSUTCDATETIME()')
   }
-
-  if (input.notes !== undefined) {
-    request.input('Notes', sql.NVarChar(4000), input.notes)
-    setClauses.push('Notes = @Notes')
-  }
-
-  if (input.measuredValue !== undefined) {
-    request.input('MeasuredValue', sql.NVarChar(255), input.measuredValue)
-    setClauses.push('MeasuredValue = @MeasuredValue')
-  }
-
-  if (input.uom !== undefined) {
-    request.input('Uom', sql.NVarChar(64), input.uom)
-    setClauses.push('Uom = @Uom')
-  }
-
-  if (setClauses.length === 0) {
-    return { exists: true, updatedRows: 0 }
-  }
-
-  const expectedRowVersionBase64 = input.expectedRowVersionBase64
-  const expectedRowVersionBuffer =
-    typeof Buffer !== 'undefined'
-      ? Buffer.from(expectedRowVersionBase64, 'base64')
-      : expectedRowVersionBase64
-
-  request.input('ExpectedRowVersion', sql.VarBinary(8), expectedRowVersionBuffer)
 
   const sqlText = `
-    UPDATE dbo.ChecklistRunEntries
+    UPDATE dbo.ChecklistRuns
     SET ${setClauses.join(', ')}
     WHERE AccountID = @AccountID
-      AND ChecklistRunEntryID = @ChecklistRunEntryID
-      AND RowVersion = @ExpectedRowVersion;
+      AND ChecklistRunID = @ChecklistRunID;
   `
 
-  const result = await request.query(sqlText)
+  const result = await updateRequest.query(sqlText)
 
   const rowsAffectedArray = (result as { rowsAffected?: number[] }).rowsAffected ?? []
   const rowsAffected = rowsAffectedArray.reduce((sum, value) => sum + value, 0)
 
   return { exists: true, updatedRows: rowsAffected }
 }
-

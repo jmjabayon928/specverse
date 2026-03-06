@@ -2,16 +2,20 @@ import { AppError } from '@/backend/errors/AppError'
 import type {
   ChecklistRunDTO,
   ChecklistRunEntryPatchInput,
+  ChecklistRunPatchInput,
   ChecklistRunPagination,
+  ChecklistTemplateCloneResult,
   CreateChecklistRunInput,
   CreateChecklistRunResult,
   EvidenceMode,
 } from '@/domain/checklists/checklistTypes'
 import {
+  cloneChecklistTemplate as cloneChecklistTemplateRepository,
   createChecklistRunWithEntries,
   getChecklistRun as getChecklistRunRepository,
   insertAuditLog,
   listChecklistRunsByAssetId as listChecklistRunsByAssetIdRepository,
+  patchChecklistRun as patchChecklistRunRepository,
   patchChecklistRunEntry as patchChecklistRunEntryRepository,
   uploadChecklistRunEntryEvidence as uploadChecklistRunEntryEvidenceRepository,
   type ChecklistRunsListResult,
@@ -258,4 +262,71 @@ export const patchChecklistRunEntry = async (
   })
 }
 
+export const cloneChecklistTemplate = async (
+  accountId: number,
+  userId: number,
+  templateId: number,
+): Promise<ChecklistTemplateCloneResult> => {
+  const result = await cloneChecklistTemplateRepository({
+    accountId,
+    userId,
+    templateId,
+  })
+
+  await safeAuditLog({
+    accountId,
+    performedBy: userId,
+    action: 'CHECKLIST_TEMPLATE_CLONE',
+    tableName: 'ChecklistTemplates',
+    recordId: null,
+    route: `/api/backend/checklists/templates/${String(templateId)}/clone`,
+    method: 'POST',
+    statusCode: 200,
+    changes: {
+      sourceTemplateId: templateId,
+      newTemplateId: result.checklistTemplateId,
+      versionNumber: result.versionNumber,
+      entryCount: result.entryCount,
+    },
+  })
+
+  return result
+}
+
+export const patchChecklistRun = async (
+  accountId: number,
+  userId: number,
+  runId: number,
+  input: ChecklistRunPatchInput,
+): Promise<void> => {
+  const result = await patchChecklistRunRepository({
+    accountId,
+    userId,
+    runId,
+    input,
+  })
+
+  if (!result.exists) {
+    throw new AppError('Checklist run not found', 404)
+  }
+
+  if (result.updatedRows === 0) {
+    throw new AppError('Checklist run was not updated', 400)
+  }
+
+  await safeAuditLog({
+    accountId,
+    performedBy: userId,
+    action: 'CHECKLIST_RUN_UPDATE',
+    tableName: 'ChecklistRuns',
+    recordId: null,
+    route: `/api/backend/checklists/runs/${String(runId)}`,
+    method: 'PATCH',
+    statusCode: 200,
+    changes: {
+      checklistRunId: runId,
+      patched: input,
+    },
+  })
+}
 

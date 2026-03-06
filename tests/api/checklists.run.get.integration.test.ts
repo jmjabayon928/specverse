@@ -69,6 +69,7 @@ describe('GET /api/backend/checklists/runs/:runId', () => {
     const dto: ChecklistRunDTO = {
       runId,
       checklistTemplateId: 10,
+      checklistTemplateVersionNumber: 2,
       runName: 'My run',
       notes: null,
       projectId: null,
@@ -76,6 +77,9 @@ describe('GET /api/backend/checklists/runs/:runId', () => {
       systemId: null,
       assetId: null,
       status: 'DRAFT',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      completedAt: null,
       entries: [
         {
           runEntryId: 1,
@@ -104,6 +108,13 @@ describe('GET /api/backend/checklists/runs/:runId', () => {
           rowVersionBase64: 'dmVyc2lvbg==',
         },
       ],
+      totalEntries: 1,
+      completedEntries: 0,
+      pendingEntries: 1,
+      passEntries: 0,
+      failEntries: 0,
+      naEntries: 0,
+      completionPercentage: 0,
     }
 
     const pagination: ChecklistRunPagination = {
