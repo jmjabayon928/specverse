@@ -11,6 +11,7 @@ type FacilityRow = {
   facilityId: number
   facilityName: string
   status: string | null
+  systemCount: number
 }
 
 type FacilitiesResponse = {
@@ -112,6 +113,9 @@ export default function FacilitiesPage() {
                         Status
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Systems
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         ID
                       </th>
                     </tr>
@@ -129,6 +133,9 @@ export default function FacilitiesPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {facility.status ?? 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {facility.systemCount ?? 0}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {facility.facilityId}

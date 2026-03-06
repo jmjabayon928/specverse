@@ -238,22 +238,6 @@ export default function SystemPage({ params }: Props) {
                     </div>
                   )}
                 </div>
-
-                {/* Other Related Content Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <div className="p-4 border border-gray-200 rounded-md bg-gray-50">
-                    <div className="font-medium text-gray-700">Checklists</div>
-                    <div className="text-sm text-gray-500 mt-1">Coming soon</div>
-                  </div>
-                  <div className="p-4 border border-gray-200 rounded-md bg-gray-50">
-                    <div className="font-medium text-gray-700">Schedules</div>
-                    <div className="text-sm text-gray-500 mt-1">Coming soon</div>
-                  </div>
-                  <div className="p-4 border border-gray-200 rounded-md bg-gray-50">
-                    <div className="font-medium text-gray-700">Activity</div>
-                    <div className="text-sm text-gray-500 mt-1">Coming soon</div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

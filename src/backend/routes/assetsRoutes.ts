@@ -2,7 +2,7 @@
 import { Router } from 'express'
 import { PERMISSIONS } from '@/constants/permissions'
 import { verifyToken, requirePermission } from '@/backend/middleware/authMiddleware'
-import { listAssets, getAssetById, getAssetCustomFields } from '../controllers/assetsController'
+import { listAssets, getAssetById, getAssetCustomFields, listChecklistRunsForAsset } from '../controllers/assetsController'
 import { listDatasheetsForAsset } from '../controllers/filledSheetController'
 import { listAssetDocuments, linkAssetDocument, unlinkAssetDocument } from '../controllers/assetDocumentsController'
 import { getAssetActivity } from '../controllers/assetActivityController'
@@ -50,6 +50,13 @@ router.get(
   verifyToken,
   requirePermission(PERMISSIONS.DATASHEET_VIEW),
   getAssetActivity
+)
+
+router.get(
+  '/:assetId/checklists',
+  verifyToken,
+  requirePermission(PERMISSIONS.DATASHEET_VIEW),
+  listChecklistRunsForAsset
 )
 
 router.post(

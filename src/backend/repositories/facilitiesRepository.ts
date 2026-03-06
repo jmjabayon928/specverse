@@ -14,6 +14,7 @@ export type FacilityRow = {
   facilityId: number
   facilityName: string
   status: string | null
+  systemCount: number
 }
 
 export type SystemRow = {
@@ -41,9 +42,16 @@ export async function listFacilities(
 ): Promise<{ items: FacilityRow[]; total: number }> {
   const pool = await poolPromise
   let query = `
-    SELECT FacilityID AS facilityId, FacilityName AS facilityName, Status AS status
-    FROM dbo.Facilities
-    WHERE AccountID = @AccountID
+    SELECT 
+      f.FacilityID AS facilityId,
+      f.FacilityName AS facilityName,
+      f.Status AS status,
+      COUNT(DISTINCT fs.SystemID) AS systemCount
+    FROM dbo.Facilities f
+    LEFT JOIN dbo.FacilitySystems fs
+      ON fs.FacilityID = f.FacilityID
+      AND fs.AccountID = @AccountID
+    WHERE f.AccountID = @AccountID
   `
   let countQuery = `
     SELECT COUNT(*) AS total
@@ -63,7 +71,7 @@ export async function listFacilities(
     ? filters.status.trim()
     : 'Active'
 
-  query += ' AND Status = @Status'
+  query += ' AND f.Status = @Status'
   countQuery += ' AND Status = @Status'
   request.input('Status', sql.NVarChar(50), statusFilter)
   countRequest.input('Status', sql.NVarChar(50), statusFilter)
@@ -71,17 +79,19 @@ export async function listFacilities(
   if (filters.q != null && filters.q.trim() !== '') {
     const escaped = escapeLike(filters.q.trim())
     const likePattern = `%${escaped}%`
-    query += ' AND FacilityName LIKE @Like ESCAPE \'\\\''
+    query += ' AND f.FacilityName LIKE @Like ESCAPE \'\\\''
     countQuery += ' AND FacilityName LIKE @Like ESCAPE \'\\\''
     request.input('Like', sql.NVarChar(400), likePattern)
     countRequest.input('Like', sql.NVarChar(400), likePattern)
   }
 
+  query += ' GROUP BY f.FacilityID, f.FacilityName, f.Status'
+
   // Get total count
   const countResult = await countRequest.query<{ total: number }>(countQuery)
   const total = countResult.recordset?.[0]?.total ?? 0
 
-  query += ' ORDER BY FacilityName ASC, FacilityID ASC'
+  query += ' ORDER BY f.FacilityName ASC, f.FacilityID ASC'
   query += ' OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY'
 
   const result = await request.query<FacilityRow>(query)
@@ -101,9 +111,17 @@ export async function getFacilityById(
     .input('AccountID', sql.Int, accountId)
     .input('FacilityID', sql.Int, facilityId)
     .query<FacilityRow>(`
-      SELECT TOP 1 FacilityID AS facilityId, FacilityName AS facilityName, Status AS status
-      FROM dbo.Facilities
-      WHERE FacilityID = @FacilityID AND AccountID = @AccountID
+      SELECT TOP 1 
+        f.FacilityID AS facilityId,
+        f.FacilityName AS facilityName,
+        f.Status AS status,
+        COUNT(DISTINCT fs.SystemID) AS systemCount
+      FROM dbo.Facilities f
+      LEFT JOIN dbo.FacilitySystems fs
+        ON fs.FacilityID = f.FacilityID
+        AND fs.AccountID = @AccountID
+      WHERE f.FacilityID = @FacilityID AND f.AccountID = @AccountID
+      GROUP BY f.FacilityID, f.FacilityName, f.Status
     `)
   return result.recordset?.[0] ?? null
 }

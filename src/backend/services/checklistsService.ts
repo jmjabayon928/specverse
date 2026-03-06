@@ -11,8 +11,10 @@ import {
   createChecklistRunWithEntries,
   getChecklistRun as getChecklistRunRepository,
   insertAuditLog,
+  listChecklistRunsByAssetId as listChecklistRunsByAssetIdRepository,
   patchChecklistRunEntry as patchChecklistRunEntryRepository,
   uploadChecklistRunEntryEvidence as uploadChecklistRunEntryEvidenceRepository,
+  type ChecklistRunsListResult,
 } from '@/backend/repositories/checklistsRepository'
 
 export interface ChecklistEvidenceFileMeta {
@@ -193,6 +195,15 @@ export const getChecklistRun = async (
     entries: shapedEntries,
     pagination,
   }
+}
+
+export const listChecklistRunsByAssetId = async (
+  accountId: number,
+  assetId: number,
+  page?: number,
+  pageSize?: number,
+): Promise<ChecklistRunsListResult> => {
+  return listChecklistRunsByAssetIdRepository(accountId, assetId, page, pageSize)
 }
 
 export const patchChecklistRunEntry = async (

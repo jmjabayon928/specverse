@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { cookies, headers } from 'next/headers'
 import AssetHeader from '@/components/assets/AssetHeader'
 import AssetTabs from '@/components/assets/AssetTabs'
+import AssetChecklistsPanel from '@/components/assets/AssetChecklistsPanel'
 
 type PageProps = {
   params: { id: string }
@@ -105,17 +106,7 @@ export default async function AssetChecklistsPage({ params }: PageProps) {
         lastUpdated={asset.updatedAt ?? undefined}
         activeTab="checklists"
       />
-      <div className="p-6 bg-gray-50 rounded-md border border-gray-200">
-        <p className="text-gray-600 mb-4">Coming soon</p>
-        <p className="text-sm text-gray-500 mb-4">
-          Checklists for this asset will be available here.
-        </p>
-        <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
-          <li>View checklists assigned to this asset</li>
-          <li>Run checklist inspections</li>
-          <li>Track checklist completion status</li>
-        </ul>
-      </div>
+      <AssetChecklistsPanel assetId={assetId} />
     </div>
   )
 }
