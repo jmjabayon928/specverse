@@ -17,6 +17,10 @@ export type AssetDetail = {
   projectId: number | null
   createdAt: Date
   updatedAt: Date
+  facilityId: number | null
+  facilityName: string | null
+  systemId: number | null
+  systemName: string | null
 }
 
 export type AssetCustomFieldDto = {

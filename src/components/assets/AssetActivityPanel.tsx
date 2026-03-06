@@ -22,6 +22,32 @@ interface ActivityResponse {
   nextCursor: { performedAt: string; logId: number } | null
 }
 
+const FALLBACK = '—'
+
+/**
+ * Formats a timestamp string for display.
+ * - null/empty -> "—"
+ * - ISO-8601 date strings (e.g., "2026-03-05T12:34:56.000Z") -> parsed and formatted
+ * - Other values -> original string
+ */
+function formatTimestamp(value: string | null): string {
+  if (value == null || value.trim() === '') return FALLBACK
+
+  // Only parse ISO-8601-like date strings (e.g., "2026-03-05T12:34:56.000Z")
+  if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    try {
+      const date = new Date(value)
+      if (!isNaN(date.getTime())) {
+        return new Intl.DateTimeFormat().format(date)
+      }
+    } catch {
+      // Fall through to string return
+    }
+  }
+
+  return value
+}
+
 export default function AssetActivityPanel({ assetId }: Props) {
   const [rows, setRows] = useState<ActivityLogRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -129,7 +155,7 @@ export default function AssetActivityPanel({ assetId }: Props) {
                   )}
                 </div>
                 {row.performedAt && (
-                  <div className="text-xs text-gray-500 mt-1">{row.performedAt}</div>
+                  <div className="text-xs text-gray-500 mt-1">{formatTimestamp(row.performedAt)}</div>
                 )}
               </div>
               <div className="text-xs text-gray-500">User #{row.performedByUserId}</div>

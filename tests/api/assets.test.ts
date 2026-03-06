@@ -164,6 +164,10 @@ describe('Assets API', () => {
         projectId: null,
         createdAt,
         updatedAt,
+        facilityId: null,
+        facilityName: null,
+        systemId: null,
+        systemName: null,
       })
 
       const res = await request(app).get('/api/backend/assets/1')
@@ -176,6 +180,106 @@ describe('Assets API', () => {
       expect(res.body).toHaveProperty('updatedAt')
       expect(typeof res.body.createdAt).toBe('string')
       expect(typeof res.body.updatedAt).toBe('string')
+      expect(res.body).toHaveProperty('facilityId')
+      expect(res.body).toHaveProperty('facilityName')
+      expect(res.body).toHaveProperty('systemId')
+      expect(res.body).toHaveProperty('systemName')
+    })
+
+    it('GET /api/backend/assets/:id returns facility/system context when asset belongs to system', async () => {
+      const createdAt = new Date('2025-01-01T12:00:00.000Z')
+      const updatedAt = new Date('2025-01-02T14:30:00.000Z')
+      mockGetAssetById.mockResolvedValue({
+        assetId: 1,
+        assetTag: 'PT-001',
+        assetName: 'Pressure Transmitter',
+        location: 'Area A',
+        system: 'HVAC',
+        service: 'Cooling',
+        criticality: 'High',
+        disciplineId: 1,
+        subtypeId: 2,
+        clientId: null,
+        projectId: null,
+        createdAt,
+        updatedAt,
+        facilityId: 10,
+        facilityName: 'Main Facility',
+        systemId: 20,
+        systemName: 'HVAC',
+      })
+
+      const res = await request(app).get('/api/backend/assets/1')
+
+      expect(res.status).toBe(200)
+      expect(res.body.facilityId).toBe(10)
+      expect(res.body.facilityName).toBe('Main Facility')
+      expect(res.body.systemId).toBe(20)
+      expect(res.body.systemName).toBe('HVAC')
+    })
+
+    it('GET /api/backend/assets/:id returns null facility/system context when duplicate system names exist', async () => {
+      const createdAt = new Date('2025-01-01T12:00:00.000Z')
+      const updatedAt = new Date('2025-01-02T14:30:00.000Z')
+      mockGetAssetById.mockResolvedValue({
+        assetId: 1,
+        assetTag: 'PT-001',
+        assetName: 'Pressure Transmitter',
+        location: 'Area A',
+        system: 'HVAC',
+        service: 'Cooling',
+        criticality: 'High',
+        disciplineId: 1,
+        subtypeId: 2,
+        clientId: null,
+        projectId: null,
+        createdAt,
+        updatedAt,
+        facilityId: null,
+        facilityName: null,
+        systemId: null,
+        systemName: null,
+      })
+
+      const res = await request(app).get('/api/backend/assets/1')
+
+      expect(res.status).toBe(200)
+      expect(res.body.facilityId).toBeNull()
+      expect(res.body.facilityName).toBeNull()
+      expect(res.body.systemId).toBeNull()
+      expect(res.body.systemName).toBeNull()
+    })
+
+    it('GET /api/backend/assets/:id returns null facility/system context when no system match exists', async () => {
+      const createdAt = new Date('2025-01-01T12:00:00.000Z')
+      const updatedAt = new Date('2025-01-02T14:30:00.000Z')
+      mockGetAssetById.mockResolvedValue({
+        assetId: 1,
+        assetTag: 'PT-001',
+        assetName: 'Pressure Transmitter',
+        location: 'Area A',
+        system: 'UnknownSystem',
+        service: 'Cooling',
+        criticality: 'High',
+        disciplineId: 1,
+        subtypeId: 2,
+        clientId: null,
+        projectId: null,
+        createdAt,
+        updatedAt,
+        facilityId: null,
+        facilityName: null,
+        systemId: null,
+        systemName: null,
+      })
+
+      const res = await request(app).get('/api/backend/assets/1')
+
+      expect(res.status).toBe(200)
+      expect(res.body.facilityId).toBeNull()
+      expect(res.body.facilityName).toBeNull()
+      expect(res.body.systemId).toBeNull()
+      expect(res.body.systemName).toBeNull()
     })
 
     it('computes completeness score math as specified', () => {

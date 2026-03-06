@@ -20,6 +20,19 @@ type FacilityRow = {
   status: string | null
 }
 
+type SystemAssetRow = {
+  assetId: number
+  assetTag: string
+  assetName: string | null
+  location: string | null
+  status: string
+}
+
+type AssetsResponse = {
+  items: SystemAssetRow[]
+  total: number
+}
+
 type Props = {
   params: Promise<{ facilityId: string; systemId: string }>
 }
@@ -32,6 +45,10 @@ export default function SystemPage({ params }: Props) {
   const [facility, setFacility] = useState<FacilityRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [assets, setAssets] = useState<SystemAssetRow[]>([])
+  const [assetTotal, setAssetTotal] = useState(0)
+  const [assetsLoading, setAssetsLoading] = useState(false)
+  const [assetsError, setAssetsError] = useState<string | null>(null)
 
   useEffect(() => {
     params.then(p => {
@@ -77,6 +94,39 @@ export default function SystemPage({ params }: Props) {
   useEffect(() => {
     fetchSystem()
   }, [fetchSystem])
+
+  const fetchAssets = useCallback(async () => {
+    if (facilityId == null || systemId == null) return
+    setAssetsLoading(true)
+    setAssetsError(null)
+    try {
+      const res = await fetch(
+        `/api/backend/facilities/${facilityId}/systems/${systemId}/assets?take=5&skip=0`,
+        {
+          credentials: 'include',
+          cache: 'no-store',
+        }
+      )
+      if (!res.ok) {
+        setAssetsError('Unable to load asset preview.')
+        setAssetsLoading(false)
+        return
+      }
+      const data: AssetsResponse = await res.json()
+      setAssets(data.items)
+      setAssetTotal(data.total)
+      setAssetsLoading(false)
+    } catch {
+      setAssetsError('Unable to load asset preview.')
+      setAssetsLoading(false)
+    }
+  }, [facilityId, systemId])
+
+  useEffect(() => {
+    if (system != null) {
+      fetchAssets()
+    }
+  }, [system, fetchAssets])
 
   if (sessionLoading || facilityId == null || systemId == null) {
     return (
@@ -127,14 +177,70 @@ export default function SystemPage({ params }: Props) {
 
               <div className="border-t border-gray-200 pt-4">
                 <h3 className="text-lg font-semibold mb-3">Related Content</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Link
-                    href={`/facilities/${facilityId}/systems/${systemId}/assets`}
-                    className="p-4 border border-gray-200 rounded-md bg-gray-50 hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="font-medium text-gray-700">Assets</div>
-                    <div className="text-sm text-gray-500 mt-1">View assets</div>
-                  </Link>
+                
+                {/* Assets Preview */}
+                <div className="mb-6 p-4 border border-gray-200 rounded-md bg-white">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="font-medium text-gray-900">Assets</h4>
+                      {assetsLoading ? (
+                        <div className="text-sm text-gray-500 mt-1">Loading assets...</div>
+                      ) : assetsError ? (
+                        <div className="text-sm text-gray-500 mt-1">{assetsError}</div>
+                      ) : (
+                        <div className="text-sm text-gray-600 mt-1">
+                          {assetTotal} {assetTotal === 1 ? 'asset' : 'assets'}
+                        </div>
+                      )}
+                    </div>
+                    <Link
+                      href={`/facilities/${facilityId}/systems/${systemId}/assets`}
+                      className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      View all assets →
+                    </Link>
+                  </div>
+                  
+                  {assetsLoading ? (
+                    <div className="text-sm text-gray-500 py-2">Loading...</div>
+                  ) : assetsError ? (
+                    <div className="text-sm text-gray-500 py-2">{assetsError}</div>
+                  ) : assets.length === 0 ? (
+                    <div className="text-sm text-gray-500 py-2">No assets found</div>
+                  ) : (
+                    <div className="border-t border-gray-100 pt-3">
+                      <div className="space-y-2">
+                        {assets.map(asset => (
+                          <div
+                            key={asset.assetId}
+                            className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <Link
+                                href={`/assets/${asset.assetId}`}
+                                className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                              >
+                                {asset.assetTag}
+                              </Link>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {asset.assetName && (
+                                  <span className="mr-2">{asset.assetName}</span>
+                                )}
+                                {asset.location && (
+                                  <span className="mr-2">• {asset.location}</span>
+                                )}
+                                <span>• {asset.status}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Other Related Content Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="p-4 border border-gray-200 rounded-md bg-gray-50">
                     <div className="font-medium text-gray-700">Checklists</div>
                     <div className="text-sm text-gray-500 mt-1">Coming soon</div>
