@@ -13,6 +13,8 @@ SpecVerse is a production-grade engineering system of record for EPC, industrial
 
 **What makes SpecVerse different** is that it treats engineering artifacts as **structured, lifecycle-aware entities** (not static documents), enabling consistent governance, revision control, QA/QC evidence, downstream cost impact, and future AI-assist workflows—without sacrificing accountability.
 
+SpecVerse has been validated through a realistic Water/Wastewater engineering pilot demonstrating facility hierarchy, MEL (Mechanical Equipment List), Asset 360 views, datasheet workflows, estimation, inventory tracking, and verification processes.
+
 ---
 
 ## 2) Architectural Goals (Non‑Negotiables)
@@ -61,6 +63,7 @@ SpecVerse is deliberately engineered around these constraints:
 - **Auth:** JWT-based session (cookie or Authorization header), server-enforced RBAC
 - **Exports/Jobs:** Background job patterns for large downloads/exports (where applicable)
 - **Audit:** Centralized insert path + middleware hooks for request/response logging
+- Facilities hierarchy (Facility → Systems → Assets) used in engineering pilots
 
 ### 3.2 Text diagram
 
@@ -98,6 +101,8 @@ SpecVerse follows a conventional layered backend structure:
 - **Services**: business rules, transaction boundaries, orchestration
 - **Repositories / database query modules**: SQL access (parameterized queries only)
 - **Middleware**: auth, tenant scoping, auditing, error handling
+
+This layered architecture enables engineering modules such as datasheets, estimations, facilities navigation, and asset lifecycle views to evolve without violating transactional integrity or tenant isolation.
 
 ### 4.2 Transaction boundaries
 
@@ -311,6 +316,8 @@ Large operations (exports, bulk downloads) should be designed to:
 - secure downloads (signed URLs, expiry windows)
 - leave audit trails
 
+Export jobs are persisted in the ExportJobs table and processed by background workers using retry scheduling fields such as NextAttemptAt, AttemptCount, and MaxAttempts to ensure reliability and resilient retry behavior.
+
 ---
 
 ## 10) Internationalization
@@ -330,6 +337,8 @@ SpecVerse is designed to support AI-assisted insights without violating engineer
 - AI should suggest, summarize, and flag inconsistencies
 - Decisions remain attributable to humans
 - AI outputs should be explainable and auditable
+
+Because engineering data in SpecVerse is structured and lifecycle-aware, the platform can support AI-assisted analysis such as datasheet anomaly detection, estimation insights, and asset performance summaries.
 
 ---
 
@@ -374,6 +383,37 @@ Recommended practice:
 - CI on both branches
 - staging used for pre-prod validation
 - production releases via main
+
+---
+
+## 14) Architecture Decision Records (ADR)
+
+This section records key architectural decisions that shape SpecVerse’s
+engineering design. These decisions provide historical context and help
+future maintainers understand why certain patterns were chosen.
+
+### ADR-001: Multi-Tenant Account Isolation
+
+SpecVerse enforces strict tenant isolation using AccountID scoping across
+API handlers, queries, and persistence layers to prevent accidental
+cross-tenant access.
+
+### ADR-002: Replace-All Transactional Datasheet Writes
+
+Complex datasheet updates are written using replace-all transactional
+patterns to guarantee atomic updates and preserve data integrity.
+
+### ADR-003: Platform Admin Separate from Account Admin
+
+Platform administrators operate at the system level and are intentionally
+separated from account-scoped roles to prevent accidental cross-tenant
+privilege escalation.
+
+### ADR-004: Export Jobs via Background Workers
+
+Large exports are processed asynchronously through background job workers
+to prevent long-running HTTP requests and to support retry and monitoring
+capabilities.
 
 ---
 

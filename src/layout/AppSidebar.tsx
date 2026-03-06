@@ -56,6 +56,12 @@ const navItems: NavItem[] = [
     requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
   },
   {
+    icon: <GridIcon />,
+    name: 'Facilities (Pilot)',
+    path: '/facilities',
+    requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
+  },
+  {
     icon: <DataSheetsIcon />,
     name: 'DataSheets',
     requiredPermission: PERMISSIONS.DATASHEET_VIEW,

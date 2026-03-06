@@ -40,6 +40,10 @@ export type AssetDetail = {
   projectId: number | null
   createdAt: Date
   updatedAt: Date
+  facilityId: number | null
+  facilityName: string | null
+  systemId: number | null
+  systemName: string | null
 }
 
 export type AssetCustomFieldValue = {
@@ -109,61 +113,10 @@ export async function listAssets(
       a.SubtypeID AS subtypeId,
       a.ClientID AS clientId,
       a.ProjectID AS projectId,
-      CASE
-        WHEN (core.coreTotalRequired + ISNULL(cfr.customTotalRequired, 0)) = 0 THEN 100
-        ELSE FLOOR(
-          100.0 * (core.coreTotalFilled + ISNULL(cf.customFilled, 0))
-          / (core.coreTotalRequired + ISNULL(cfr.customTotalRequired, 0))
-        )
-      END AS completenessScore,
-      (core.coreTotalFilled + ISNULL(cf.customFilled, 0)) AS completenessFilled,
-      (core.coreTotalRequired + ISNULL(cfr.customTotalRequired, 0)) AS completenessRequired
+      0 AS completenessScore,
+      0 AS completenessFilled,
+      0 AS completenessRequired
     FROM dbo.Assets a
-    LEFT JOIN (
-      SELECT
-        v.EntityID AS AssetID,
-        COUNT(
-          CASE
-            WHEN v.ValueString IS NOT NULL AND LTRIM(RTRIM(v.ValueString)) <> '' THEN 1
-            WHEN v.ValueNumber IS NOT NULL THEN 1
-            WHEN v.ValueBool IS NOT NULL THEN 1
-            WHEN v.ValueDate IS NOT NULL THEN 1
-            WHEN v.ValueJson IS NOT NULL THEN 1
-            ELSE NULL
-          END
-        ) AS customFilled
-      FROM dbo.CustomFieldDefinitions d
-      LEFT JOIN dbo.CustomFieldValues v
-        ON v.AccountID = d.AccountID
-        AND v.EntityType = d.EntityType
-        AND v.CustomFieldID = d.CustomFieldID
-      WHERE d.AccountID = @AccountID
-        AND d.EntityType = 'asset'
-        AND d.IsRequired = 1
-      GROUP BY v.EntityID
-    ) cf ON cf.AssetID = a.AssetID
-    CROSS APPLY (
-      SELECT
-        (CASE WHEN a.AssetName IS NOT NULL AND LTRIM(RTRIM(a.AssetName)) <> '' THEN 1 ELSE 0 END
-         + CASE WHEN a.Location IS NOT NULL AND LTRIM(RTRIM(a.Location)) <> '' THEN 1 ELSE 0 END
-         + CASE WHEN a.System IS NOT NULL AND LTRIM(RTRIM(a.System)) <> '' THEN 1 ELSE 0 END
-         + CASE WHEN a.Service IS NOT NULL AND LTRIM(RTRIM(a.Service)) <> '' THEN 1 ELSE 0 END
-         + CASE WHEN a.Criticality IS NOT NULL AND LTRIM(RTRIM(a.Criticality)) <> '' THEN 1 ELSE 0 END
-         + CASE WHEN a.DisciplineID IS NOT NULL THEN 1 ELSE 0 END
-         + CASE WHEN a.SubtypeID IS NOT NULL THEN 1 ELSE 0 END
-         + CASE WHEN a.ClientID IS NOT NULL THEN 1 ELSE 0 END
-         + CASE WHEN a.ProjectID IS NOT NULL THEN 1 ELSE 0 END
-        ) AS coreTotalFilled,
-        9 AS coreTotalRequired
-    ) core
-    CROSS JOIN (
-      SELECT
-        COUNT(*) AS customTotalRequired
-      FROM dbo.CustomFieldDefinitions d2
-      WHERE d2.AccountID = @AccountID
-        AND d2.EntityType = 'asset'
-        AND d2.IsRequired = 1
-    ) cfr
     WHERE a.AccountID = @AccountID
   `
   const request = pool.request().input('AccountID', sql.Int, accountId)
@@ -232,7 +185,7 @@ export async function getAssetById(
     .input('AccountID', sql.Int, accountId)
     .input('AssetID', sql.Int, assetId)
     .query<AssetDetail>(`
-      SELECT TOP 1
+      SELECT
         a.AssetID AS assetId,
         a.AssetTag AS assetTag,
         a.AssetName AS assetName,
@@ -245,8 +198,27 @@ export async function getAssetById(
         a.ClientID AS clientId,
         a.ProjectID AS projectId,
         a.CreatedAt AS createdAt,
-        a.UpdatedAt AS updatedAt
+        a.UpdatedAt AS updatedAt,
+        CASE WHEN match.MatchCount = 1 THEN match.FacilityID ELSE NULL END AS facilityId,
+        CASE WHEN match.MatchCount = 1 THEN f.FacilityName ELSE NULL END AS facilityName,
+        CASE WHEN match.MatchCount = 1 THEN match.SystemID ELSE NULL END AS systemId,
+        CASE WHEN match.MatchCount = 1 THEN match.SystemName ELSE NULL END AS systemName
       FROM dbo.Assets a
+      OUTER APPLY (
+        SELECT 
+          fs.SystemID,
+          fs.SystemName,
+          fs.FacilityID,
+          COUNT(*) OVER() AS MatchCount
+        FROM dbo.FacilitySystems fs
+        WHERE fs.AccountID = @AccountID
+          AND fs.SystemName IS NOT NULL
+          AND LTRIM(RTRIM(UPPER(fs.SystemName))) = LTRIM(RTRIM(UPPER(a.System)))
+      ) match
+      LEFT JOIN dbo.Facilities f
+        ON f.AccountID = @AccountID
+        AND f.FacilityID = match.FacilityID
+        AND match.MatchCount = 1
       WHERE a.AccountID = @AccountID
         AND a.AssetID = @AssetID
     `)

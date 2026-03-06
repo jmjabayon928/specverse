@@ -10,6 +10,7 @@ export type DemoModule =
   | 'estimations'
   | 'inventory'
   | 'schedules'
+  | 'facilities'
   | 'verification'
   | 'governance'
   | 'auditLogs'
@@ -387,6 +388,13 @@ export const demoGuide: DemoGuideConfig = {
       title: 'Facility schedules at scale',
       body:
         'Asset-first schedule tables with typed cells, strong invariants, and transactional bulk saves—built for consistent facility documentation.',
+      action: { label: 'Back to Dashboard Guide', href: '/dashboard' }
+    },
+    facilities: {
+      module: 'facilities',
+      title: 'Facilities pilot navigation',
+      body:
+        'Navigate facilities and systems to explore asset organization and future integration points.',
       action: { label: 'Back to Dashboard Guide', href: '/dashboard' }
     },
     verification: {

@@ -130,7 +130,7 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
 
   if (!req.user) {
     if (isDevOrStage) {
-      console.info(JSON.stringify({
+      console.debug(JSON.stringify({
         event: 'auth.session',
         cookiePresent,
         sessionFound: false,
@@ -140,10 +140,11 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
     return
   }
 
-  if (isDevOrStage) {
-    console.info(JSON.stringify({
+  // Only log failures (missing cookie or session) to reduce noise
+  if (isDevOrStage && !cookiePresent) {
+    console.debug(JSON.stringify({
       event: 'auth.session',
-      cookiePresent,
+      cookiePresent: false,
       sessionFound: true,
     }))
   }
