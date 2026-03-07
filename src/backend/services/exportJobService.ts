@@ -28,6 +28,11 @@ import {
   type InventoryTransactionFilters,
 } from '../database/inventoryTransactionQueries'
 import type { InventoryTransactionDTO } from '@/domain/inventory/inventoryTypes'
+import { getAssetById } from './assetsService'
+import { listChecklistRunsByAssetId } from './checklistsService'
+import { fetchAssetDocuments } from './assetDocumentsService'
+import { fetchFilledSheetsForAsset } from './filledSheetService'
+import { getAccountContextForUser } from '../database/accountContextQueries'
 
 const JWT_SECRET = process.env.JWT_SECRET
 if (!JWT_SECRET) {
@@ -377,6 +382,313 @@ export async function runClaimedExportJob(row: ExportJobRow, leaseId: string): P
 
       if (process.env.NODE_ENV !== 'test') {
         console.log(JSON.stringify({ msg: 'export_job_complete', jobId, leaseId }))
+      }
+    } else if (row.JobType === 'handover_binder') {
+      const zipFileName = `handover-binder-${jobId}.zip`
+      const expectedRelativePath = `jobs/${zipFileName}`
+
+      // Check if already completed (reuse existing zip if present)
+      if (
+        row.Status === 'running' &&
+        row.LeaseId === leaseId &&
+        row.FileName === zipFileName &&
+        row.FilePath === expectedRelativePath
+      ) {
+        const stored = row.FilePath
+        if (!path.isAbsolute(stored) && !stored.includes('..')) {
+          const basename = path.basename(stored)
+          const absolutePath = path.join(EXPORT_JOBS_DIR, basename)
+          const resolved = path.resolve(absolutePath)
+          const root = path.resolve(EXPORT_JOBS_DIR)
+          const relative = path.relative(root, resolved)
+          if (!relative.startsWith('..') && !path.isAbsolute(relative) && existsSync(resolved)) {
+            // Verify manifest.json exists in ExportJobItems (sanity check)
+            const items = await getExportJobItemsForJob(jobId)
+            const hasManifest = items.some((i) => i.RelativePath === normalizeRelativePath('manifest.json'))
+            if (hasManifest) {
+              await updateExportJobCompleted(jobId, zipFileName, expectedRelativePath, leaseId)
+              if (process.env.NODE_ENV !== 'test') {
+                console.log(JSON.stringify({ msg: 'export_job_complete_skip_regenerate', jobId, leaseId }))
+              }
+              return
+            }
+          }
+        }
+      }
+
+      // Parse params with validation
+      let params: Record<string, unknown> = {}
+      try {
+        params = row.ParamsJson ? (JSON.parse(row.ParamsJson) as Record<string, unknown>) : {}
+      } catch {
+        await updateExportJobFailed(
+          jobId,
+          'Invalid ParamsJson format',
+          leaseId,
+          backoffSecondsForAttempt(attemptCount)
+        )
+        return
+      }
+
+      const assetIdRaw = params.assetId
+      const assetId = typeof assetIdRaw === 'number' && Number.isInteger(assetIdRaw) && assetIdRaw > 0 ? assetIdRaw : null
+
+      if (!assetId) {
+        await updateExportJobFailed(
+          jobId,
+          'Missing or invalid assetId parameter (must be positive integer)',
+          leaseId,
+          backoffSecondsForAttempt(attemptCount)
+        )
+        return
+      }
+
+      // Get accountId - prefer from row, otherwise query from user
+      let accountId = row.AccountID ?? null
+      if (!accountId) {
+        const accountContext = await getAccountContextForUser(row.CreatedBy)
+        if (!accountContext) {
+          await updateExportJobFailed(
+            jobId,
+            'Unable to determine account context',
+            leaseId,
+            backoffSecondsForAttempt(attemptCount)
+          )
+          return
+        }
+        accountId = accountContext.accountId
+      }
+
+      await ensureExportJobsDir()
+      const zipFilePath = path.join(EXPORT_JOBS_DIR, zipFileName)
+      const output = createWriteStream(zipFilePath)
+      const archive = archiver('zip', { zlib: { level: 9 } })
+      archive.pipe(output)
+
+      const manifest: {
+        exportType: string
+        assetId: number
+        assetTag: string | null
+        exportedAt: string
+        sections: {
+          asset: { file: string; included: boolean }
+          checklists: { file: string; count: number; included: boolean }
+          documents: { file: string; count: number; included: boolean }
+          datasheets: { file: string; count: number; included: boolean }
+        }
+      } = {
+        exportType: 'handover_binder',
+        assetId,
+        assetTag: null,
+        exportedAt: new Date().toISOString(),
+        sections: {
+          asset: { file: 'asset-summary.json', included: false },
+          checklists: { file: 'checklists/index.json', count: 0, included: false },
+          documents: { file: 'documents/index.json', count: 0, included: false },
+          datasheets: { file: 'datasheets/index.json', count: 0, included: false },
+        },
+      }
+
+      try {
+        // Helper to safely add file to archive and track in ExportJobItems
+        const addFileToArchive = async (
+          content: string,
+          relativePath: string,
+          sourceId: number | null
+        ): Promise<void> => {
+          const normalizedPath = normalizeRelativePath(relativePath)
+          archive.append(content, { name: normalizedPath })
+          const byteSize = Buffer.byteLength(content, 'utf8')
+          await insertExportJobItem({
+            jobId,
+            relativePath: normalizedPath,
+            sourceType: 'handover_binder',
+            sourceId,
+            byteSize,
+          })
+        }
+
+        // 1. Collect asset summary (required - fail if missing)
+        const asset = await getAssetById(accountId, assetId)
+        if (!asset) {
+          await updateExportJobFailed(
+            jobId,
+            `Asset ${assetId} not found or access denied`,
+            leaseId,
+            backoffSecondsForAttempt(attemptCount)
+          )
+          return
+        }
+
+        manifest.assetTag = asset.assetTag
+        const assetSummary = {
+          assetId: asset.assetId,
+          assetTag: asset.assetTag,
+          assetName: asset.assetName,
+          location: asset.location,
+          system: asset.system,
+          service: asset.service,
+          criticality: asset.criticality,
+          disciplineId: asset.disciplineId,
+          subtypeId: asset.subtypeId,
+          clientId: asset.clientId,
+          projectId: asset.projectId,
+          facilityId: asset.facilityId,
+          facilityName: asset.facilityName,
+          systemId: asset.systemId,
+          systemName: asset.systemName,
+          createdAt: asset.createdAt instanceof Date ? asset.createdAt.toISOString() : String(asset.createdAt),
+          updatedAt: asset.updatedAt instanceof Date ? asset.updatedAt.toISOString() : String(asset.updatedAt),
+        }
+        await addFileToArchive(JSON.stringify(assetSummary, null, 2), 'asset-summary.json', assetId)
+        manifest.sections.asset.included = true
+
+        // 2. Collect checklists (paginate with safety limit)
+        try {
+          const checklistRuns: unknown[] = []
+          let checklistPage = 1
+          const checklistPageSize = 100
+          const maxChecklistPages = 1000 // Safety limit: 100k checklists max
+          while (checklistPage <= maxChecklistPages) {
+            const checklistResult = await listChecklistRunsByAssetId(accountId, assetId, checklistPage, checklistPageSize)
+            checklistRuns.push(...checklistResult.items)
+            if (checklistRuns.length >= checklistResult.total || checklistResult.items.length === 0) break
+            checklistPage++
+          }
+          manifest.sections.checklists.count = checklistRuns.length
+          manifest.sections.checklists.included = true
+
+          const checklistIndex = {
+            total: checklistRuns.length,
+            runs: checklistRuns.map((run) => ({
+              checklistRunId: (run as { checklistRunId: number }).checklistRunId,
+              runName: (run as { runName: string }).runName,
+              status: (run as { status: string }).status,
+              createdAt: (run as { createdAt: string }).createdAt,
+              checklistTemplateId: (run as { checklistTemplateId: number }).checklistTemplateId,
+              totalEntries: (run as { totalEntries: number }).totalEntries,
+              completedEntries: (run as { completedEntries: number }).completedEntries,
+              completionPercentage: (run as { completionPercentage: number }).completionPercentage,
+            })),
+          }
+          await addFileToArchive(JSON.stringify(checklistIndex, null, 2), 'checklists/index.json', assetId)
+        } catch (checklistErr) {
+          // Log but continue - partial export is acceptable
+          if (process.env.NODE_ENV !== 'test') {
+            console.warn(JSON.stringify({ msg: 'binder_checklist_collection_failed', jobId, error: checklistErr instanceof Error ? checklistErr.message : String(checklistErr) }))
+          }
+          manifest.sections.checklists.included = false
+        }
+
+        // 3. Collect documents (paginate with safety limit)
+        try {
+          const documents: unknown[] = []
+          let documentSkip = 0
+          const documentTake = 100
+          const maxDocumentPages = 1000 // Safety limit: 100k documents max
+          let documentPageCount = 0
+          while (documentPageCount < maxDocumentPages) {
+            const documentResult = await fetchAssetDocuments({
+              accountId,
+              assetId,
+              take: documentTake,
+              skip: documentSkip,
+            })
+            documents.push(...documentResult.items)
+            if (documents.length >= documentResult.total || documentResult.items.length === 0) break
+            documentSkip += documentTake
+            documentPageCount++
+          }
+          manifest.sections.documents.count = documents.length
+          manifest.sections.documents.included = true
+
+          const documentIndex = {
+            total: documents.length,
+            items: documents.map((doc) => ({
+              attachmentId: (doc as { attachmentId: number }).attachmentId,
+              filename: (doc as { filename: string }).filename,
+              contentType: (doc as { contentType: string }).contentType,
+              filesize: (doc as { filesize: number }).filesize,
+              uploadedAt: (doc as { uploadedAt: string }).uploadedAt,
+              uploadedBy: (doc as { uploadedBy: number }).uploadedBy,
+            })),
+          }
+          await addFileToArchive(JSON.stringify(documentIndex, null, 2), 'documents/index.json', assetId)
+        } catch (documentErr) {
+          // Log but continue - partial export is acceptable
+          if (process.env.NODE_ENV !== 'test') {
+            console.warn(JSON.stringify({ msg: 'binder_document_collection_failed', jobId, error: documentErr instanceof Error ? documentErr.message : String(documentErr) }))
+          }
+          manifest.sections.documents.included = false
+        }
+
+        // 4. Collect datasheets (paginate with safety limit)
+        try {
+          const datasheets: unknown[] = []
+          let datasheetSkip = 0
+          const datasheetTake = 100
+          const maxDatasheetPages = 1000 // Safety limit: 100k datasheets max
+          let datasheetPageCount = 0
+          while (datasheetPageCount < maxDatasheetPages) {
+            const datasheetResult = await fetchFilledSheetsForAsset({
+              accountId,
+              assetId,
+              take: datasheetTake,
+              skip: datasheetSkip,
+            })
+            datasheets.push(...datasheetResult.items)
+            if (datasheets.length >= datasheetResult.total || datasheetResult.items.length === 0) break
+            datasheetSkip += datasheetTake
+            datasheetPageCount++
+          }
+          manifest.sections.datasheets.count = datasheets.length
+          manifest.sections.datasheets.included = true
+
+          const datasheetIndex = {
+            total: datasheets.length,
+            items: datasheets.map((sheet) => ({
+              sheetId: (sheet as { sheetId: number }).sheetId,
+              sheetName: (sheet as { sheetName: string }).sheetName,
+              equipmentTagNum: (sheet as { equipmentTagNum: string }).equipmentTagNum,
+              status: (sheet as { status: string }).status,
+              revisionDate: (sheet as { revisionDate: string }).revisionDate,
+            })),
+          }
+          await addFileToArchive(JSON.stringify(datasheetIndex, null, 2), 'datasheets/index.json', assetId)
+        } catch (datasheetErr) {
+          // Log but continue - partial export is acceptable
+          if (process.env.NODE_ENV !== 'test') {
+            console.warn(JSON.stringify({ msg: 'binder_datasheet_collection_failed', jobId, error: datasheetErr instanceof Error ? datasheetErr.message : String(datasheetErr) }))
+          }
+          manifest.sections.datasheets.included = false
+        }
+
+        // 5. Add manifest (always included, even if some sections failed)
+        await addFileToArchive(JSON.stringify(manifest, null, 2), 'manifest.json', assetId)
+
+        // Finalize archive and wait for completion
+        archive.finalize()
+
+        await new Promise<void>((resolve, reject) => {
+          output.on('close', () => resolve())
+          archive.on('error', (err) => {
+            reject(new Error(`Archive finalization failed: ${err instanceof Error ? err.message : String(err)}`))
+          })
+          output.on('error', (err) => {
+            reject(new Error(`File write failed: ${err instanceof Error ? err.message : String(err)}`))
+          })
+        })
+
+        const relativePath = `jobs/${zipFileName}`
+        await updateExportJobCompleted(jobId, zipFileName, relativePath, leaseId)
+
+        if (process.env.NODE_ENV !== 'test') {
+          console.log(JSON.stringify({ msg: 'export_job_complete', jobId, leaseId, jobType: 'handover_binder' }))
+        }
+      } catch (collectErr) {
+        const message = collectErr instanceof Error ? collectErr.message : 'Failed to collect binder data'
+        await updateExportJobFailed(jobId, message, leaseId, backoffSecondsForAttempt(attemptCount))
+        // Don't rethrow - error already handled
       }
     } else {
       await updateExportJobFailed(

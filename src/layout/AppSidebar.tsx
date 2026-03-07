@@ -57,9 +57,15 @@ const navItems: NavItem[] = [
   },
   {
     icon: <GridIcon />,
-    name: 'Facilities (Pilot)',
+    name: 'Facilities / Systems',
     path: '/facilities',
     requiredPermission: PERMISSIONS.DASHBOARD_VIEW,
+  },
+  {
+    icon: <InventoryIcon />,
+    name: 'Assets',
+    path: '/assets',
+    requiredPermission: PERMISSIONS.DATASHEET_VIEW,
   },
   {
     icon: <DataSheetsIcon />,
