@@ -14,25 +14,33 @@ import {
   cleanupExpiredExportJobs,
 } from '../services/exportJobService'
 
-const startExportBodySchema = z.object({
-  jobType: z.literal('inventory_transactions_csv'),
-  params: z
-    .object({
-      warehouseId: z.number().int().positive().optional(),
-      itemId: z.number().int().positive().optional(),
-      transactionType: z.string().optional(),
-      dateFrom: z
-        .union([z.string(), z.date()])
-        .transform((v) => (typeof v === 'string' ? new Date(v) : v))
-        .optional(),
-      dateTo: z
-        .union([z.string(), z.date()])
-        .transform((v) => (typeof v === 'string' ? new Date(v) : v))
-        .optional(),
-    })
-    .optional()
-    .default({}),
-})
+const startExportBodySchema = z.union([
+  z.object({
+    jobType: z.literal('inventory_transactions_csv'),
+    params: z
+      .object({
+        warehouseId: z.number().int().positive().optional(),
+        itemId: z.number().int().positive().optional(),
+        transactionType: z.string().optional(),
+        dateFrom: z
+          .union([z.string(), z.date()])
+          .transform((v) => (typeof v === 'string' ? new Date(v) : v))
+          .optional(),
+        dateTo: z
+          .union([z.string(), z.date()])
+          .transform((v) => (typeof v === 'string' ? new Date(v) : v))
+          .optional(),
+      })
+      .optional()
+      .default({}),
+  }),
+  z.object({
+    jobType: z.literal('handover_binder'),
+    params: z.object({
+      assetId: z.number().int().positive(),
+    }),
+  }),
+])
 
 const jobIdParamSchema = z.object({
   jobId: z

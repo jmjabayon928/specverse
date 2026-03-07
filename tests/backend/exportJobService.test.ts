@@ -37,6 +37,32 @@ jest.mock('../../src/backend/database/inventoryTransactionQueries', () => ({
   getAllInventoryAuditLogs: jest.fn(),
 }))
 
+const mockGetAssetById = jest.fn()
+const mockListChecklistRunsByAssetId = jest.fn()
+const mockFetchAssetDocuments = jest.fn()
+const mockFetchFilledSheetsForAsset = jest.fn()
+const mockGetAccountContextForUser = jest.fn()
+
+jest.mock('../../src/backend/services/assetsService', () => ({
+  getAssetById: (...args: unknown[]) => mockGetAssetById(...args),
+}))
+
+jest.mock('../../src/backend/services/checklistsService', () => ({
+  listChecklistRunsByAssetId: (...args: unknown[]) => mockListChecklistRunsByAssetId(...args),
+}))
+
+jest.mock('../../src/backend/services/assetDocumentsService', () => ({
+  fetchAssetDocuments: (...args: unknown[]) => mockFetchAssetDocuments(...args),
+}))
+
+jest.mock('../../src/backend/services/filledSheetService', () => ({
+  fetchFilledSheetsForAsset: (...args: unknown[]) => mockFetchFilledSheetsForAsset(...args),
+}))
+
+jest.mock('../../src/backend/database/accountContextQueries', () => ({
+  getAccountContextForUser: (...args: unknown[]) => mockGetAccountContextForUser(...args),
+}))
+
 const mockAppend = jest.fn()
 const mockFinalize = jest.fn()
 const mockPipe = jest.fn()
@@ -123,6 +149,7 @@ describe('exportJobService', () => {
       claimed: true,
       row: stubClaimedRow,
     })
+    mockGetAccountContextForUser.mockResolvedValue({ accountId: 1 })
   })
 
   describe('inventory_transactions_csv', () => {
@@ -255,6 +282,170 @@ describe('exportJobService', () => {
         1
       )
       jest.useRealTimers()
+    })
+  })
+
+  describe('handover_binder', () => {
+    const stubBinderRow = {
+      ...stubClaimedRow,
+      JobType: 'handover_binder',
+      ParamsJson: JSON.stringify({ assetId: 100 }),
+      AccountID: 1,
+    }
+
+    beforeEach(() => {
+      mockGetAssetById.mockResolvedValue({
+        assetId: 100,
+        assetTag: 'ASSET-001',
+        assetName: 'Test Asset',
+        location: 'Location A',
+        system: 'System A',
+        service: 'Service A',
+        criticality: 'HIGH',
+        disciplineId: 1,
+        subtypeId: 1,
+        clientId: 1,
+        projectId: 1,
+        facilityId: 1,
+        facilityName: 'Facility A',
+        systemId: 1,
+        systemName: 'System A',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-02'),
+      })
+      mockListChecklistRunsByAssetId.mockResolvedValue({
+        items: [
+          {
+            checklistRunId: 1,
+            runName: 'Run 1',
+            status: 'COMPLETED',
+            createdAt: '2024-01-01T00:00:00Z',
+            checklistTemplateId: 1,
+            totalEntries: 10,
+            completedEntries: 10,
+            completionPercentage: 100,
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 100,
+      })
+      mockFetchAssetDocuments.mockResolvedValue({
+        items: [
+          {
+            attachmentId: 1,
+            filename: 'doc1.pdf',
+            contentType: 'application/pdf',
+            filesize: 1024,
+            uploadedAt: '2024-01-01T00:00:00Z',
+            uploadedBy: 1,
+          },
+        ],
+        total: 1,
+      })
+      mockFetchFilledSheetsForAsset.mockResolvedValue({
+        items: [
+          {
+            sheetId: 1,
+            sheetName: 'Sheet 1',
+            equipmentTagNum: 'TAG-001',
+            status: 'APPROVED',
+            revisionDate: '2024-01-01',
+          },
+        ],
+        total: 1,
+      })
+    })
+
+    it('creates ZIP with correct structure and inserts ExportJobItems', async () => {
+      const rowWithCorrectId = {
+        ...stubBinderRow,
+        Id: 51,
+      }
+      mockClaimExportJob.mockResolvedValueOnce({
+        claimed: true,
+        row: rowWithCorrectId,
+      })
+
+      await runExportJob(51)
+
+      expect(mockGetAssetById).toHaveBeenCalledWith(1, 100)
+      expect(mockListChecklistRunsByAssetId).toHaveBeenCalled()
+      expect(mockFetchAssetDocuments).toHaveBeenCalled()
+      expect(mockFetchFilledSheetsForAsset).toHaveBeenCalled()
+
+      // Check that manifest and all sections were added (order may vary)
+      const appendCalls = mockAppend.mock.calls
+      const fileNames = appendCalls.map((call) => call[1]?.name)
+      expect(fileNames).toContain('manifest.json')
+      expect(fileNames).toContain('asset-summary.json')
+      expect(fileNames).toContain('checklists/index.json')
+      expect(fileNames).toContain('documents/index.json')
+      expect(fileNames).toContain('datasheets/index.json')
+      
+      // Verify manifest contains expected fields (JSON.stringify adds spaces)
+      const manifestCall = appendCalls.find((call) => call[1]?.name === 'manifest.json')
+      expect(manifestCall).toBeDefined()
+      expect(manifestCall![0]).toMatch(/"exportType"\s*:\s*"handover_binder"/)
+      expect(manifestCall![0]).toMatch(/"assetId"\s*:\s*100/)
+
+      // Check ExportJobItems were inserted (should be 5: manifest + 4 sections)
+      expect(mockInsertExportJobItem.mock.calls.length).toBeGreaterThanOrEqual(5)
+      const manifestItemCall = mockInsertExportJobItem.mock.calls.find(
+        (call) => call[0]?.relativePath === 'manifest.json'
+      )
+      expect(manifestItemCall).toBeDefined()
+      expect(manifestItemCall![0]).toMatchObject({
+        jobId: 51,
+        relativePath: 'manifest.json',
+        sourceType: 'handover_binder',
+        sourceId: 100,
+      })
+
+      expect(mockUpdateExportJobCompleted).toHaveBeenCalled()
+      const completedCall = mockUpdateExportJobCompleted.mock.calls.find(
+        (call) => call[1]?.match(/^handover-binder-51\.zip$/)
+      )
+      expect(completedCall).toBeDefined()
+      expect(completedCall![1]).toMatch(/^handover-binder-51\.zip$/)
+    })
+
+    it('fails when assetId is missing', async () => {
+      const rowWithoutAssetId = {
+        ...stubBinderRow,
+        Id: 52,
+        ParamsJson: JSON.stringify({}),
+      }
+      mockClaimExportJob.mockResolvedValueOnce({
+        claimed: true,
+        row: rowWithoutAssetId,
+      })
+
+      await runExportJob(52)
+
+      expect(mockUpdateExportJobFailed).toHaveBeenCalledWith(
+        52,
+        'Missing or invalid assetId parameter (must be positive integer)',
+        expect.any(String),
+        expect.any(Number)
+      )
+      expect(mockGetAssetById).not.toHaveBeenCalled()
+    })
+
+    it('queries accountId from user when AccountID not in row', async () => {
+      const rowWithoutAccountId = {
+        ...stubBinderRow,
+        AccountID: null,
+      }
+      mockClaimExportJob.mockResolvedValueOnce({
+        claimed: true,
+        row: rowWithoutAccountId,
+      })
+
+      await runExportJob(53)
+
+      expect(mockGetAccountContextForUser).toHaveBeenCalledWith(stubBinderRow.CreatedBy)
+      expect(mockGetAssetById).toHaveBeenCalled()
     })
   })
 })
