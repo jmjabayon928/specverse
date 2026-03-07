@@ -4,6 +4,7 @@ import { cookies, headers } from 'next/headers'
 import Link from 'next/link'
 import AssetHeader from '@/components/assets/AssetHeader'
 import AssetTabs from '@/components/assets/AssetTabs'
+import AssetHandoverExportCard from '@/components/assets/AssetHandoverExportCard'
 
 export const dynamic = 'force-dynamic'
 
@@ -143,6 +144,7 @@ export default async function AssetDetailPage({ params }: PageProps) {
         </div>
       )}
       <AssetHeader asset={headerAsset} assetId={assetId} />
+      <AssetHandoverExportCard assetId={assetId} />
       <AssetTabs
         assetId={assetId}
         identityAsset={identityAsset}

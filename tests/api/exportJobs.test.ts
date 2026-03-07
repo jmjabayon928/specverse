@@ -254,6 +254,44 @@ describe('Export Jobs API', () => {
       expect(mockInsertExportJob).toHaveBeenCalled()
     })
 
+    it('creates handover_binder job with valid assetId', async () => {
+      const app = buildTestApp()
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
+      const res = await request(app)
+        .post('/api/backend/exports/jobs')
+        .set('Cookie', [cookie])
+        .send({ jobType: 'handover_binder', params: { assetId: 100 } })
+      expect(res.statusCode).toBe(201)
+      expect(res.body).toMatchObject({
+        jobId: 123,
+        status: 'queued',
+        createdAt: expect.any(String),
+      })
+      expect(mockInsertExportJob).toHaveBeenCalled()
+    })
+
+    it('returns 400 when handover_binder missing assetId', async () => {
+      const app = buildTestApp()
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
+      const res = await request(app)
+        .post('/api/backend/exports/jobs')
+        .set('Cookie', [cookie])
+        .send({ jobType: 'handover_binder', params: {} })
+      assertValidationError(res)
+      expect(mockInsertExportJob).not.toHaveBeenCalled()
+    })
+
+    it('returns 400 when handover_binder has invalid assetId', async () => {
+      const app = buildTestApp()
+      const cookie = createAuthCookie(1, 'Engineer', [PERMISSIONS.INVENTORY_VIEW])
+      const res = await request(app)
+        .post('/api/backend/exports/jobs')
+        .set('Cookie', [cookie])
+        .send({ jobType: 'handover_binder', params: { assetId: -1 } })
+      assertValidationError(res)
+      expect(mockInsertExportJob).not.toHaveBeenCalled()
+    })
+
     it('returns 413 when pre-check exceeds 10k rows', async () => {
       mockGetInventoryTransactionsPaged.mockResolvedValueOnce({
         total: 10001,
