@@ -1,6 +1,5 @@
 // src/backend/app.ts
 import express, { type Application, type Request, type Response } from 'express'
-import { randomUUID } from 'crypto'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import helmet from 'helmet'
@@ -40,9 +39,6 @@ import adminRoutes from './routes/adminRoutes'
 import devRoutes from './routes/devRoutes'
 import auditLogsRoutes from './routes/auditLogsRoutes'
 import platformAdminsRoutes from './routes/platformAdminsRoutes'
-import exportJobsRoutes from './routes/exportJobsRoutes'
-import { startExportJobRunner } from './services/exportJobService'
-import importsRoutes from './routes/importsRoutes'
 import verificationRecordsRoutes from './routes/verificationRecordsRoutes'
 import datasheetVerificationRecordsRoutes from './routes/datasheetVerificationRecordsRoutes'
 import datasheetRatingsRoutes from './routes/datasheetRatingsRoutes'
@@ -50,12 +46,6 @@ import datasheetInstrumentsRoutes from './routes/datasheetInstrumentsRoutes'
 import ratingsRoutes from './routes/ratingsRoutes'
 import instrumentsRoutes from './routes/instrumentsRoutes'
 import instrumentLoopsRoutes from './routes/instrumentLoopsRoutes'
-import schedulesRoutes from './routes/schedulesRoutes'
-import assetsRoutes from './routes/assetsRoutes'
-import facilitiesRoutes from './routes/facilitiesRoutes'
-import submittalsRoutes from './routes/submittalsRoutes'
-import deviationsRoutes from './routes/deviationsRoutes'
-import checklistsRoutes from './routes/checklistsRoutes'
 import { errorHandler } from './middleware/errorHandler'
 
 const app: Application = express()
@@ -202,18 +192,10 @@ app.use('/api/backend/admin', adminRoutes)
 app.use('/api/backend/dev', devRoutes)
 app.use('/api/backend/audit-logs', auditLogsRoutes)
 app.use('/api/backend/platform/admins', platformAdminsRoutes)
-app.use('/api/backend/exports/jobs', exportJobsRoutes)
-app.use('/api/backend/imports', importsRoutes)
 app.use('/api/backend/verification-records', verificationRecordsRoutes)
 app.use('/api/backend/ratings', ratingsRoutes)
 app.use('/api/backend/instruments', instrumentsRoutes)
 app.use('/api/backend/instrument-loops', instrumentLoopsRoutes)
-app.use('/api/backend/schedules', schedulesRoutes)
-app.use('/api/backend/assets', assetsRoutes)
-app.use('/api/backend/facilities', facilitiesRoutes)
-app.use('/api/backend/submittals', submittalsRoutes)
-app.use('/api/backend/deviations', deviationsRoutes)
-app.use('/api/backend/checklists', checklistsRoutes)
 
 // ─────────────────────────────────────────────
 // Dev-only routes inspector
@@ -385,24 +367,6 @@ if (process.env.NODE_ENV !== 'production') {
     }))
 
     res.json(flat)
-  })
-}
-
-// Export job background runner (start on boot unless disabled or in test)
-if (process.env.NODE_ENV !== 'test' && process.env.ENABLE_EXPORT_JOB_RUNNER !== 'false') {
-  const pollMs = parseInt(process.env.EXPORT_JOB_RUNNER_POLL_MS ?? '2000', 10)
-  const workers = parseInt(process.env.EXPORT_JOB_WORKERS ?? '2', 10)
-  const perAccountLimit = parseInt(process.env.EXPORT_JOB_PER_ACCOUNT_LIMIT ?? '1', 10)
-  const leaseTtlMs = parseInt(process.env.EXPORT_JOB_LEASE_TTL_MS ?? '300000', 10)
-  const heartbeatMs = parseInt(process.env.EXPORT_JOB_HEARTBEAT_MS ?? '60000', 10)
-  startExportJobRunner({
-    enabled: true,
-    workerId: randomUUID(),
-    pollIntervalMs: Number.isInteger(pollMs) && pollMs > 0 ? pollMs : 2000,
-    leaseTtlMs: Number.isInteger(leaseTtlMs) && leaseTtlMs > 0 ? leaseTtlMs : 300000,
-    heartbeatMs: Number.isInteger(heartbeatMs) && heartbeatMs > 0 ? heartbeatMs : 60000,
-    globalConcurrency: Number.isInteger(workers) && workers > 0 ? workers : 2,
-    perAccountLimit: Number.isInteger(perAccountLimit) && perAccountLimit > 0 ? perAccountLimit : 1,
   })
 }
 

@@ -1,7 +1,82 @@
-# 📘 SpecVerse - Engineering Data & Estimation Platform
+# 📘 SpecVerse - Enterprise Engineering Platform for EPC & Water / Wastewater Infrastructure
+### Live Platform Demonstration
 
-[![CI (main)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml)
-[![CI (staging)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml/badge.svg?branch=staging)](https://github.com/jmjabayon928/specverse/actions/workflows/ci.yml?branch=staging)
+Production demo:  
+https://specverse.jeffabayon.com
+
+---
+
+## Contents
+
+- Overview
+- Public Repository Notice
+- Key Innovation
+- Architectural Positioning
+- Open Core Model
+- Core Modules
+- Water / Wastewater Pilot
+- Roadmap
+- Architecture
+- Testing Strategy
+- Access Control
+- Tech Stack
+- Deployment
+- Local Setup
+- Full Platform Demonstration
+
+---
+
+## Overview
+
+SpecVerse is an enterprise engineering data platform designed for EPC contractors and asset-intensive infrastructure organizations.
+
+It provides structured lifecycle management for engineering datasheets, estimations, inventory, verification records, and facility documentation.
+
+The platform is designed as a **multi-tenant system of record**, enabling engineering teams to manage complex equipment data with full auditability, approval workflows, and exportable documentation.
+
+This repository contains the **public architecture and core modules** of the platform.  
+The full operational system used in engineering pilots and production environments is maintained in a **private repository**.
+
+---
+
+### Continuous Integration
+
+The production deployment pipeline for SpecVerse runs from the **private production repository**.
+
+The public repository retains the architecture and testing structure used in the platform but does not include the production deployment configuration.
+
+---
+
+## Public Repository Notice
+
+This repository contains a **public version of SpecVerse** intended for demonstration, learning, and portfolio purposes.
+
+Some components from the full production system have intentionally been **removed or simplified** in this repository.
+
+These include:
+
+• operational pilot workflows  
+• certain backend services and controllers  
+• some frontend modules and UI flows  
+• internal documentation and migration history  
+• selected database structures and test suites  
+
+These components remain part of the **private production system** used for real engineering environments.
+
+If you are interested in:
+
+• a technical walkthrough  
+• evaluating the full platform  
+• partnership opportunities  
+• enterprise licensing  
+
+please contact me directly.
+
+📧 Email: jmjabayon@gmail.com
+
+A live demonstration of the platform can be arranged upon request.
+
+---
 
 ## SpecVerse
 
@@ -12,6 +87,24 @@ It unifies datasheets, equipment specifications, schedules, estimations, invento
 SpecVerse has been validated through a realistic Water/Wastewater engineering pilot demonstrating facility hierarchy, asset organization, datasheet workflows, estimation, inventory tracking, and engineering verification processes.
 
 Unlike traditional tools that treat datasheets as static documents, SpecVerse models engineering data as structured, lifecycle-aware entities with approvals, revisions, traceability, and downstream impact on cost, procurement, and operations.
+
+## Industry Problem
+
+Engineering organizations managing large infrastructure projects often rely on a fragmented toolchain:
+
+• spreadsheets for datasheets  
+• document repositories for specifications  
+• ERP systems for procurement  
+• manual exports for engineering documentation  
+
+This fragmentation leads to:
+
+• duplicated engineering data  
+• lack of traceability between design, procurement, and verification  
+• inconsistent approval workflows  
+• costly manual document generation  
+
+SpecVerse addresses this problem by providing a **single engineering system of record** for structured equipment data and engineering workflows.
 
 ## 🌟 Key Innovation — Dynamic Engineering Data, Not Static Forms
 
@@ -37,6 +130,52 @@ SpecVerse is intentionally designed as:
 - Validated through a water and wastewater facility pilot architecture
 
 Every architectural decision — schema design, replace-all transactions, audit logging, permission enforcement, and comprehensive testing — reinforces these principles.
+
+## Platform Capability Map
+
+SpecVerse operates across several engineering domains:
+
+Engineering Definition
+  Datasheets
+  Templates
+  Revisions
+  Attachments
+
+Engineering Planning
+  Estimations
+  Supplier quotes
+  Labor costing (planned)
+
+Engineering Operations
+  Inventory
+  Verification
+  Inspections
+
+Facility Engineering
+  Assets
+  Schedules
+  Facilities
+
+Governance
+  Audit logs
+  RBAC
+  Approvals
+
+## Open Core Model
+
+SpecVerse follows an **open-core model**.
+
+This public repository contains the **core platform architecture**, including:
+
+• the dynamic datasheet engine  
+• estimation framework  
+• inventory integration  
+• multi-tenant access control  
+• selected UI components and workflows  
+
+The **full commercial platform** includes additional modules that are not published in this repository.
+
+These additional capabilities include operational engineering workflows, enterprise integrations, and deployment features used in real production environments.
 
 ## 🧩 Core Modules
 
@@ -167,7 +306,7 @@ Verification is modeled as a first-class engineering object, not an afterthought
 
 * ✅ Full auditability and traceability
 
-*##* ✅ Account-scoped access control
+* ✅ Account-scoped access control
 
 **Outcome**
 SpecVerse supports QA/QC, compliance, and inspection workflows with traceable evidence.
@@ -297,6 +436,16 @@ This validates SpecVerse as a scalable engineering data platform suitable for:
 * municipal infrastructure projects
 * industrial facilities
 * asset-intensive engineering environments
+
+⚠️ Note
+
+The full operational implementation used in this pilot — including certain facility workflows, asset management modules, and document control features — is part of the **private production repository** and is not included in this public version.
+
+This public repository focuses on the core architecture and foundational modules of the platform.
+
+If you would like to explore the full system or request a technical walkthrough of the complete pilot implementation, please contact:
+
+📧 jmjabayon@gmail.com
 
 ## 🚧 Near-Term Platform Expansion
 
@@ -1007,6 +1156,61 @@ This makes audit logging **provable**, not aspirational.
 
 ---
 
+## Enterprise Characteristics
+
+SpecVerse is designed with enterprise-grade engineering platforms in mind.
+
+Key characteristics include:
+
+• multi-tenant architecture with strict account isolation  
+• role-based access control with fine-grained permissions  
+• full auditability of engineering data and approvals  
+• lifecycle-aware datasheet management  
+• transactional data integrity guarantees  
+• exportable engineering documentation (PDF / Excel)  
+• internationalization support  
+• scalable modular architecture  
+
+These principles allow SpecVerse to scale across multiple organizations, engineering disciplines, and infrastructure projects.
+
+---
+
+## Platform Architecture
+
+SpecVerse is built using a layered enterprise architecture designed for long-term scalability and auditability.
+
+### Architecture Layers
+
+Frontend
+• Next.js (App Router)
+• React + TypeScript
+• Tailwind UI components
+• Server-first rendering
+
+Backend
+• Node.js + Express
+• Controller → Service → Repository architecture
+• Strict RBAC enforcement
+• Multi-tenant data isolation
+
+Database
+• Microsoft SQL Server
+• Normalized relational schema
+• Account-scoped entities
+• transactional write guarantees
+
+Infrastructure
+• VPS deployment
+• nginx reverse proxy
+• PM2 process management
+• automated migrations via Flyway
+
+Testing
+• API integration tests
+• domain logic tests
+• repository tests
+• UI tests (React Testing Library)
+
 ## 📦 Tech Stack
 
 SpecVerse is built as a production-grade, full-stack engineering SaaS with strong emphasis on data integrity, auditability, and long-term extensibility.
@@ -1286,6 +1490,36 @@ SpecVerse uses a layered testing strategy covering backend, domain logic, and UI
 ### Architecture
 * multi-tenant design
 * domain-driven backend structure
+
+## Full Platform Demonstration
+
+The private production version of SpecVerse includes additional capabilities such as:
+
+• Asset lifecycle management  
+• Operational checklists  
+• Commissioning workflows  
+• Document control  
+• Engineering handover packages  
+
+These modules are intentionally not included in the public repository.
+
+A private demonstration of the full platform can be arranged for:
+
+• engineering firms  
+• EPC contractors  
+• technical recruiters  
+• potential partners or investors
+
+---
+
+## Attribution
+
+SpecVerse initially used the TailAdmin dashboard template as a UI starting point.
+
+During development most of the template components were removed or significantly modified.
+The system architecture, backend services, database schema, domain models, and platform features were designed and implemented by Jeff Martin Abayon.
+
+TailAdmin remains credited in accordance with the MIT license.
 
 ---
 
