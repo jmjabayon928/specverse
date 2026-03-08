@@ -1,4 +1,4 @@
-name: CI
+name: Public CI
 
 on:
   pull_request:
@@ -6,11 +6,12 @@ on:
     branches: [main, staging]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: public-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test-build:
+  validate:
+    name: Validate (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     env:
       HOST_ENVIRONMENT: render
@@ -44,14 +45,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Private keys should never be committed (exclude workflow files to avoid self-match)
           if git grep -n "BEGIN PRIVATE KEY" -- . ':!/.github/*' >/dev/null 2>&1; then
-            echo "Forbidden private key material found in repository."
+            echo "::error::Forbidden private key material found in repository."
             exit 1
           fi
 
-          # Helper: fail if a variable is present in tracked files with a non-placeholder value.
-          # Excludes docs/** and *.env.example.
           check_var_placeholder() {
             local name="$1"
             local placeholder="$2"
@@ -63,14 +61,12 @@ jobs:
             fi
 
             if echo "$matches" | grep -v "${name}=${placeholder}" >/dev/null 2>&1; then
-              echo "Suspicious ${name} value found (non-placeholder)."
+              echo "::error::Suspicious ${name} value found (non-placeholder)."
               echo "$matches"
               exit 1
             fi
           }
 
-          # Helper: same as above, but ONLY enforces if the var appears at all.
-          # (Useful during transitions when not all env names are standardized.)
           check_var_placeholder_if_present() {
             local name="$1"
             local placeholder="$2"
@@ -82,27 +78,24 @@ jobs:
             fi
 
             if echo "$matches" | grep -v "${name}=${placeholder}" >/dev/null 2>&1; then
-              echo "Suspicious ${name} value found (non-placeholder)."
+              echo "::error::Suspicious ${name} value found (non-placeholder)."
               echo "$matches"
               exit 1
             fi
           }
 
-          # DB secrets should never be real in tracked files
           check_var_placeholder "DB_PASSWORD" "CHANGEME"
-
-          # You moved from JWT to server-side sessions.
-          # If any of these exist in tracked files, they MUST be placeholders.
           check_var_placeholder_if_present "SESSION_SECRET" "CHANGEME"
           check_var_placeholder_if_present "AUTH_SESSION_SECRET" "CHANGEME"
           check_var_placeholder_if_present "COOKIE_SECRET" "CHANGEME"
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
 
-      - name: Install
+      - name: Install dependencies
         run: npm ci
 
       - name: Lint
@@ -114,7 +107,7 @@ jobs:
       - name: Test
         run: npm test -- --runInBand --no-cache
 
-      - name: Guard - Architecture Regression
+      - name: Guard - architecture regression
         shell: bash
         run: |
           set -euo pipefail
@@ -124,12 +117,12 @@ jobs:
           rg -n "NEXT_PUBLIC_API_BASE_URL" src && exit 1 || echo "No NEXT_PUBLIC_API_BASE_URL usage"
           rg -n --glob "src/app/**/*.{ts,tsx}" "@/backend/database" src && exit 1 || echo "No Next->DB imports"
 
-      - name: Guard - Committed .env files
+      - name: Guard - committed .env file
         shell: bash
         run: |
           set -euo pipefail
           if [ -f ".env" ]; then
-            echo ".env file committed — forbidden"
+            echo "::error::.env file committed — forbidden"
             exit 1
           fi
           echo "No committed .env file"
@@ -155,54 +148,8 @@ jobs:
           echo "$CHANGED"
 
           if echo "$CHANGED" | grep -q "^db/migrations/sqlserver/V0001__initial_schema\.sql$"; then
-            echo "ERROR: V0001__initial_schema.sql is immutable. Create a new V0002+ migration instead."
+            echo "::error::V0001__initial_schema.sql is immutable. Create a new V0002+ migration instead."
             exit 1
           fi
 
           echo "OK: V0001 unchanged."
-
-  deploy-stage:
-    name: Deploy to VPS (staging)
-    runs-on: ubuntu-latest
-    needs: [test-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
-    concurrency:
-      group: deploy-staging
-      cancel-in-progress: false
-
-    steps:
-      - name: SSH deploy (staging)
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT }}
-          command_timeout: 60m
-          script_stop: true
-          script: |
-            set -euo pipefail
-            /home/jeff/apps/deploy/deploy-stage.sh staging
-
-  deploy-prod:
-    name: Deploy to VPS (production)
-    runs-on: ubuntu-latest
-    needs: [test-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_PROD_DEPLOY == 'true'
-    concurrency:
-      group: deploy-prod
-      cancel-in-progress: false
-
-    steps:
-      - name: SSH deploy (production)
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT }}
-          command_timeout: 60m
-          script_stop: true
-          script: |
-            set -euo pipefail
-            /home/jeff/apps/deploy/deploy-prod.sh main
